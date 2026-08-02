@@ -11,6 +11,7 @@ import {
 import { db } from "../db";
 import { isAuthenticated, isSuperAdmin } from "../auth";
 import { S3StorageService } from "../s3Storage";
+import { sendAviationBriefingAnnouncement } from "./aviationBriefingSubscriptions";
 
 const listSchema = z.object({
   search: z.string().trim().max(200).optional(),
@@ -186,6 +187,7 @@ export function registerAviationBriefingRoutes(app: Express) {
       if (parsed.data.status === "scheduled" && !parsed.data.scheduledAt) return res.status(400).json({ error: "A scheduled briefing requires a scheduled publication date." });
       const userId = requestUserId(req);
       const [row] = await db.insert(aviationBriefings).values({ ...mapInput(parsed.data, userId), createdByUserId: userId }).returning();
+      if (row.status === "published" && req.body?.notifySubscribers !== false) void sendAviationBriefingAnnouncement(row.id, { req }).catch(() => {});
       res.status(201).json({ briefing: publicBriefing(row) });
     } catch (error: any) {
       if (error?.code === "23505") {
@@ -204,6 +206,7 @@ export function registerAviationBriefingRoutes(app: Express) {
 
   app.patch("/api/admin/aviation-briefings/:id", isAuthenticated, isSuperAdmin, async (req: any, res, next) => {
     try {
+      const [before] = await db.select({ status: aviationBriefings.status }).from(aviationBriefings).where(eq(aviationBriefings.id, String(req.params.id))).limit(1);
       const parsed = aviationBriefingInputSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid briefing", validation: parsed.error.format() });
       const videoError = validateBriefingVideo(parsed.data);
@@ -211,6 +214,7 @@ export function registerAviationBriefingRoutes(app: Express) {
       if (parsed.data.status === "scheduled" && !parsed.data.scheduledAt) return res.status(400).json({ error: "A scheduled briefing requires a scheduled publication date." });
       const [row] = await db.update(aviationBriefings).set(mapInput(parsed.data, requestUserId(req))).where(eq(aviationBriefings.id, String(req.params.id))).returning();
       if (!row) return res.status(404).json({ error: "Briefing not found" });
+      if (before?.status !== "published" && row.status === "published" && req.body?.notifySubscribers !== false) void sendAviationBriefingAnnouncement(row.id, { req }).catch(() => {});
       res.json({ briefing: publicBriefing(row) });
     } catch (error: any) {
       if (error?.code === "23505") return res.status(409).json({ error: "That slug is already in use." });
@@ -227,6 +231,9 @@ export function registerAviationBriefingRoutes(app: Express) {
       if (status === "published") updates.publishedAt = new Date();
       const [row] = await db.update(aviationBriefings).set(updates).where(eq(aviationBriefings.id, String(req.params.id))).returning();
       if (!row) return res.status(404).json({ error: "Briefing not found" });
+      if (status === "published" && req.body?.notifySubscribers !== false) {
+        void sendAviationBriefingAnnouncement(row.id, { req }).catch((error) => console.error("Aviation Briefings announcement failed", error instanceof Error ? error.message : "unknown error"));
+      }
       res.json({ briefing: publicBriefing(row) });
     } catch (error) { next(error); }
   });

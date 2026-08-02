@@ -14,6 +14,7 @@ import {
 import { BriefingEditor } from "@/components/aviation-briefings/BriefingEditor";
 import { BriefingPerformancePanel } from "@/components/aviation-briefings/BriefingPerformancePanel";
 import { PhotoSubmissionAdmin } from "@/components/aviation-briefings/PhotoSubmissionAdmin";
+import { BriefingSubscriberAdmin } from "@/components/aviation-briefings/BriefingSubscriberAdmin";
 import type { AviationBriefing } from "@/components/aviation-briefings/types";
 import {
   aviationBriefingInputSchema,
@@ -345,8 +346,8 @@ export default function AdminAviationBriefingsPage() {
     },
   });
   const action = useMutation({
-    mutationFn: ({ id, action }: { id: string; action: string }) =>
-      apiRequest("POST", `/api/admin/aviation-briefings/${id}/${action}`),
+    mutationFn: ({ id, action, notifySubscribers }: { id: string; action: string; notifySubscribers?: boolean }) =>
+      apiRequest("POST", `/api/admin/aviation-briefings/${id}/${action}`, { notifySubscribers }),
     onSuccess: () =>
       queryClient.invalidateQueries({
         queryKey: ["/api/admin/aviation-briefings"],
@@ -799,6 +800,7 @@ export default function AdminAviationBriefingsPage() {
             </section>
             <PhotoSubmissionAdmin />
             <BriefingPerformancePanel />
+            <BriefingSubscriberAdmin briefings={data?.briefings || []} />
             <section className="mt-8 rounded-xl border border-[#526d94]/40 bg-[#0c1624] p-5">
               <h2 className="text-2xl font-bold">Private reader engagement</h2>
               <p className="mt-1 text-sm text-[#9fb0c4]">
@@ -1052,15 +1054,15 @@ export default function AdminAviationBriefingsPage() {
                           Unpublish
                         </Button>
                       ) : (
-                        <Button
+                        <><Button
                           size="sm"
                           className="bg-[#347edc] text-white"
                           onClick={() =>
-                            action.mutate({ id: item.id, action: "publish" })
+                            action.mutate({ id: item.id, action: "publish", notifySubscribers: true })
                           }
                         >
-                          Publish
-                        </Button>
+                          Publish + email
+                        </Button><Button size="sm" variant="outline" onClick={()=>action.mutate({id:item.id,action:"publish",notifySubscribers:false})}>Publish only</Button></>
                       )}
                       <Button
                         variant="destructive"

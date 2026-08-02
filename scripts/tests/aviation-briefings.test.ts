@@ -416,3 +416,40 @@ test("photo workflow is public for contributors and Super Admin-only for review"
   assert.match(page, /aviation_briefings_photo_submission_completed/);
   assert.doesNotMatch(page, /contributorEmail.*trackEvent/);
 });
+
+test("Briefings subscriptions use confirmed opt-in and one-click unsubscribe", () => {
+  const routes = readFileSync(new URL("../../server/routes/aviationBriefingSubscriptions.ts", import.meta.url), "utf8");
+  assert.match(routes, /confirmationTokenHash/);
+  assert.match(routes, /subscriptions\/confirm\/:token/);
+  assert.match(routes, /subscriptions\/unsubscribe\/:token/);
+  assert.match(routes, /status:\s*"active"/);
+  assert.match(routes, /status:\s*"unsubscribed"/);
+  assert.match(routes, /List-Unsubscribe/);
+});
+
+test("article announcement email includes image, excerpt, article link, and duplicate protection", () => {
+  const routes = readFileSync(new URL("../../server/routes/aviationBriefingSubscriptions.ts", import.meta.url), "utf8");
+  const migration = readFileSync(new URL("../../migrations/0128_add_aviation_briefing_subscribers.sql", import.meta.url), "utf8");
+  assert.match(routes, /articleImage\(briefing/);
+  assert.match(routes, /briefing\.excerpt/);
+  assert.match(routes, /Read the full briefing/);
+  assert.match(routes, /existing\?\.status\s*===\s*"sent"/);
+  assert.match(migration, /UNIQUE\(briefing_id, subscriber_id\)/);
+});
+
+test("publishing can notify subscribers or explicitly suppress the announcement", () => {
+  const routes = readFileSync(new URL("../../server/routes/aviationBriefings.ts", import.meta.url), "utf8");
+  const admin = readFileSync(new URL("../../client/src/pages/admin-aviation-briefings.tsx", import.meta.url), "utf8");
+  assert.match(routes, /req\.body\?\.notifySubscribers\s*!==\s*false/);
+  assert.match(routes, /sendAviationBriefingAnnouncement/);
+  assert.match(admin, /Publish \+ email/);
+  assert.match(admin, /Publish only/);
+  assert.match(admin, /notifySubscribers:\s*false/);
+});
+
+test("subscription analytics exclude subscriber identity", () => {
+  const component = readFileSync(new URL("../../client/src/components/aviation-briefings/BriefingSubscribe.tsx", import.meta.url), "utf8");
+  assert.match(component, /aviation_briefings_subscription_requested/);
+  assert.doesNotMatch(component, /trackEvent\([^)]*email/s);
+  assert.doesNotMatch(component, /trackEvent\([^)]*name/s);
+});

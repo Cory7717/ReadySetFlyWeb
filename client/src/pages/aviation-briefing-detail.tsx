@@ -21,6 +21,7 @@ import { RSF_TOOLS } from "@/lib/tool-registry";
 import { trackEvent } from "@/lib/analytics";
 import { apiUrl } from "@/lib/api";
 import { BriefingEngagement } from "@/components/aviation-briefings/BriefingEngagement";
+import { BriefingSubscribe } from "@/components/aviation-briefings/BriefingSubscribe";
 
 function RichText({ text }: { text: string }) {
   const tokens = text
@@ -478,7 +479,7 @@ export default function AviationBriefingDetailPage() {
             </section>
           )}
           {!isPreview && (
-            <BriefingEngagement briefing={briefing} related={data.related} />
+            <><div className="mt-14"><BriefingSubscribe source="briefing-article" /></div><BriefingEngagement briefing={briefing} related={data.related} /></>
           )}
           <aside className="mt-12 flex gap-3 rounded-xl border border-[#6f7d90]/35 bg-[#111923] p-5 text-sm leading-6 text-[#aebbc9]">
             <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-[#90a6bf]" />

@@ -5797,6 +5797,22 @@ export const aviationBriefingPhotoSubmissions = pgTable(
   ],
 );
 
+export const aviationBriefingSubscribers = pgTable("aviation_briefing_subscribers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: varchar("email").notNull().unique(), name: text("name"), status: text("status").notNull().default("pending"),
+  confirmationTokenHash: text("confirmation_token_hash"), unsubscribeToken: varchar("unsubscribe_token").notNull().unique(),
+  confirmedAt: timestamp("confirmed_at"), unsubscribedAt: timestamp("unsubscribed_at"), source: text("source"), sourceIp: text("source_ip"), userAgent: text("user_agent"),
+  createdAt: timestamp("created_at").defaultNow(), updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [index("idx_aviation_briefing_subscriber_status").on(table.status, table.createdAt)]);
+
+export const aviationBriefingEmailDeliveries = pgTable("aviation_briefing_email_deliveries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  briefingId: varchar("briefing_id").notNull().references(() => aviationBriefings.id, { onDelete: "cascade" }),
+  subscriberId: varchar("subscriber_id").notNull().references(() => aviationBriefingSubscribers.id, { onDelete: "cascade" }),
+  status: text("status").notNull().default("pending"), providerMessageId: text("provider_message_id"), errorMessage: text("error_message"), sentAt: timestamp("sent_at"),
+  createdAt: timestamp("created_at").defaultNow(), updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [uniqueIndex("idx_aviation_briefing_delivery_once").on(table.briefingId, table.subscriberId), index("idx_aviation_briefing_delivery_status").on(table.status, table.createdAt)]);
+
 export const aviationBriefingSuggestions = pgTable(
   "aviation_briefing_suggestions",
   {

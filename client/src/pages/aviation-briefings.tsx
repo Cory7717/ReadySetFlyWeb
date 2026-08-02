@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { BookOpen, Camera, Search } from "lucide-react";
 import { BriefingCard } from "@/components/aviation-briefings/BriefingCard";
+import { BriefingSubscribe } from "@/components/aviation-briefings/BriefingSubscribe";
 import type { AviationBriefing } from "@/components/aviation-briefings/types";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -87,6 +88,8 @@ export default function AviationBriefingsPage() {
         </div>
       </section>
       <div className="mx-auto max-w-7xl px-5 py-10 sm:px-8">
+        {new URLSearchParams(window.location.search).get("subscription")&&<div className="mb-6 rounded-lg border border-[#55739b]/40 bg-[#10233a] p-4 text-[#dbeafe]">{new URLSearchParams(window.location.search).get("subscription")==="confirmed"?"Your Aviation Briefings subscription is confirmed.":new URLSearchParams(window.location.search).get("subscription")==="unsubscribed"?"You have been unsubscribed from Aviation Briefings emails.":"That subscription link is invalid or has already been used."}</div>}
+        <div className="mb-10"><BriefingSubscribe source="briefings-index" /></div>
         <section className="mb-10 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[#526d94]/35 bg-[#0c1624] p-5">
           <div>
             <h2 className="flex items-center text-xl font-bold">

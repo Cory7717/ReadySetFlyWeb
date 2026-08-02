@@ -263,6 +263,7 @@ import { registerAviationBriefingRoutes } from "./routes/aviationBriefings";
 import { registerAviationBriefingSubmissionRoutes } from "./routes/aviationBriefingSubmissions";
 import { registerAviationBriefingEngagementRoutes } from "./routes/aviationBriefingEngagement";
 import { registerAviationBriefingPhotoSubmissionRoutes } from "./routes/aviationBriefingPhotoSubmissions";
+import { registerAviationBriefingSubscriptionRoutes } from "./routes/aviationBriefingSubscriptions";
 import {
   flightPlanFilingProvider,
   getLeidosFlightServiceDiagnostics,
@@ -6904,6 +6905,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerVehicleListingRoutes(app);
   registerAviationBriefingEngagementRoutes(app);
   registerAviationBriefingPhotoSubmissionRoutes(app);
+  registerAviationBriefingSubscriptionRoutes(app);
   registerAviationBriefingRoutes(app);
   registerAviationBriefingSubmissionRoutes(app);
   app.use("/api/fuel-prices", fuelPricesRouter);

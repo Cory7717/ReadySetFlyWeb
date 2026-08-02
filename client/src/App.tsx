@@ -5,7 +5,14 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { ThemeProvider } from "./components/theme-provider";
 import { Header } from "./components/header";
 import { Footer } from "./components/footer";
@@ -18,9 +25,16 @@ import { AiWeatherTranslatorAnnouncement } from "@/components/AiWeatherTranslato
 import { MembershipGrantAnnouncement } from "@/components/MembershipGrantAnnouncement";
 import { AuthGateModal } from "@/components/AuthGateModal";
 import { ScrollToTopButton } from "@/components/scroll-to-top-button";
-import { recordAnonSession, recordAnonToolInteraction, isSoftAuthEnabled } from "@/utils/anonUsage";
+import {
+  recordAnonSession,
+  recordAnonToolInteraction,
+  isSoftAuthEnabled,
+} from "@/utils/anonUsage";
 import { setAuthState } from "@/utils/authGate";
-import { PREMIUM_MONTHLY_PRICE, PREMIUM_ANNUAL_PRICE } from "@shared/membership-plans";
+import {
+  PREMIUM_MONTHLY_PRICE,
+  PREMIUM_ANNUAL_PRICE,
+} from "@shared/membership-plans";
 import Home from "@/pages/home";
 import Landing from "@/pages/landing";
 import Marketplace from "@/pages/marketplace";
@@ -110,6 +124,7 @@ import AviationBriefingsPage from "@/pages/aviation-briefings";
 import AviationBriefingDetailPage from "@/pages/aviation-briefing-detail";
 import AdminAviationBriefingsPage from "@/pages/admin-aviation-briefings";
 import AviationBriefingSubmitPage from "@/pages/aviation-briefing-submit";
+import AviationBriefingContributePage from "@/pages/aviation-briefing-contribute";
 import SavedAviationBriefingsPage from "@/pages/saved-aviation-briefings";
 
 const StudentHub = lazy(() => import("@/pages/student/hub"));
@@ -119,10 +134,14 @@ const StudentCost = lazy(() => import("@/pages/student/cost"));
 const StudentProgress = lazy(() => import("@/pages/student/progress"));
 const StudentTraining = lazy(() => import("@/pages/student/training"));
 const StudentWritten = lazy(() => import("@/pages/student/written"));
-const StudentAbbreviations = lazy(() => import("@/pages/student/abbreviations"));
+const StudentAbbreviations = lazy(
+  () => import("@/pages/student/abbreviations"),
+);
 const StudentSyllabi = lazy(() => import("@/pages/student/syllabi"));
 const StudentVorTrainer = lazy(() => import("@/pages/student/vor-trainer"));
-const StudentSixPackTrainer = lazy(() => import("@/pages/student/six-pack-trainer"));
+const StudentSixPackTrainer = lazy(
+  () => import("@/pages/student/six-pack-trainer"),
+);
 const StudentChecklists = lazy(() => import("@/pages/student/checklists"));
 const StudentWeather = lazy(() => import("@/pages/student/weather"));
 const GpsSimsHub = lazy(() => import("@/pages/gps-sims"));
@@ -130,21 +149,41 @@ const GpsSimsUnit = lazy(() => import("@/pages/gps-sims-unit"));
 const IfrTools = lazy(() => import("@/pages/ifr-tools"));
 const EventsPage = lazy(() => import("@/pages/events"));
 
-function StudentPageLoader({ component: Component }: { component: ComponentType }) {
+function StudentPageLoader({
+  component: Component,
+}: {
+  component: ComponentType;
+}) {
   return (
-    <Suspense fallback={<div className="container mx-auto px-4 py-10 text-sm text-muted-foreground">Loading...</div>}>
+    <Suspense
+      fallback={
+        <div className="container mx-auto px-4 py-10 text-sm text-muted-foreground">
+          Loading...
+        </div>
+      }
+    >
       <Component />
     </Suspense>
   );
 }
 
-function PaidToolAccess({ component: Component }: { component: ComponentType }) {
+function PaidToolAccess({
+  component: Component,
+}: {
+  component: ComponentType;
+}) {
   const { isAuthenticated, isLoading, user } = useAuth();
   const entitlements = (user as any)?.entitlements;
-  const isPaid = entitlements?.tier ? entitlements.tier !== "free" : user?.logbookProStatus === "active";
+  const isPaid = entitlements?.tier
+    ? entitlements.tier !== "free"
+    : user?.logbookProStatus === "active";
 
   if (isLoading) {
-    return <div className="container mx-auto px-4 py-10 text-sm text-muted-foreground">Loading...</div>;
+    return (
+      <div className="container mx-auto px-4 py-10 text-sm text-muted-foreground">
+        Loading...
+      </div>
+    );
   }
 
   if (!isAuthenticated || !isPaid) {
@@ -154,7 +193,11 @@ function PaidToolAccess({ component: Component }: { component: ComponentType }) 
   return <Component />;
 }
 
-function LockedPremiumToolPreview({ component: Component }: { component: ComponentType }) {
+function LockedPremiumToolPreview({
+  component: Component,
+}: {
+  component: ComponentType;
+}) {
   const { isAuthenticated } = useAuth();
   const [location] = useLocation();
   const [open, setOpen] = useState(false);
@@ -165,7 +208,10 @@ function LockedPremiumToolPreview({ component: Component }: { component: Compone
   return (
     <>
       <div className="relative min-h-screen bg-[#080a0d]">
-        <div className="pointer-events-none select-none opacity-95" aria-hidden="true">
+        <div
+          className="pointer-events-none select-none opacity-95"
+          aria-hidden="true"
+        >
           <Component />
         </div>
         <button
@@ -179,17 +225,27 @@ function LockedPremiumToolPreview({ component: Component }: { component: Compone
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="rsf-metal-panel border-[#5d6f85]/30 text-[#E8EDF4] sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-[#F5F8FC]">Available with RSF Premium</DialogTitle>
+            <DialogTitle className="text-[#F5F8FC]">
+              Available with RSF Premium
+            </DialogTitle>
             <DialogDescription className="text-[#A9BBCD]">
-              This calculator is available for RSF Premium subscribers. Premium unlocks live inputs, saved planning context, and the full RSF EFB workflow.
+              This calculator is available for RSF Premium subscribers. Premium
+              unlocks live inputs, saved planning context, and the full RSF EFB
+              workflow.
             </DialogDescription>
           </DialogHeader>
           <div className="rounded-[1rem] border border-[#5d6f85]/24 bg-[#101720] p-4 text-sm text-[#DCE6F2]">
-            RSF Premium is ${PREMIUM_MONTHLY_PRICE.toFixed(2)}/month or ${PREMIUM_ANNUAL_PRICE.toFixed(2)}/year. Create an account or upgrade to use this calculator.
+            RSF Premium is ${PREMIUM_MONTHLY_PRICE.toFixed(2)}/month or $
+            {PREMIUM_ANNUAL_PRICE.toFixed(2)}/year. Create an account or upgrade
+            to use this calculator.
           </div>
           <DialogFooter>
             <Button asChild className="rsf-metal-button-primary">
-              <a href={signupHref}>{isAuthenticated ? "View Premium Pricing" : "Sign up for RSF Premium"}</a>
+              <a href={signupHref}>
+                {isAuthenticated
+                  ? "View Premium Pricing"
+                  : "Sign up for RSF Premium"}
+              </a>
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -270,28 +326,83 @@ function Router() {
       <Route path="/verify-email" component={VerifyEmail} />
       <Route path="/faq" component={FaqPage} />
       <Route path="/aviation-briefings" component={AviationBriefingsPage} />
-      <Route path="/aviation-briefings/preview/:id" component={AviationBriefingDetailPage} />
-      <Route path="/aviation-briefings/submit/:token" component={AviationBriefingSubmitPage} />
-      <Route path="/aviation-briefings/saved" component={isAuthenticated ? SavedAviationBriefingsPage : RequireAuth} />
-      <Route path="/aviation-briefings/:slug" component={AviationBriefingDetailPage} />
+      <Route
+        path="/aviation-briefings/contribute"
+        component={AviationBriefingContributePage}
+      />
+      <Route
+        path="/aviation-briefings/preview/:id"
+        component={AviationBriefingDetailPage}
+      />
+      <Route
+        path="/aviation-briefings/submit/:token"
+        component={AviationBriefingSubmitPage}
+      />
+      <Route
+        path="/aviation-briefings/saved"
+        component={isAuthenticated ? SavedAviationBriefingsPage : RequireAuth}
+      />
+      <Route
+        path="/aviation-briefings/:slug"
+        component={AviationBriefingDetailPage}
+      />
       <Route path="/synthetic-vision" component={SyntheticVisionPage} />
       <Route path="/flight-demo" component={SyntheticVisionPage} />
       <Route path="/logbook/pro" component={() => <LogbookPro />} />
       <Route path="/flight-planner" component={FlightPlanner} />
-      <Route path="/pilot-tools" component={() => <PaidToolAccess component={PilotTools} />} />
-      <Route path="/aviation-weather" component={() => <PaidToolAccess component={AviationWeatherHub} />} />
-      <Route path="/tfr-map" component={() => <PaidToolAccess component={TfrMap} />} />
-      <Route path="/approach-plates" component={() => <PaidToolAccess component={ApproachPlates} />} />
-      <Route path="/ownership-cost-calculator" component={() => <PaidToolAccess component={OwnershipCostCalculator} />} />
-      <Route path="/weight-balance" component={() => <PaidToolAccess component={WeightBalance} />} />
+      <Route
+        path="/pilot-tools"
+        component={() => <PaidToolAccess component={PilotTools} />}
+      />
+      <Route
+        path="/aviation-weather"
+        component={() => <PaidToolAccess component={AviationWeatherHub} />}
+      />
+      <Route
+        path="/tfr-map"
+        component={() => <PaidToolAccess component={TfrMap} />}
+      />
+      <Route
+        path="/approach-plates"
+        component={() => <PaidToolAccess component={ApproachPlates} />}
+      />
+      <Route
+        path="/ownership-cost-calculator"
+        component={() => <PaidToolAccess component={OwnershipCostCalculator} />}
+      />
+      <Route
+        path="/weight-balance"
+        component={() => <PaidToolAccess component={WeightBalance} />}
+      />
       <Route path="/density-altitude" component={DensityAltitude} />
-      <Route path="/crosswind-calculator" component={() => <PaidToolAccess component={CrosswindCalculator} />} />
-      <Route path="/tools/e6b" component={() => <PaidToolAccess component={Eb6Calculator} />} />
-      <Route path="/radio-comms-trainer" component={() => <PaidToolAccess component={RadioCommsTrainer} />} />
-      <Route path="/adsb-receiver-help" component={() => <PaidToolAccess component={AdsbReceiverHelp} />} />
-      <Route path="/live-traffic" component={() => <PaidToolAccess component={AdsbLive} />} />
-      <Route path="/adsb-live" component={() => <RedirectTo to="/live-traffic" />} />
-      <Route path="/events" component={() => <StudentPageLoader component={EventsPage} />} />
+      <Route
+        path="/crosswind-calculator"
+        component={() => <PaidToolAccess component={CrosswindCalculator} />}
+      />
+      <Route
+        path="/tools/e6b"
+        component={() => <PaidToolAccess component={Eb6Calculator} />}
+      />
+      <Route
+        path="/radio-comms-trainer"
+        component={() => <PaidToolAccess component={RadioCommsTrainer} />}
+      />
+      <Route
+        path="/adsb-receiver-help"
+        component={() => <PaidToolAccess component={AdsbReceiverHelp} />}
+      />
+      <Route
+        path="/live-traffic"
+        component={() => <PaidToolAccess component={AdsbLive} />}
+      />
+      <Route
+        path="/adsb-live"
+        component={() => <RedirectTo to="/live-traffic" />}
+      />
+      <Route
+        path="/events"
+        component={() => <StudentPageLoader component={EventsPage} />}
+      />
       <Route path="/admin/invite" component={RequireAuth} />
       <Route path="/privacy-policy" component={PrivacyPolicy} />
       <Route path="/terms-of-service" component={TermsOfService} />
@@ -307,7 +418,10 @@ function Router() {
       <Route path="/cfi/student-terms" component={CfiStudentTerms} />
       <Route path="/cfi/:slug" component={CfiProfile} />
       <Route path="/delete-account" component={DeleteAccount} />
-      <Route path="/tools/eb6" component={() => <RedirectTo to="/tools/e6b" />} />
+      <Route
+        path="/tools/eb6"
+        component={() => <RedirectTo to="/tools/e6b" />}
+      />
       <Route path="/investor-deck" component={InvestorDeck} />
       <Route path={INVESTOR_DECK_SHARE_PATH} component={InvestorDeck} />
       <Route path="/noiseandfury" component={NoiseAndFuryPage} />
@@ -319,19 +433,28 @@ function Router() {
       <Route path="/tips/admin" component={TipsPage} />
       <Route path="/courtyard" component={CourtyardPortalPage} />
       <Route path="/courtyard/budget" component={CourtyardBudgetPage} />
-      <Route path="/courtyard/sales-intelligence" component={CourtyardSalesIntelligencePage} />
+      <Route
+        path="/courtyard/sales-intelligence"
+        component={CourtyardSalesIntelligencePage}
+      />
       <Route path="/bankdeposit" component={BankDepositPage} />
       <Route path="/schedule" component={SchedulePage} />
       <Route path="/opsreport" component={OpsReportPage} />
       <Route path="/comptroller" component={ComptrollerPage} />
-      <Route path="/comtroller" component={() => <RedirectTo to="/comptroller" />} />
+      <Route
+        path="/comtroller"
+        component={() => <RedirectTo to="/comptroller" />}
+      />
       <Route path="/dosreporting" component={DosReportingPage} />
       <Route path="/incidentreport" component={IncidentReportPage} />
-      <Route path="/incidentreport/share/:token" component={IncidentReportSharePage} />
+      <Route
+        path="/incidentreport/share/:token"
+        component={IncidentReportSharePage}
+      />
       <Route path="/vw-beetle" component={VwBeetlePage} />
       <Route path="/vw-beetle/admin" component={VwBeetlePage} />
       <Route path="/404" component={NotFound} />
-      
+
       {/* Protected routes - require authentication */}
       {isAuthenticated ? (
         <>
@@ -347,49 +470,129 @@ function Router() {
           <Route path="/marketplace" component={Marketplace} />
           <Route path="/cfi/:slug/request" component={CfiRequest} />
           <Route path="/aircraft/:id" component={AircraftDetail} />
-          
+
           <Route path="/tool-hub" component={ToolHub} />
-          
+
           <Route path="/list-aircraft" component={ListAircraft} />
           <Route path="/edit-aircraft/:id" component={ListAircraft} />
-          <Route path="/create-marketplace-listing" component={CreateMarketplaceListing} />
-          <Route path="/edit-marketplace-listing/:id" component={CreateMarketplaceListing} />
-          <Route path="/marketplace/listing/checkout" component={MarketplaceListingCheckout} />
+          <Route
+            path="/create-marketplace-listing"
+            component={CreateMarketplaceListing}
+          />
+          <Route
+            path="/edit-marketplace-listing/:id"
+            component={CreateMarketplaceListing}
+          />
+          <Route
+            path="/marketplace/listing/checkout"
+            component={MarketplaceListingCheckout}
+          />
           <Route path="/rental-payment/:id" component={RentalPayment} />
           <Route path="/owner-payout-setup" component={OwnerPayoutSetup} />
           <Route path="/owner-withdrawals" component={OwnerWithdrawals} />
           <Route path="/admin" component={AdminDashboard} />
-          <Route path="/admin/aviation-briefings" component={AdminAviationBriefingsPage} />
+          <Route
+            path="/admin/aviation-briefings"
+            component={AdminAviationBriefingsPage}
+          />
           <Route path="/admin/certification" component={AdminDashboard} />
-      <Route path="/super-admin/flight-service-ops" component={FlightServiceOpsPage} />
-      <Route path="/super-admin/membership-promotions" component={MembershipPromotionsAdminPage} />
+          <Route
+            path="/super-admin/flight-service-ops"
+            component={FlightServiceOpsPage}
+          />
+          <Route
+            path="/super-admin/membership-promotions"
+            component={MembershipPromotionsAdminPage}
+          />
           <Route path="/admin/invite" component={AdminInviteAccept} />
           <Route path="/verify-identity" component={VerifyIdentity} />
           <Route path="/settings" component={Settings} />
           <Route path="/logbook" component={Logbook} />
           <Route path="/logbook/pro/success" component={LogbookProSuccess} />
           <Route path="/logbook/pro/cancel" component={LogbookProCancel} />
-          
+
           <Route path="/my-aircraft" component={MyAircraft} />
           <Route path="/notifications" component={NotificationsPage} />
-          <Route path="/admin/aircraft-library" component={AdminAircraftLibrary} />
-          <Route path="/student" component={() => <StudentPageLoader component={StudentHub} />} />
-          <Route path="/start-flying" component={() => <StudentPageLoader component={StudentHub} />} />
-          <Route path="/student/wizard" component={() => <StudentPageLoader component={StudentWizard} />} />
-          <Route path="/student/roadmap" component={() => <StudentPageLoader component={StudentRoadmap} />} />
-          <Route path="/student/cost" component={() => <StudentPageLoader component={StudentCost} />} />
-          <Route path="/student/progress" component={() => <StudentPageLoader component={StudentProgress} />} />
-          <Route path="/student/training" component={() => <StudentPageLoader component={StudentTraining} />} />
-          <Route path="/student/written" component={() => <StudentPageLoader component={StudentWritten} />} />
-          <Route path="/student/abbreviations" component={() => <StudentPageLoader component={StudentAbbreviations} />} />
-          <Route path="/student/syllabi" component={() => <StudentPageLoader component={StudentSyllabi} />} />
-          <Route path="/student/vor-trainer" component={() => <StudentPageLoader component={StudentVorTrainer} />} />
-          <Route path="/student/six-pack-trainer" component={() => <StudentPageLoader component={StudentSixPackTrainer} />} />
-          <Route path="/student/checklists" component={() => <StudentPageLoader component={StudentChecklists} />} />
-          <Route path="/student/weather" component={() => <StudentPageLoader component={StudentWeather} />} />
-          <Route path="/gps-sims" component={() => <StudentPageLoader component={GpsSimsHub} />} />
-          <Route path="/gps-sims/:unitId" component={() => <StudentPageLoader component={GpsSimsUnit} />} />
-          <Route path="/ifr-tools" component={() => <StudentPageLoader component={IfrTools} />} />
+          <Route
+            path="/admin/aircraft-library"
+            component={AdminAircraftLibrary}
+          />
+          <Route
+            path="/student"
+            component={() => <StudentPageLoader component={StudentHub} />}
+          />
+          <Route
+            path="/start-flying"
+            component={() => <StudentPageLoader component={StudentHub} />}
+          />
+          <Route
+            path="/student/wizard"
+            component={() => <StudentPageLoader component={StudentWizard} />}
+          />
+          <Route
+            path="/student/roadmap"
+            component={() => <StudentPageLoader component={StudentRoadmap} />}
+          />
+          <Route
+            path="/student/cost"
+            component={() => <StudentPageLoader component={StudentCost} />}
+          />
+          <Route
+            path="/student/progress"
+            component={() => <StudentPageLoader component={StudentProgress} />}
+          />
+          <Route
+            path="/student/training"
+            component={() => <StudentPageLoader component={StudentTraining} />}
+          />
+          <Route
+            path="/student/written"
+            component={() => <StudentPageLoader component={StudentWritten} />}
+          />
+          <Route
+            path="/student/abbreviations"
+            component={() => (
+              <StudentPageLoader component={StudentAbbreviations} />
+            )}
+          />
+          <Route
+            path="/student/syllabi"
+            component={() => <StudentPageLoader component={StudentSyllabi} />}
+          />
+          <Route
+            path="/student/vor-trainer"
+            component={() => (
+              <StudentPageLoader component={StudentVorTrainer} />
+            )}
+          />
+          <Route
+            path="/student/six-pack-trainer"
+            component={() => (
+              <StudentPageLoader component={StudentSixPackTrainer} />
+            )}
+          />
+          <Route
+            path="/student/checklists"
+            component={() => (
+              <StudentPageLoader component={StudentChecklists} />
+            )}
+          />
+          <Route
+            path="/student/weather"
+            component={() => <StudentPageLoader component={StudentWeather} />}
+          />
+          <Route
+            path="/gps-sims"
+            component={() => <StudentPageLoader component={GpsSimsHub} />}
+          />
+          <Route
+            path="/gps-sims/:unitId"
+            component={() => <StudentPageLoader component={GpsSimsUnit} />}
+          />
+          <Route
+            path="/ifr-tools"
+            component={() => <StudentPageLoader component={IfrTools} />}
+          />
         </>
       ) : (
         <>
@@ -405,9 +608,9 @@ function Router() {
           <Route path="/marketplace" component={Marketplace} />
           <Route path="/cfi/:slug/request" component={RequireAuth} />
           <Route path="/aircraft/:id" component={AircraftDetail} />
-          
+
           <Route path="/tool-hub" component={ToolHub} />
-          
+
           <Route path="/list-aircraft" component={RequireAuth} />
           <Route path="/edit-aircraft/:id" component={RequireAuth} />
           <Route path="/create-marketplace-listing" component={RequireAuth} />
@@ -419,38 +622,100 @@ function Router() {
           <Route path="/admin" component={RequireAuth} />
           <Route path="/admin/aviation-briefings" component={RequireAuth} />
           <Route path="/admin/certification" component={RequireAuth} />
-          <Route path="/super-admin/flight-service-ops" component={RequireAuth} />
-          <Route path="/super-admin/membership-promotions" component={RequireAuth} />
+          <Route
+            path="/super-admin/flight-service-ops"
+            component={RequireAuth}
+          />
+          <Route
+            path="/super-admin/membership-promotions"
+            component={RequireAuth}
+          />
           <Route path="/admin/invite" component={RequireAuth} />
           <Route path="/verify-identity" component={RequireAuth} />
           <Route path="/settings" component={RequireAuth} />
           <Route path="/logbook" component={RequireAuth} />
           <Route path="/logbook/pro/success" component={RequireAuth} />
           <Route path="/logbook/pro/cancel" component={RequireAuth} />
-          
+
           <Route path="/my-aircraft" component={RequireAuth} />
           <Route path="/notifications" component={RequireAuth} />
           <Route path="/admin/aircraft-library" component={RequireAuth} />
-          <Route path="/student" component={() => <StudentPageLoader component={StudentHub} />} />
-          <Route path="/start-flying" component={() => <StudentPageLoader component={StudentHub} />} />
-          <Route path="/student/wizard" component={() => <StudentPageLoader component={StudentWizard} />} />
-          <Route path="/student/roadmap" component={() => <StudentPageLoader component={StudentRoadmap} />} />
-          <Route path="/student/cost" component={() => <StudentPageLoader component={StudentCost} />} />
-          <Route path="/student/progress" component={() => <StudentPageLoader component={StudentProgress} />} />
+          <Route
+            path="/student"
+            component={() => <StudentPageLoader component={StudentHub} />}
+          />
+          <Route
+            path="/start-flying"
+            component={() => <StudentPageLoader component={StudentHub} />}
+          />
+          <Route
+            path="/student/wizard"
+            component={() => <StudentPageLoader component={StudentWizard} />}
+          />
+          <Route
+            path="/student/roadmap"
+            component={() => <StudentPageLoader component={StudentRoadmap} />}
+          />
+          <Route
+            path="/student/cost"
+            component={() => <StudentPageLoader component={StudentCost} />}
+          />
+          <Route
+            path="/student/progress"
+            component={() => <StudentPageLoader component={StudentProgress} />}
+          />
           <Route path="/student/training" component={RequireAuth} />
-          <Route path="/student/written" component={() => <StudentPageLoader component={StudentWritten} />} />
-          <Route path="/student/abbreviations" component={() => <StudentPageLoader component={StudentAbbreviations} />} />
-          <Route path="/student/syllabi" component={() => <StudentPageLoader component={StudentSyllabi} />} />
-          <Route path="/student/vor-trainer" component={() => <StudentPageLoader component={StudentVorTrainer} />} />
-          <Route path="/student/six-pack-trainer" component={() => <StudentPageLoader component={StudentSixPackTrainer} />} />
-          <Route path="/student/checklists" component={() => <StudentPageLoader component={StudentChecklists} />} />
-          <Route path="/student/weather" component={() => <StudentPageLoader component={StudentWeather} />} />
-          <Route path="/gps-sims" component={() => <StudentPageLoader component={GpsSimsHub} />} />
-          <Route path="/gps-sims/:unitId" component={() => <StudentPageLoader component={GpsSimsUnit} />} />
-          <Route path="/ifr-tools" component={() => <StudentPageLoader component={IfrTools} />} />
+          <Route
+            path="/student/written"
+            component={() => <StudentPageLoader component={StudentWritten} />}
+          />
+          <Route
+            path="/student/abbreviations"
+            component={() => (
+              <StudentPageLoader component={StudentAbbreviations} />
+            )}
+          />
+          <Route
+            path="/student/syllabi"
+            component={() => <StudentPageLoader component={StudentSyllabi} />}
+          />
+          <Route
+            path="/student/vor-trainer"
+            component={() => (
+              <StudentPageLoader component={StudentVorTrainer} />
+            )}
+          />
+          <Route
+            path="/student/six-pack-trainer"
+            component={() => (
+              <StudentPageLoader component={StudentSixPackTrainer} />
+            )}
+          />
+          <Route
+            path="/student/checklists"
+            component={() => (
+              <StudentPageLoader component={StudentChecklists} />
+            )}
+          />
+          <Route
+            path="/student/weather"
+            component={() => <StudentPageLoader component={StudentWeather} />}
+          />
+          <Route
+            path="/gps-sims"
+            component={() => <StudentPageLoader component={GpsSimsHub} />}
+          />
+          <Route
+            path="/gps-sims/:unitId"
+            component={() => <StudentPageLoader component={GpsSimsUnit} />}
+          />
+          <Route
+            path="/ifr-tools"
+            component={() => <StudentPageLoader component={IfrTools} />}
+          />
         </>
       )}
-      
+
       <Route component={NotFound} />
     </Switch>
   );
@@ -469,7 +734,8 @@ function AppShell() {
   const isCourtyardPage = location.startsWith("/courtyard");
   const isBankDepositPage = location.startsWith("/bankdeposit");
   const isOpsReportPage = location.startsWith("/opsreport");
-  const isComptrollerPage = location.startsWith("/comptroller") || location.startsWith("/comtroller");
+  const isComptrollerPage =
+    location.startsWith("/comptroller") || location.startsWith("/comtroller");
   const isDosReportingPage = location.startsWith("/dosreporting");
   const isIncidentReportPage = location.startsWith("/incidentreport");
   const isVwBeetlePage = location.startsWith("/vw-beetle");

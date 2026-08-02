@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 import { BriefingEditor } from "@/components/aviation-briefings/BriefingEditor";
 import { BriefingPerformancePanel } from "@/components/aviation-briefings/BriefingPerformancePanel";
+import { PhotoSubmissionAdmin } from "@/components/aviation-briefings/PhotoSubmissionAdmin";
 import type { AviationBriefing } from "@/components/aviation-briefings/types";
 import {
   aviationBriefingInputSchema,
@@ -796,6 +797,7 @@ export default function AdminAviationBriefingsPage() {
                 )}
               </div>
             </section>
+            <PhotoSubmissionAdmin />
             <BriefingPerformancePanel />
             <section className="mt-8 rounded-xl border border-[#526d94]/40 bg-[#0c1624] p-5">
               <h2 className="text-2xl font-bold">Private reader engagement</h2>

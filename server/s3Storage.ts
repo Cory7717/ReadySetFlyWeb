@@ -1,4 +1,10 @@
-import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
+import {
+  S3Client,
+  PutObjectCommand,
+  GetObjectCommand,
+  DeleteObjectCommand,
+  HeadObjectCommand,
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { createReadStream } from "fs";
 import { Readable } from "stream";
@@ -32,7 +38,7 @@ export class S3StorageService {
    */
   async getPresignedUploadUrl(): Promise<string> {
     const key = `uploads/${randomUUID()}`;
-    
+
     const command = new PutObjectCommand({
       Bucket: this.bucket,
       Key: key,
@@ -64,7 +70,11 @@ export class S3StorageService {
     return { uploadURL, key };
   }
 
-  async uploadFile(params: { key: string; filePath: string; contentType?: string }): Promise<void> {
+  async uploadFile(params: {
+    key: string;
+    filePath: string;
+    contentType?: string;
+  }): Promise<void> {
     const command = new PutObjectCommand({
       Bucket: this.bucket,
       Key: params.key,
@@ -74,7 +84,28 @@ export class S3StorageService {
     await this.client.send(command);
   }
 
-  async getObjectStream(params: { key: string }): Promise<{ stream: Readable; contentType?: string; contentLength?: number }> {
+  async uploadBuffer(params: {
+    key: string;
+    buffer: Buffer;
+    contentType: string;
+  }): Promise<void> {
+    await this.client.send(
+      new PutObjectCommand({
+        Bucket: this.bucket,
+        Key: params.key,
+        Body: params.buffer,
+        ContentType: params.contentType,
+      }),
+    );
+  }
+
+  async getObjectStream(params: {
+    key: string;
+  }): Promise<{
+    stream: Readable;
+    contentType?: string;
+    contentLength?: number;
+  }> {
     const command = new GetObjectCommand({
       Bucket: this.bucket,
       Key: params.key,
@@ -99,11 +130,15 @@ export class S3StorageService {
     await this.client.send(command);
   }
 
-  async headObject(key: string): Promise<{ contentType?: string; contentLength?: number }> {
-    const response = await this.client.send(new HeadObjectCommand({
-      Bucket: this.bucket,
-      Key: key,
-    }));
+  async headObject(
+    key: string,
+  ): Promise<{ contentType?: string; contentLength?: number }> {
+    const response = await this.client.send(
+      new HeadObjectCommand({
+        Bucket: this.bucket,
+        Key: key,
+      }),
+    );
     return {
       contentType: response.ContentType,
       contentLength: response.ContentLength,

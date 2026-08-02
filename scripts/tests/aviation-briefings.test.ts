@@ -9,47 +9,113 @@ import {
 } from "../../shared/config/aviationBriefings";
 
 const base: AviationBriefingInput = {
-  title: "Reading a METAR Without Guesswork", slug: "reading-a-metar-without-guesswork",
-  excerpt: "A practical explanation of the weather report elements pilots encounter.",
-  contentType: "article", category: "Weather", status: "draft", isFeatured: false,
-  featuredImageUrl: "", featuredImageStorageKey: "", featuredImageAlt: "", featuredImageCredit: "", featuredImageCreditUrl: "",
-  articleContent: [{ type: "heading", level: 2, text: "Start with the observation" }, { type: "paragraph", text: "Use official weather sources." }],
-  videoSourceType: null, videoUrl: "", videoStorageKey: "", videoThumbnailUrl: "",
-  videoDurationSeconds: null, videoTranscript: "", supportingContent: [], contributors: [],
-  relevantToolIds: ["aviation-weather"], seoTitle: "", seoDescription: "", publishedAt: null, scheduledAt: null,
+  title: "Reading a METAR Without Guesswork",
+  slug: "reading-a-metar-without-guesswork",
+  excerpt:
+    "A practical explanation of the weather report elements pilots encounter.",
+  contentType: "article",
+  category: "Weather",
+  status: "draft",
+  isFeatured: false,
+  featuredImageUrl: "",
+  featuredImageStorageKey: "",
+  featuredImageAlt: "",
+  featuredImageCredit: "",
+  featuredImageCreditUrl: "",
+  articleContent: [
+    { type: "heading", level: 2, text: "Start with the observation" },
+    { type: "paragraph", text: "Use official weather sources." },
+  ],
+  videoSourceType: null,
+  videoUrl: "",
+  videoStorageKey: "",
+  videoThumbnailUrl: "",
+  videoDurationSeconds: null,
+  videoTranscript: "",
+  supportingContent: [],
+  contributors: [],
+  relevantToolIds: ["aviation-weather"],
+  seoTitle: "",
+  seoDescription: "",
+  publishedAt: null,
+  scheduledAt: null,
 };
 
 test("structured article creation accepts safe blocks and rejects arbitrary HTML fields", () => {
   assert.equal(aviationBriefingInputSchema.safeParse(base).success, true);
-  assert.equal(aviationBriefingInputSchema.safeParse({ ...base, articleContent: [{ type: "html", html: "<script>alert(1)</script>" }] }).success, false);
+  assert.equal(
+    aviationBriefingInputSchema.safeParse({
+      ...base,
+      articleContent: [{ type: "html", html: "<script>alert(1)</script>" }],
+    }).success,
+    false,
+  );
 });
 
 test("external briefing videos accept only their declared provider", () => {
-  const youtube = { ...base, contentType: "video" as const, videoSourceType: "youtube" as const, videoUrl: "https://www.youtube.com/watch?v=abc123" };
+  const youtube = {
+    ...base,
+    contentType: "video" as const,
+    videoSourceType: "youtube" as const,
+    videoUrl: "https://www.youtube.com/watch?v=abc123",
+  };
   assert.equal(validateBriefingVideo(youtube), null);
-  assert.match(validateBriefingVideo({ ...youtube, videoUrl: "https://attacker.example/embed/abc" }) || "", /YouTube/);
-  assert.equal(validateBriefingVideo({ ...youtube, videoSourceType: "vimeo", videoUrl: "https://vimeo.com/12345" }), null);
+  assert.match(
+    validateBriefingVideo({
+      ...youtube,
+      videoUrl: "https://attacker.example/embed/abc",
+    }) || "",
+    /YouTube/,
+  );
+  assert.equal(
+    validateBriefingVideo({
+      ...youtube,
+      videoSourceType: "vimeo",
+      videoUrl: "https://vimeo.com/12345",
+    }),
+    null,
+  );
 });
 
 test("contributor credentials are preserved exactly and never inferred", () => {
-  const entered = { name: "Cory Armer", role: "Author", professionalTitle: "Founder, Ready Set Fly", aviationCredentials: "Student pilot and aviation software builder" };
+  const entered = {
+    name: "Cory Armer",
+    role: "Author",
+    professionalTitle: "Founder, Ready Set Fly",
+    aviationCredentials: "Student pilot and aviation software builder",
+  };
   const parsed = briefingContributorSchema.parse(entered);
   assert.equal(parsed.aviationCredentials, entered.aviationCredentials);
-  const noCredential = briefingContributorSchema.parse({ name: "RSF Team", role: "Contributor" });
+  const noCredential = briefingContributorSchema.parse({
+    name: "RSF Team",
+    role: "Contributor",
+  });
   assert.equal(noCredential.aviationCredentials, "");
 });
 
 test("route contract protects drafts and supports due scheduled content", () => {
-  const source = readFileSync(new URL("../../server/routes/aviationBriefings.ts", import.meta.url), "utf8");
+  const source = readFileSync(
+    new URL("../../server/routes/aviationBriefings.ts", import.meta.url),
+    "utf8",
+  );
   assert.match(source, /eq\(aviationBriefings\.status, "published"\)/);
   assert.match(source, /eq\(aviationBriefings\.status, "scheduled"\)/);
   assert.match(source, /lte\(aviationBriefings\.scheduledAt, now\)/);
-  assert.match(source, /"\/api\/admin\/aviation-briefings", isAuthenticated, isSuperAdmin/);
+  assert.match(
+    source,
+    /"\/api\/admin\/aviation-briefings", isAuthenticated, isSuperAdmin/,
+  );
   assert.match(source, /code === "23505"/);
 });
 
 test("public rendering includes tools, disclaimer, attribution, and analytics", () => {
-  const detail = readFileSync(new URL("../../client/src/pages/aviation-briefing-detail.tsx", import.meta.url), "utf8");
+  const detail = readFileSync(
+    new URL(
+      "../../client/src/pages/aviation-briefing-detail.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
   assert.match(detail, /Try It in Ready Set Fly/);
   assert.match(detail, /not a substitute for\s+official FAA publications/);
   assert.match(detail, /person\.aviationCredentials/);
@@ -57,10 +123,30 @@ test("public rendering includes tools, disclaimer, attribution, and analytics", 
 });
 
 test("contributor photos use durable media storage and accessible fallbacks", () => {
-  const editor = readFileSync(new URL("../../client/src/components/aviation-briefings/BriefingEditor.tsx", import.meta.url), "utf8");
-  const detail = readFileSync(new URL("../../client/src/pages/aviation-briefing-detail.tsx", import.meta.url), "utf8");
-  const routes = readFileSync(new URL("../../server/routes/aviationBriefings.ts", import.meta.url), "utf8");
-  const parsed = briefingContributorSchema.parse({ name: "Cory Armer", role: "Author", profileImageUrl: "/api/aviation-briefings/media?key=aviation-briefings/photo.webp" });
+  const editor = readFileSync(
+    new URL(
+      "../../client/src/components/aviation-briefings/BriefingEditor.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const detail = readFileSync(
+    new URL(
+      "../../client/src/pages/aviation-briefing-detail.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const routes = readFileSync(
+    new URL("../../server/routes/aviationBriefings.ts", import.meta.url),
+    "utf8",
+  );
+  const parsed = briefingContributorSchema.parse({
+    name: "Cory Armer",
+    role: "Author",
+    profileImageUrl:
+      "/api/aviation-briefings/media?key=aviation-briefings/photo.webp",
+  });
   assert.match(parsed.profileImageUrl, /aviation-briefings\/media/);
   assert.match(editor, /Contributor Photo/);
   assert.match(editor, /Replace photo/);
@@ -74,12 +160,24 @@ test("contributor photos use durable media storage and accessible fallbacks", ()
   assert.match(detail, /Default avatar for/);
   assert.match(detail, /ContributorFooter/);
   assert.match(detail, /src=\{apiUrl\(person\.profileImageUrl\)\}/);
-  assert.ok(routes.indexOf('app.get("/api/aviation-briefings/media"') < routes.indexOf('app.get("/api/aviation-briefings/:slug"'));
+  assert.ok(
+    routes.indexOf('app.get("/api/aviation-briefings/media"') <
+      routes.indexOf('app.get("/api/aviation-briefings/:slug"'),
+  );
 });
 
 test("saved drafts remain open and the briefing library is directly accessible", () => {
-  const admin = readFileSync(new URL("../../client/src/pages/admin-aviation-briefings.tsx", import.meta.url), "utf8");
-  const routes = readFileSync(new URL("../../server/routes/aviationBriefings.ts", import.meta.url), "utf8");
+  const admin = readFileSync(
+    new URL(
+      "../../client/src/pages/admin-aviation-briefings.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const routes = readFileSync(
+    new URL("../../server/routes/aviationBriefings.ts", import.meta.url),
+    "utf8",
+  );
   assert.match(admin, /setEditingId\(saved\.id\)/);
   assert.match(admin, /Back to saved briefings/);
   assert.match(admin, /id="briefing-library"/);
@@ -93,7 +191,13 @@ test("saved drafts remain open and the briefing library is directly accessible",
 });
 
 test("article blocks can be reordered without changing their content", () => {
-  const editor = readFileSync(new URL("../../client/src/components/aviation-briefings/BriefingEditor.tsx", import.meta.url), "utf8");
+  const editor = readFileSync(
+    new URL(
+      "../../client/src/components/aviation-briefings/BriefingEditor.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
   assert.match(editor, /const move = \(index: number, direction: -1 \| 1\)/);
   assert.match(editor, /Move \$\{block\.type\} block up/);
   assert.match(editor, /Move \$\{block\.type\} block down/);
@@ -101,8 +205,17 @@ test("article blocks can be reordered without changing their content", () => {
 });
 
 test("a completed first save can recover from a duplicate-slug retry", () => {
-  const routes = readFileSync(new URL("../../server/routes/aviationBriefings.ts", import.meta.url), "utf8");
-  const admin = readFileSync(new URL("../../client/src/pages/admin-aviation-briefings.tsx", import.meta.url), "utf8");
+  const routes = readFileSync(
+    new URL("../../server/routes/aviationBriefings.ts", import.meta.url),
+    "utf8",
+  );
+  const admin = readFileSync(
+    new URL(
+      "../../client/src/pages/admin-aviation-briefings.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
   assert.match(routes, /recoveredExisting: true/);
   assert.match(routes, /aviationBriefings\.slug, slug/);
   assert.match(routes, /set\(mapInput\(recoveredInput\.data/);
@@ -111,7 +224,13 @@ test("a completed first save can recover from a duplicate-slug retry", () => {
 });
 
 test("article typography preserves structured headings, quotes, and paragraph breaks", () => {
-  const detail = readFileSync(new URL("../../client/src/pages/aviation-briefing-detail.tsx", import.meta.url), "utf8");
+  const detail = readFileSync(
+    new URL(
+      "../../client/src/pages/aviation-briefing-detail.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
   assert.match(detail, /text-3xl font-extrabold/);
   assert.match(detail, /block\.text\.split\(\/\\n\\s\*\\n\//);
   assert.match(detail, /whitespace-pre-line/);
@@ -119,44 +238,111 @@ test("article typography preserves structured headings, quotes, and paragraph br
 });
 
 test("featured images can carry an optional linked photo credit", () => {
-  const parsed = aviationBriefingInputSchema.parse({ ...base, featuredImageCredit: "Jane Pilot", featuredImageCreditUrl: "https://example.com/jane" });
+  const parsed = aviationBriefingInputSchema.parse({
+    ...base,
+    featuredImageCredit: "Jane Pilot",
+    featuredImageCreditUrl: "https://example.com/jane",
+  });
   assert.equal(parsed.featuredImageCredit, "Jane Pilot");
-  assert.equal(aviationBriefingInputSchema.safeParse({ ...base, featuredImageCreditUrl: "javascript:alert(1)" }).success, false);
-  const editor = readFileSync(new URL("../../client/src/components/aviation-briefings/BriefingEditor.tsx", import.meta.url), "utf8");
-  const detail = readFileSync(new URL("../../client/src/pages/aviation-briefing-detail.tsx", import.meta.url), "utf8");
+  assert.equal(
+    aviationBriefingInputSchema.safeParse({
+      ...base,
+      featuredImageCreditUrl: "javascript:alert(1)",
+    }).success,
+    false,
+  );
+  const editor = readFileSync(
+    new URL(
+      "../../client/src/components/aviation-briefings/BriefingEditor.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const detail = readFileSync(
+    new URL(
+      "../../client/src/pages/aviation-briefing-detail.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
   assert.match(editor, /Photo credit link \(optional\)/);
   assert.match(detail, /Photo credit:/);
   assert.match(detail, /featuredImageCreditUrl/);
 });
 
 test("static engagement analytics route is registered before dynamic briefing ids", () => {
-  const registration = readFileSync(new URL("../../server/routes.ts", import.meta.url), "utf8");
-  assert.ok(registration.indexOf("registerAviationBriefingEngagementRoutes(app)") < registration.indexOf("registerAviationBriefingRoutes(app)"));
+  const registration = readFileSync(
+    new URL("../../server/routes.ts", import.meta.url),
+    "utf8",
+  );
+  assert.ok(
+    registration.indexOf("registerAviationBriefingEngagementRoutes(app)") <
+      registration.indexOf("registerAviationBriefingRoutes(app)"),
+  );
 });
 
 test("Aviation Briefings suppresses the global free-account promotion bar", () => {
-  const banner = readFileSync(new URL("../../client/src/components/FreeAccountValueBar.tsx", import.meta.url), "utf8");
+  const banner = readFileSync(
+    new URL(
+      "../../client/src/components/FreeAccountValueBar.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
   assert.match(banner, /"\/aviation-briefings"/);
 });
 
 test("Aviation Briefings suppresses the global weather announcement", () => {
-  const announcement = readFileSync(new URL("../../client/src/components/AiWeatherTranslatorAnnouncement.tsx", import.meta.url), "utf8");
+  const announcement = readFileSync(
+    new URL(
+      "../../client/src/components/AiWeatherTranslatorAnnouncement.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
   assert.match(announcement, /"\/aviation-briefings"/);
 });
 
 test("public article links receive article-specific server-rendered social metadata", () => {
-  const server = readFileSync(new URL("../../server/vite.ts", import.meta.url), "utf8");
+  const server = readFileSync(
+    new URL("../../server/vite.ts", import.meta.url),
+    "utf8",
+  );
   assert.match(server, /eq\(aviationBriefings\.slug, slug\)/);
-  assert.match(server, /briefing\.seoTitle \|\| `\$\{briefing\.title\} \| Ready Set Fly`/);
+  assert.match(
+    server,
+    /briefing\.seoTitle \|\| `\$\{briefing\.title\} \| Ready Set Fly`/,
+  );
   assert.match(server, /briefing\.seoDescription \|\| briefing\.excerpt/);
-  assert.match(server, /type: briefing\.contentType === "video" \? "video\.other" : "article"/);
+  assert.match(
+    server,
+    /type: briefing\.contentType === "video" \? "video\.other" : "article"/,
+  );
   assert.match(server, /featuredImageStorageKey/);
 });
 
 test("private briefing performance reports anonymous readership and engagement", () => {
-  const routes = readFileSync(new URL("../../server/routes/aviationBriefingEngagement.ts", import.meta.url), "utf8");
-  const panel = readFileSync(new URL("../../client/src/components/aviation-briefings/BriefingPerformancePanel.tsx", import.meta.url), "utf8");
-  const admin = readFileSync(new URL("../../client/src/pages/admin-aviation-briefings.tsx", import.meta.url), "utf8");
+  const routes = readFileSync(
+    new URL(
+      "../../server/routes/aviationBriefingEngagement.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const panel = readFileSync(
+    new URL(
+      "../../client/src/components/aviation-briefings/BriefingPerformancePanel.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const admin = readFileSync(
+    new URL(
+      "../../client/src/pages/admin-aviation-briefings.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
   assert.match(routes, /\/api\/admin\/aviation-briefings\/performance/);
   assert.match(routes, /count\(DISTINCT "visitor_id"\)/);
   assert.match(routes, /aviation_briefing_tool_clicked/);
@@ -168,10 +354,65 @@ test("private briefing performance reports anonymous readership and engagement",
 });
 
 test("reader sharing identifies LinkedIn and provides an Instagram-safe fallback", () => {
-  const engagement = readFileSync(new URL("../../client/src/components/aviation-briefings/BriefingEngagement.tsx", import.meta.url), "utf8");
+  const engagement = readFileSync(
+    new URL(
+      "../../client/src/components/aviation-briefings/BriefingEngagement.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
   assert.match(engagement, /linkedin\.com\/sharing\/share-offsite/);
   assert.match(engagement, /aria-label="Share on Instagram"/);
   assert.match(engagement, /navigator\.share/);
   assert.match(engagement, /network: "instagram"/);
   assert.match(engagement, /The link is ready to paste into Instagram/);
+});
+
+test("photo submissions require a valid image, ownership, and versioned permission", () => {
+  const routes = readFileSync(
+    new URL(
+      "../../server/routes/aviationBriefingPhotoSubmissions.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const config = readFileSync(
+    new URL("../../shared/config/aviationBriefings.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(routes, /PHOTO_MAX_BYTES\s*=\s*15\s*\*\s*1024\s*\*\s*1024/);
+  assert.match(routes, /ownershipConfirmed:\s*z\.literal\("true"\)/);
+  assert.match(routes, /permissionAccepted:\s*z\.literal\("true"\)/);
+  assert.match(routes, /detectPhoto\(req\.file\.buffer\)/);
+  assert.match(routes, /uploadBuffer/);
+  assert.match(routes, /deleteObject\(uploadedKey\)/);
+  assert.match(config, /photo_permission_v1/);
+  assert.match(routes, /permissionText:\s*AVIATION_PHOTO_PERMISSION_TEXT/);
+});
+
+test("photo workflow is public for contributors and Super Admin-only for review", () => {
+  const app = readFileSync(
+    new URL("../../client/src/App.tsx", import.meta.url),
+    "utf8",
+  );
+  const routes = readFileSync(
+    new URL(
+      "../../server/routes/aviationBriefingPhotoSubmissions.ts",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  const page = readFileSync(
+    new URL(
+      "../../client/src/pages/aviation-briefing-contribute.tsx",
+      import.meta.url,
+    ),
+    "utf8",
+  );
+  assert.match(app, /\/aviation-briefings\/contribute/);
+  assert.match(routes, /photo-submissions",\s*isAuthenticated,\s*isSuperAdmin/);
+  assert.match(routes, /image",\s*isAuthenticated,\s*isSuperAdmin/);
+  assert.match(page, /disabled={!canSubmit}/);
+  assert.match(page, /aviation_briefings_photo_submission_completed/);
+  assert.doesNotMatch(page, /contributorEmail.*trackEvent/);
 });

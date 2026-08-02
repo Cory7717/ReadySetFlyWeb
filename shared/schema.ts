@@ -1991,11 +1991,23 @@ export const courtyardSalesMonthlyTargets = pgTable(
     targetYear: integer("target_year").notNull(),
     targetMonth: integer("target_month").notNull(),
     segment: text("segment").notNull(),
-    targetRoomNights: numeric("target_room_nights", { precision: 14, scale: 2 }).notNull(),
-    targetRevenue: numeric("target_revenue", { precision: 16, scale: 2 }).notNull(),
+    targetRoomNights: numeric("target_room_nights", {
+      precision: 14,
+      scale: 2,
+    }).notNull(),
+    targetRevenue: numeric("target_revenue", {
+      precision: 16,
+      scale: 2,
+    }).notNull(),
     targetAdr: numeric("target_adr", { precision: 14, scale: 2 }).notNull(),
-    stretchRoomNights: numeric("stretch_room_nights", { precision: 14, scale: 2 }).notNull(),
-    stretchRevenue: numeric("stretch_revenue", { precision: 16, scale: 2 }).notNull(),
+    stretchRoomNights: numeric("stretch_room_nights", {
+      precision: 14,
+      scale: 2,
+    }).notNull(),
+    stretchRevenue: numeric("stretch_revenue", {
+      precision: 16,
+      scale: 2,
+    }).notNull(),
     stretchAdr: numeric("stretch_adr", { precision: 14, scale: 2 }).notNull(),
     baselineJson: jsonb("baseline_json")
       .$type<Record<string, unknown>>()
@@ -2005,8 +2017,14 @@ export const courtyardSalesMonthlyTargets = pgTable(
     status: text("status").notNull().default("draft"),
     sourceFingerprint: text("source_fingerprint").notNull(),
     lockedAt: timestamp("locked_at"),
-    createdByUserId: varchar("created_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
-    updatedByUserId: varchar("updated_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
+    createdByUserId: varchar("created_by_user_id").references(
+      () => tipsUsers.id,
+      { onDelete: "set null" },
+    ),
+    updatedByUserId: varchar("updated_by_user_id").references(
+      () => tipsUsers.id,
+      { onDelete: "set null" },
+    ),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
@@ -2028,8 +2046,12 @@ export const courtyardSalesMonthlyTargets = pgTable(
 export const courtyardSalesDemandEvents = pgTable(
   "courtyard_sales_demand_events",
   {
-    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-    hotelId: varchar("hotel_id").notNull().references(() => courtyardHotels.id, { onDelete: "cascade" }),
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    hotelId: varchar("hotel_id")
+      .notNull()
+      .references(() => courtyardHotels.id, { onDelete: "cascade" }),
     eventName: text("event_name").notNull(),
     category: text("category").notNull(),
     startDate: date("start_date").notNull(),
@@ -2038,8 +2060,14 @@ export const courtyardSalesDemandEvents = pgTable(
     city: text("city"),
     distanceMiles: numeric("distance_miles", { precision: 8, scale: 2 }),
     demandLevel: text("demand_level").notNull().default("medium"),
-    opportunityTypesJson: jsonb("opportunity_types_json").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
-    targetRolesJson: jsonb("target_roles_json").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    opportunityTypesJson: jsonb("opportunity_types_json")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    targetRolesJson: jsonb("target_roles_json")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     recommendedAction: text("recommended_action"),
     bookingWindowDays: integer("booking_window_days"),
     sourceName: text("source_name"),
@@ -2047,18 +2075,30 @@ export const courtyardSalesDemandEvents = pgTable(
     evidenceStatus: text("evidence_status").notNull().default("manual"),
     confidence: text("confidence").notNull().default("medium"),
     sourceLastVerifiedAt: timestamp("source_last_verified_at"),
-    createdByUserId: varchar("created_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
+    createdByUserId: varchar("created_by_user_id").references(
+      () => tipsUsers.id,
+      { onDelete: "set null" },
+    ),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
-  (table) => [index("idx_courtyard_sales_demand_period").on(table.hotelId, table.startDate)],
+  (table) => [
+    index("idx_courtyard_sales_demand_period").on(
+      table.hotelId,
+      table.startDate,
+    ),
+  ],
 );
 
 export const courtyardSalesRegionalProspects = pgTable(
   "courtyard_sales_regional_prospects",
   {
-    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-    hotelId: varchar("hotel_id").notNull().references(() => courtyardHotels.id, { onDelete: "cascade" }),
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    hotelId: varchar("hotel_id")
+      .notNull()
+      .references(() => courtyardHotels.id, { onDelete: "cascade" }),
     companyName: text("company_name").notNull(),
     address: text("address"),
     city: text("city"),
@@ -2073,11 +2113,23 @@ export const courtyardSalesRegionalProspects = pgTable(
     sourceType: text("source_type").notNull().default("manual"),
     sourceId: text("source_id"),
     sourceUrl: text("source_url"),
-    opportunitySignalsJson: jsonb("opportunity_signals_json").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
-    targetRolesJson: jsonb("target_roles_json").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    opportunitySignalsJson: jsonb("opportunity_signals_json")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    targetRolesJson: jsonb("target_roles_json")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     historicalAccountKey: text("historical_account_key"),
-    historicalRoomNights: numeric("historical_room_nights", { precision: 14, scale: 2 }),
-    historicalRevenue: numeric("historical_revenue", { precision: 16, scale: 2 }),
+    historicalRoomNights: numeric("historical_room_nights", {
+      precision: 14,
+      scale: 2,
+    }),
+    historicalRevenue: numeric("historical_revenue", {
+      precision: 16,
+      scale: 2,
+    }),
     opportunityScore: integer("opportunity_score").notNull().default(0),
     rationale: text("rationale"),
     status: text("status").notNull().default("new"),
@@ -2088,20 +2140,38 @@ export const courtyardSalesRegionalProspects = pgTable(
     engineeringFirm: text("engineering_firm"),
     architect: text("architect"),
     projectManager: text("project_manager"),
-    knownSubcontractorsJson: jsonb("known_subcontractors_json").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
-    demandTypesJson: jsonb("demand_types_json").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    knownSubcontractorsJson: jsonb("known_subcontractors_json")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    demandTypesJson: jsonb("demand_types_json")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     notes: text("notes"),
     nextAction: text("next_action"),
     followUpDate: date("follow_up_date"),
-    assignedUserId: varchar("assigned_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
+    assignedUserId: varchar("assigned_user_id").references(() => tipsUsers.id, {
+      onDelete: "set null",
+    }),
     lastVerifiedAt: timestamp("last_verified_at"),
-    createdByUserId: varchar("created_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
+    createdByUserId: varchar("created_by_user_id").references(
+      () => tipsUsers.id,
+      { onDelete: "set null" },
+    ),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
   (table) => [
-    index("idx_courtyard_sales_regional_score").on(table.hotelId, table.opportunityScore),
-    uniqueIndex("idx_courtyard_sales_regional_source").on(table.hotelId, table.sourceType, table.sourceId),
+    index("idx_courtyard_sales_regional_score").on(
+      table.hotelId,
+      table.opportunityScore,
+    ),
+    uniqueIndex("idx_courtyard_sales_regional_source").on(
+      table.hotelId,
+      table.sourceType,
+      table.sourceId,
+    ),
   ],
 );
 
@@ -5428,7 +5498,9 @@ export const aircraftProfiles = pgTable(
 export const aviationBriefings = pgTable(
   "aviation_briefings",
   {
-    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
     title: text("title").notNull(),
     slug: varchar("slug", { length: 180 }).notNull(),
     excerpt: text("excerpt").notNull(),
@@ -5441,73 +5513,326 @@ export const aviationBriefings = pgTable(
     featuredImageAlt: text("featured_image_alt"),
     featuredImageCredit: text("featured_image_credit"),
     featuredImageCreditUrl: text("featured_image_credit_url"),
-    articleContentJson: jsonb("article_content_json").$type<Array<Record<string, unknown>>>().notNull().default(sql`'[]'::jsonb`),
+    articleContentJson: jsonb("article_content_json")
+      .$type<Array<Record<string, unknown>>>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     videoSourceType: text("video_source_type"),
     videoUrl: text("video_url"),
     videoStorageKey: text("video_storage_key"),
     videoThumbnailUrl: text("video_thumbnail_url"),
     videoDurationSeconds: integer("video_duration_seconds"),
     videoTranscript: text("video_transcript"),
-    supportingContentJson: jsonb("supporting_content_json").$type<Array<Record<string, unknown>>>().notNull().default(sql`'[]'::jsonb`),
-    contributorsJson: jsonb("contributors_json").$type<Array<Record<string, unknown>>>().notNull().default(sql`'[]'::jsonb`),
-    relevantToolIdsJson: jsonb("relevant_tool_ids_json").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    supportingContentJson: jsonb("supporting_content_json")
+      .$type<Array<Record<string, unknown>>>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    contributorsJson: jsonb("contributors_json")
+      .$type<Array<Record<string, unknown>>>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    relevantToolIdsJson: jsonb("relevant_tool_ids_json")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
     seoTitle: text("seo_title"),
     seoDescription: text("seo_description"),
     publishedAt: timestamp("published_at"),
     scheduledAt: timestamp("scheduled_at"),
-    createdByUserId: varchar("created_by_user_id").references(() => users.id, { onDelete: "set null" }),
-    updatedByUserId: varchar("updated_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    createdByUserId: varchar("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    updatedByUserId: varchar("updated_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
   (table) => [
     uniqueIndex("idx_aviation_briefings_slug").on(table.slug),
-    index("idx_aviation_briefings_visibility").on(table.status, table.publishedAt),
+    index("idx_aviation_briefings_visibility").on(
+      table.status,
+      table.publishedAt,
+    ),
     index("idx_aviation_briefings_category").on(table.category),
     index("idx_aviation_briefings_type").on(table.contentType),
     index("idx_aviation_briefings_featured").on(table.isFeatured),
   ],
 );
 
-export const aviationContributorInvitations = pgTable("aviation_contributor_invitations", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`), tokenHash: text("token_hash").notNull(),
-  contributorName: text("contributor_name").notNull(), contributorEmail: varchar("contributor_email").notNull(), organization: text("organization"),
-  internalNote: text("internal_note"), status: text("status").notNull().default("active"), reusableForRevisions: boolean("reusable_for_revisions").notNull().default(true),
-  expiresAt: timestamp("expires_at"), openedAt: timestamp("opened_at"), firstSubmissionAt: timestamp("first_submission_at"), revokedAt: timestamp("revoked_at"),
-  createdByUserId: varchar("created_by_user_id").references(() => users.id, { onDelete: "set null" }), createdAt: timestamp("created_at").defaultNow(), updatedAt: timestamp("updated_at").defaultNow(),
-}, (table) => [uniqueIndex("idx_aviation_contributor_invite_token").on(table.tokenHash), index("idx_aviation_contributor_invite_status").on(table.status, table.expiresAt)]);
+export const aviationContributorInvitations = pgTable(
+  "aviation_contributor_invitations",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    tokenHash: text("token_hash").notNull(),
+    contributorName: text("contributor_name").notNull(),
+    contributorEmail: varchar("contributor_email").notNull(),
+    organization: text("organization"),
+    internalNote: text("internal_note"),
+    status: text("status").notNull().default("active"),
+    reusableForRevisions: boolean("reusable_for_revisions")
+      .notNull()
+      .default(true),
+    expiresAt: timestamp("expires_at"),
+    openedAt: timestamp("opened_at"),
+    firstSubmissionAt: timestamp("first_submission_at"),
+    revokedAt: timestamp("revoked_at"),
+    createdByUserId: varchar("created_by_user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("idx_aviation_contributor_invite_token").on(table.tokenHash),
+    index("idx_aviation_contributor_invite_status").on(
+      table.status,
+      table.expiresAt,
+    ),
+  ],
+);
 
-export const aviationBriefingSubmissions = pgTable("aviation_briefing_submissions", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`), invitationId: varchar("invitation_id").notNull().references(() => aviationContributorInvitations.id, { onDelete: "cascade" }),
-  contributorName: text("contributor_name").notNull(), contributorEmail: varchar("contributor_email").notNull(), contributorTitle: text("contributor_title"), contributorCredentials: text("contributor_credentials"), contributorOrganization: text("contributor_organization"), contributorBio: text("contributor_bio"), contributorProfileImageUrl: text("contributor_profile_image_url"), contributorLinksJson: jsonb("contributor_links_json").$type<Record<string,string>>().notNull().default(sql`'{}'::jsonb`),
-  title: text("title").notNull(), description: text("description").notNull(), category: text("category").notNull(), videoProvider: text("video_provider").notNull(), videoUrl: text("video_url").notNull(), originalPublicationUrl: text("original_publication_url"), thumbnailUrl: text("thumbnail_url"), videoDurationSeconds: integer("video_duration_seconds"), transcript: text("transcript"), contentOutline: text("content_outline"), intendedAudience: text("intended_audience"), relevantToolIdsJson: jsonb("relevant_tool_ids_json").$type<string[]>().notNull().default(sql`'[]'::jsonb`), additionalNotes: text("additional_notes"), disclosuresJson: jsonb("disclosures_json").$type<Record<string,unknown>>().notNull().default(sql`'{}'::jsonb`),
-  status: text("status").notNull().default("draft"), revisionRequest: text("revision_request"), internalReviewNotes: text("internal_review_notes"), reviewChecklistJson: jsonb("review_checklist_json").$type<Record<string,boolean>>().notNull().default(sql`'{}'::jsonb`), credentialsReviewed: boolean("credentials_reviewed").notNull().default(false), aviationReviewRecommended: boolean("aviation_review_recommended").notNull().default(false), aviationReviewCompleted: boolean("aviation_review_completed").notNull().default(false), assignedReviewerUserId: varchar("assigned_reviewer_user_id").references(() => users.id, { onDelete: "set null" }),
-  agreementAccepted: boolean("agreement_accepted").notNull().default(false), agreementVersion: text("agreement_version"), agreementAcceptedAt: timestamp("agreement_accepted_at"), submittedAt: timestamp("submitted_at"), reviewedAt: timestamp("reviewed_at"), approvedAt: timestamp("approved_at"), rejectedAt: timestamp("rejected_at"), withdrawnAt: timestamp("withdrawn_at"), publishedBriefingId: varchar("published_briefing_id").references(() => aviationBriefings.id, { onDelete: "set null" }), createdAt: timestamp("created_at").defaultNow(), updatedAt: timestamp("updated_at").defaultNow(),
-}, (table) => [uniqueIndex("idx_aviation_submission_invitation").on(table.invitationId), index("idx_aviation_submission_status").on(table.status, table.createdAt), index("idx_aviation_submission_email").on(table.contributorEmail), index("idx_aviation_submission_category").on(table.category), index("idx_aviation_submission_reviewer").on(table.assignedReviewerUserId), index("idx_aviation_submission_briefing").on(table.publishedBriefingId)]);
+export const aviationBriefingSubmissions = pgTable(
+  "aviation_briefing_submissions",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    invitationId: varchar("invitation_id")
+      .notNull()
+      .references(() => aviationContributorInvitations.id, {
+        onDelete: "cascade",
+      }),
+    contributorName: text("contributor_name").notNull(),
+    contributorEmail: varchar("contributor_email").notNull(),
+    contributorTitle: text("contributor_title"),
+    contributorCredentials: text("contributor_credentials"),
+    contributorOrganization: text("contributor_organization"),
+    contributorBio: text("contributor_bio"),
+    contributorProfileImageUrl: text("contributor_profile_image_url"),
+    contributorLinksJson: jsonb("contributor_links_json")
+      .$type<Record<string, string>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    title: text("title").notNull(),
+    description: text("description").notNull(),
+    category: text("category").notNull(),
+    videoProvider: text("video_provider").notNull(),
+    videoUrl: text("video_url").notNull(),
+    originalPublicationUrl: text("original_publication_url"),
+    thumbnailUrl: text("thumbnail_url"),
+    videoDurationSeconds: integer("video_duration_seconds"),
+    transcript: text("transcript"),
+    contentOutline: text("content_outline"),
+    intendedAudience: text("intended_audience"),
+    relevantToolIdsJson: jsonb("relevant_tool_ids_json")
+      .$type<string[]>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    additionalNotes: text("additional_notes"),
+    disclosuresJson: jsonb("disclosures_json")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    status: text("status").notNull().default("draft"),
+    revisionRequest: text("revision_request"),
+    internalReviewNotes: text("internal_review_notes"),
+    reviewChecklistJson: jsonb("review_checklist_json")
+      .$type<Record<string, boolean>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    credentialsReviewed: boolean("credentials_reviewed")
+      .notNull()
+      .default(false),
+    aviationReviewRecommended: boolean("aviation_review_recommended")
+      .notNull()
+      .default(false),
+    aviationReviewCompleted: boolean("aviation_review_completed")
+      .notNull()
+      .default(false),
+    assignedReviewerUserId: varchar("assigned_reviewer_user_id").references(
+      () => users.id,
+      { onDelete: "set null" },
+    ),
+    agreementAccepted: boolean("agreement_accepted").notNull().default(false),
+    agreementVersion: text("agreement_version"),
+    agreementAcceptedAt: timestamp("agreement_accepted_at"),
+    submittedAt: timestamp("submitted_at"),
+    reviewedAt: timestamp("reviewed_at"),
+    approvedAt: timestamp("approved_at"),
+    rejectedAt: timestamp("rejected_at"),
+    withdrawnAt: timestamp("withdrawn_at"),
+    publishedBriefingId: varchar("published_briefing_id").references(
+      () => aviationBriefings.id,
+      { onDelete: "set null" },
+    ),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("idx_aviation_submission_invitation").on(table.invitationId),
+    index("idx_aviation_submission_status").on(table.status, table.createdAt),
+    index("idx_aviation_submission_email").on(table.contributorEmail),
+    index("idx_aviation_submission_category").on(table.category),
+    index("idx_aviation_submission_reviewer").on(table.assignedReviewerUserId),
+    index("idx_aviation_submission_briefing").on(table.publishedBriefingId),
+  ],
+);
 
-export const aviationBriefingFeedback = pgTable("aviation_briefing_feedback", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  briefingId: varchar("briefing_id").notNull().references(() => aviationBriefings.id, { onDelete: "cascade" }),
-  readerHash: text("reader_hash").notNull(),
-  userId: varchar("user_id").references(() => users.id, { onDelete: "set null" }),
-  responseType: text("response_type").notNull(),
-  createdAt: timestamp("created_at").defaultNow(),
-}, (table) => [uniqueIndex("idx_aviation_feedback_reader").on(table.briefingId, table.readerHash), index("idx_aviation_feedback_briefing").on(table.briefingId, table.createdAt)]);
+export const aviationBriefingFeedback = pgTable(
+  "aviation_briefing_feedback",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    briefingId: varchar("briefing_id")
+      .notNull()
+      .references(() => aviationBriefings.id, { onDelete: "cascade" }),
+    readerHash: text("reader_hash").notNull(),
+    userId: varchar("user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    responseType: text("response_type").notNull(),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("idx_aviation_feedback_reader").on(
+      table.briefingId,
+      table.readerHash,
+    ),
+    index("idx_aviation_feedback_briefing").on(
+      table.briefingId,
+      table.createdAt,
+    ),
+  ],
+);
 
-export const aviationBriefingSaves = pgTable("aviation_briefing_saves", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  briefingId: varchar("briefing_id").notNull().references(() => aviationBriefings.id, { onDelete: "cascade" }),
-  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
-  createdAt: timestamp("created_at").defaultNow(),
-}, (table) => [uniqueIndex("idx_aviation_save_user_briefing").on(table.userId, table.briefingId), index("idx_aviation_save_briefing").on(table.briefingId)]);
+export const aviationBriefingSaves = pgTable(
+  "aviation_briefing_saves",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    briefingId: varchar("briefing_id")
+      .notNull()
+      .references(() => aviationBriefings.id, { onDelete: "cascade" }),
+    userId: varchar("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at").defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("idx_aviation_save_user_briefing").on(
+      table.userId,
+      table.briefingId,
+    ),
+    index("idx_aviation_save_briefing").on(table.briefingId),
+  ],
+);
 
-export const aviationBriefingSuggestions = pgTable("aviation_briefing_suggestions", {
-  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`), name: text("name").notNull(), email: varchar("email").notNull(),
-  suggestedPerson: text("suggested_person").notNull(), organization: text("organization"), topic: text("topic").notNull(), reason: text("reason").notNull(), website: text("website"), notes: text("notes"),
-  status: text("status").notNull().default("new"), assignedAdminUserId: varchar("assigned_admin_user_id").references(() => users.id, { onDelete: "set null" }),
-  sourceBriefingId: varchar("source_briefing_id").references(() => aviationBriefings.id, { onDelete: "set null" }), convertedInvitationId: varchar("converted_invitation_id").references(() => aviationContributorInvitations.id, { onDelete: "set null" }),
-  createdAt: timestamp("created_at").defaultNow(), updatedAt: timestamp("updated_at").defaultNow(),
-}, (table) => [index("idx_aviation_suggestion_status").on(table.status, table.createdAt), index("idx_aviation_suggestion_assignee").on(table.assignedAdminUserId), index("idx_aviation_suggestion_email").on(table.email)]);
+export const aviationBriefingPhotoSubmissions = pgTable(
+  "aviation_briefing_photo_submissions",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    submissionToken: varchar("submission_token").notNull().unique(),
+    contributorName: text("contributor_name").notNull(),
+    contributorEmail: varchar("contributor_email").notNull(),
+    phone: text("phone"),
+    homeAirport: text("home_airport"),
+    cityState: text("city_state"),
+    preferredCredit: text("preferred_credit").notNull(),
+    profileUrl: text("profile_url"),
+    aircraftMakeModel: text("aircraft_make_model"),
+    aircraftRegistration: text("aircraft_registration"),
+    photoLocation: text("photo_location"),
+    dateTaken: text("date_taken"),
+    description: text("description"),
+    storyContext: text("story_context"),
+    suggestedTopic: text("suggested_topic"),
+    identifiablePeople: text("identifiable_people"),
+    imageStorageKey: text("image_storage_key").notNull(),
+    originalFilename: text("original_filename").notNull(),
+    storedFilename: text("stored_filename").notNull(),
+    mimeType: text("mime_type").notNull(),
+    fileSize: integer("file_size").notNull(),
+    imageWidth: integer("image_width"),
+    imageHeight: integer("image_height"),
+    ownershipConfirmed: boolean("ownership_confirmed").notNull(),
+    permissionAccepted: boolean("permission_accepted").notNull(),
+    permissionText: text("permission_text").notNull(),
+    permissionVersion: text("permission_version").notNull(),
+    consentedAt: timestamp("consented_at").notNull(),
+    userId: varchar("user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    sourceIp: text("source_ip"),
+    userAgent: text("user_agent"),
+    reviewStatus: text("review_status").notNull().default("pending"),
+    internalNotes: text("internal_notes"),
+    publicationStatus: text("publication_status")
+      .notNull()
+      .default("unpublished"),
+    associatedBriefingId: varchar("associated_briefing_id").references(
+      () => aviationBriefings.id,
+      { onDelete: "set null" },
+    ),
+    publishedImageUrl: text("published_image_url"),
+    finalCreditLine: text("final_credit_line"),
+    altText: text("alt_text"),
+    caption: text("caption"),
+    imageTitle: text("image_title"),
+    relevantAircraftType: text("relevant_aircraft_type"),
+    relevantAirport: text("relevant_airport"),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [
+    index("idx_aviation_photo_status").on(table.reviewStatus, table.createdAt),
+    index("idx_aviation_photo_email").on(table.contributorEmail),
+    index("idx_aviation_photo_article").on(table.associatedBriefingId),
+  ],
+);
+
+export const aviationBriefingSuggestions = pgTable(
+  "aviation_briefing_suggestions",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    name: text("name").notNull(),
+    email: varchar("email").notNull(),
+    suggestedPerson: text("suggested_person").notNull(),
+    organization: text("organization"),
+    topic: text("topic").notNull(),
+    reason: text("reason").notNull(),
+    website: text("website"),
+    notes: text("notes"),
+    status: text("status").notNull().default("new"),
+    assignedAdminUserId: varchar("assigned_admin_user_id").references(
+      () => users.id,
+      { onDelete: "set null" },
+    ),
+    sourceBriefingId: varchar("source_briefing_id").references(
+      () => aviationBriefings.id,
+      { onDelete: "set null" },
+    ),
+    convertedInvitationId: varchar("converted_invitation_id").references(
+      () => aviationContributorInvitations.id,
+      { onDelete: "set null" },
+    ),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [
+    index("idx_aviation_suggestion_status").on(table.status, table.createdAt),
+    index("idx_aviation_suggestion_assignee").on(table.assignedAdminUserId),
+    index("idx_aviation_suggestion_email").on(table.email),
+  ],
+);
 
 const logbookDecimalField = z
   .union([

@@ -401,6 +401,7 @@ export default function AviationBriefingDetailPage() {
           </div>
         </header>
         <div className="mx-auto max-w-5xl px-5 py-10 sm:px-8">
+          {!isPreview && <div className="mb-8"><BriefingSubscribe source="briefing-article-top" compact /></div>}
           {briefing.contentType === "video" && embed ? (
             <div className="mb-10 aspect-video overflow-hidden rounded-2xl border border-[#58759b]/40 bg-black">
               <iframe

@@ -453,3 +453,11 @@ test("subscription analytics exclude subscriber identity", () => {
   assert.doesNotMatch(component, /trackEvent\([^)]*email/s);
   assert.doesNotMatch(component, /trackEvent\([^)]*name/s);
 });
+
+test("article pages include a compact top subscription invitation", () => {
+  const component = readFileSync(new URL("../../client/src/components/aviation-briefings/BriefingSubscribe.tsx", import.meta.url), "utf8");
+  const detail = readFileSync(new URL("../../client/src/pages/aviation-briefing-detail.tsx", import.meta.url), "utf8");
+  assert.match(component, /compact = false/);
+  assert.match(component, /Get new Aviation Briefings by email/);
+  assert.match(detail, /source="briefing-article-top" compact/);
+});

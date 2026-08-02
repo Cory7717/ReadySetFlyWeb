@@ -5,7 +5,7 @@ import { trackEvent } from "@/lib/analytics";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
-export function BriefingSubscribe({ source = "article" }: { source?: string }) {
+export function BriefingSubscribe({ source = "article", compact = false }: { source?: string; compact?: boolean }) {
   const [email, setEmail] = useState(""),
     [name, setName] = useState(""),
     [pending, setPending] = useState(false),
@@ -37,6 +37,31 @@ export function BriefingSubscribe({ source = "article" }: { source?: string }) {
       trackEvent("aviation_briefings_subscription_failed", { source });
       setPending(false);
     }
+  }
+  if (compact) {
+    return (
+      <section className="rounded-xl border border-[#55739b]/35 bg-[#0b1726] px-4 py-4 sm:px-5">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex items-center gap-3">
+            <Mail className="h-5 w-5 shrink-0 text-[#8dbbfa]" />
+            <div>
+              <h2 className="font-bold text-white">Get new Aviation Briefings by email</h2>
+              <p className="text-sm text-[#9fb0c4]">A short preview and direct link whenever a new article is published.</p>
+            </div>
+          </div>
+          {sent ? (
+            <p className="text-sm font-semibold text-emerald-300">Check your inbox to confirm.</p>
+          ) : (
+            <form onSubmit={submit} className="flex w-full flex-col gap-2 sm:flex-row lg:max-w-md">
+              <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email address" type="email" required maxLength={320} aria-label="Email address" className="min-w-0 flex-1" />
+              <Button disabled={pending || !email.trim()} className="bg-[#347edc] text-white">{pending ? "Sendingâ€¦" : "Subscribe"}</Button>
+              <input className="hidden" tabIndex={-1} autoComplete="off" name="company" />
+            </form>
+          )}
+        </div>
+        {error && <p role="alert" className="mt-2 text-sm text-red-300">{error}</p>}
+      </section>
+    );
   }
   return (
     <section className="rounded-2xl border border-[#55739b]/40 bg-[#0d1929] p-6 sm:p-8">

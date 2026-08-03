@@ -991,6 +991,30 @@ test("internal preview labels and aircraft presets do not populate filing remark
   assert.doesNotMatch(source, /remarks:\s*current\.remarks\.trim\(\)\s*\|\|\s*selectedProfile\.filingRemarksDefault/);
 });
 
+test("analysis recommendations use practical flight tools and preserve click analytics", () => {
+  const source = readFileSync(resolve(process.cwd(), "client/src/pages/flight-planner.tsx"), "utf8");
+  const app = readFileSync(resolve(process.cwd(), "client/src/App.tsx"), "utf8");
+  const recommendations = source.slice(
+    source.indexOf("const contextualTools: ContextualTool[]"),
+    source.indexOf("const [briefingLocked", source.indexOf("const contextualTools: ContextualTool[]")),
+  );
+  const requestedTools = [
+    ["Digital Logbook", "Open Digital Logbook", "/logbook"],
+    ["Density Altitude Calculator", "Open Density Altitude Calculator", "/density-altitude"],
+    ["Weight & Balance Calculator", "Open Weight & Balance Calculator", "/weight-balance"],
+    ["Crosswind Calculator", "Open Crosswind Calculator", "/crosswind-calculator"],
+    ["E6B Flight Computer", "Open E6B", "/tools/e6b"],
+  ];
+  for (const [title, cta, href] of requestedTools) {
+    assert.ok(recommendations.includes(`title: "${title}"`));
+    assert.ok(recommendations.includes(`cta: "${cta}"`));
+    assert.ok(recommendations.includes(`href: "${href}"`));
+    assert.ok(app.includes(`path="${href}"`));
+  }
+  assert.doesNotMatch(recommendations, /Radio comms trainer|6-pack panel trainer|Training time & cost/i);
+  assert.match(source, /trackEvent\("planner_contextual_tool_open", \{ tool: tool\.id, target: tool\.href \}\)/);
+});
+
 test("flight planner uses notification polling only to surface webhook persistence", () => {
   const source = readFileSync(resolve(process.cwd(), "client/src/pages/flight-planner.tsx"), "utf8");
   assert.match(source, /queryKey:\s*\["\/api\/notifications\/unread"\]/);

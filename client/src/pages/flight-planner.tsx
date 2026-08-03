@@ -34,7 +34,6 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
 import { useAuth } from "@/hooks/useAuth";
-import { useStudentProfile } from "@/hooks/useStudentProfile";
 import { trackEvent } from "@/lib/analytics";
 import { getCurrentReturnTo, withReturnTo, withSourceParam } from "@/lib/returnTo";
 import { runWithAuth } from "@/utils/authGate";
@@ -179,12 +178,6 @@ const zzzzActualLocationModeCopy: Record<ZzzzActualLocationMode, { label: string
     help: "Use DDMMNDDDMMW format, optionally with a slash after latitude. Example: 3027N09749W.",
   },
 };
-const CONTROLLED_AIRPORTS = new Set([
-  "KATL", "KDFW", "KDEN", "KORD", "KLAX", "KJFK", "KSFO", "KSEA", "KLAS", "KPHX",
-  "KCLT", "KIAH", "KMIA", "KBOS", "KMSP", "KDCA", "KIAD", "KEWR", "KLGA", "KPDX",
-  "KPHL", "KDTW", "KSTL", "KMDW", "KSAN", "KTPA", "KAUS", "KDAL", "KHOU",
-]);
-
 const FLIGHT_PLANNER_PRESS_STEPS: PressDemoStep[] = [
   {
     id: "route-setup",
@@ -2147,7 +2140,6 @@ function flightCategoryClassName(cat: string): string {
 
 export default function FlightPlanner() {
   const { user, isAuthenticated } = useAuth();
-  const { profile: studentProfile } = useStudentProfile();
   const [plannerLocation] = useLocation();
   const isMobile = useIsMobile();
   const { toast } = useToast();
@@ -2164,9 +2156,6 @@ export default function FlightPlanner() {
   const tfmsTier: TfmsTier = hasPremiumAccess ? "premium" : "free";
   const isGuest = !isAuthenticated;
   const isFree = isAuthenticated && !hasPremiumAccess;
-  const isStudent = Boolean(
-    studentProfile?.wizardJson || studentProfile?.roadmapJson || studentProfile?.progressJson
-  );
   const [showUpgradePrompt, setShowUpgradePrompt] = useState(false);
   const [guestFlightPlanFiles, setGuestFlightPlanFiles] = useState(() => getAnonFlightPlanFileCount());
   const [activeTab, setActiveTab] = useState<FlightPlannerTab>("route");
@@ -5994,9 +5983,6 @@ export default function FlightPlanner() {
   }, [autoChecklist, checklist]);
   const recentPlans = useMemo(() => savedPlansView.slice(0, 8), [savedPlansView]);
 
-  const isIfrFlight = hasIfrWeather || plannedAltitudeFt >= 18000;
-  const isVfrFlight = !isIfrFlight;
-
   const departureMetar = useMemo(() => {
     return weatherData.find((item) => item.icao === planningDepartureCode)?.data?.metar;
   }, [weatherData, planningDepartureCode]);
@@ -6199,98 +6185,45 @@ export default function FlightPlanner() {
       .slice(0, 8);
   }, [routeAirports]);
 
-  const hasControlledAirport = useMemo(
-    () => routeAirports.some((icao) => CONTROLLED_AIRPORTS.has(icao)),
-    [routeAirports]
-  );
   const overwaterLikely = Boolean(suggestionMeta?.overwaterLikely);
 
-  const trainingCostTrigger = isStudent || eteHours >= 3;
-
-  const contextualTools = useMemo<ContextualTool[]>(() => {
-    const tools: ContextualTool[] = [];
-
-    if (densityAltitudeTrigger) {
-      tools.push({
-        id: "density-altitude",
-        title: "Density altitude check",
-        description: "Performance may be impacted at the departure airport based on temperature and elevation.",
-        cta: "Open density altitude calculator",
-        href: "/density-altitude",
-      });
-    }
-
-    if (crosswindTrigger) {
-      tools.push({
-        id: "crosswind",
-        title: "Crosswind component",
-        description: "Winds and runway heading suggest a notable crosswind component for departure.",
-        cta: "Review crosswind calculator",
-        href: "/crosswind-calculator",
-      });
-    }
-
-    if (trainingCostTrigger) {
-      tools.push({
-        id: "training-cost",
-        title: "Training time & cost",
-        description: "Longer routes are a good moment to estimate training time and budget.",
-        cta: "Open training cost calculator",
-        href: "/student/cost",
-      });
-    }
-
-    if (overwaterLikely) {
-      tools.push({
-        id: "water-safety",
-        title: "Overwater safety check",
-        description: "This route likely spends meaningful time over water. Review flotation gear, ditching considerations, and whether the coastline assist is a better fit.",
-        cta: "Review route analysis",
-        href: "#route-analysis",
-      });
-    }
-
-    if (isIfrFlight) {
-      tools.push({
-        id: "vor-trainer",
-        title: "VOR trainer",
-        description: "Practice intercepts and tracking for IFR routing or VOR-based segments.",
-        cta: "Open VOR trainer",
-        href: "/student/vor-trainer",
-      });
-    }
-
-    if (hasControlledAirport) {
-      tools.push({
-        id: "radio-trainer",
-        title: "Radio comms trainer",
-        description: "Your route includes controlled airspace. Rehearse clearances and handoffs.",
-        cta: "Open radio trainer",
-        href: "/radio-comms-trainer",
-      });
-    }
-
-    if (isStudent && isVfrFlight) {
-      tools.push({
-        id: "six-pack",
-        title: "6-pack panel trainer",
-        description: "Sharpen scan fundamentals before a VFR flight.",
-        cta: "Open 6-pack trainer",
-        href: "/student/six-pack-trainer",
-      });
-    }
-
-    return tools;
-  }, [
-    densityAltitudeTrigger,
-    crosswindTrigger,
-    trainingCostTrigger,
-    overwaterLikely,
-    isIfrFlight,
-    hasControlledAirport,
-    isStudent,
-    isVfrFlight,
-  ]);
+  const contextualTools: ContextualTool[] = [
+    {
+      id: "digital-logbook",
+      title: "Digital Logbook",
+      description: "Save or review flight details and prepare the trip for post-flight logging.",
+      cta: "Open Digital Logbook",
+      href: "/logbook",
+    },
+    {
+      id: "density-altitude",
+      title: "Density Altitude Calculator",
+      description: "Check takeoff and climb performance using airport elevation and current conditions.",
+      cta: "Open Density Altitude Calculator",
+      href: "/density-altitude",
+    },
+    {
+      id: "weight-balance",
+      title: "Weight & Balance Calculator",
+      description: "Verify aircraft loading, center of gravity, and loading limits before departure.",
+      cta: "Open Weight & Balance Calculator",
+      href: "/weight-balance",
+    },
+    {
+      id: "crosswind",
+      title: "Crosswind Calculator",
+      description: "Calculate headwind and crosswind components using runway direction and current winds.",
+      cta: "Open Crosswind Calculator",
+      href: "/crosswind-calculator",
+    },
+    {
+      id: "e6b",
+      title: "E6B Flight Computer",
+      description: "Verify groundspeed, wind correction, fuel burn, endurance, and time en route.",
+      cta: "Open E6B",
+      href: "/tools/e6b",
+    },
+  ];
 
   const [briefingLocked, setBriefingLocked] = useState(false);
   const briefingKey = useMemo(() => {

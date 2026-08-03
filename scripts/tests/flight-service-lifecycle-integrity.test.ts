@@ -128,9 +128,12 @@ test("webhook synchronization retrieves only the affected provider plan", () => 
 
 test("continuous provider polling is replaced by targeted failed-webhook recovery", () => {
   const planner = readFileSync("client/src/pages/flight-planner.tsx", "utf8");
+  const recovery = readFileSync("client/src/components/flight-planner/providerSyncRecovery.ts", "utf8");
   assert.doesNotMatch(planner, /activeTab === "file" \? 15_000 : false/);
-  assert.match(planner, /providerWebhookRetrievalPending === true/);
+  assert.match(planner, /planNeedsProviderWebhookRecovery\(plan\)/);
+  assert.match(recovery, /providerWebhookRetrievalPending === true/);
   assert.match(planner, /setInterval\(poll, 5 \* 60_000\)/);
+  assert.doesNotMatch(planner, /void poll\(\)/);
   assert.match(routes, /providerWebhookRetrievalPending:\s*true/);
   assert.match(routes, /providerWebhookRetrievalPending:\s*false/);
 });

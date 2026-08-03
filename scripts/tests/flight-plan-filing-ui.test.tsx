@@ -1003,8 +1003,9 @@ test("flight planner uses notification polling only to surface webhook persisten
   assert.match(source, /predicate:\s*\(query\) => String\(query\.queryKey\?\.\[0\] \|\| ""\)\.startsWith\("\/api\/flight-plans"\)/);
   assert.match(source, /invalidateFlightPlanQueries\(\);/);
   assert.doesNotMatch(source, /activeTab === "file" \? 15_000 : false/);
-  assert.match(source, /providerWebhookRetrievalPending === true/);
-  assert.match(source, /void poll\(\);\s*const timer = window\.setInterval\(poll, 5 \* 60_000\)/);
+  assert.match(source, /planNeedsProviderWebhookRecovery\(plan\)/);
+  assert.match(source, /const timer = window\.setInterval\(poll, 5 \* 60_000\)/);
+  assert.doesNotMatch(source, /void poll\(\)/);
 });
 
 test("timezone-less display strings are not canonical lifecycle-action instants", () => {

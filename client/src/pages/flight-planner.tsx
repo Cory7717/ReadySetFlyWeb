@@ -110,6 +110,7 @@ import {
 } from "@/components/flight-planner/PlannerWorkflowFooter";
 import { FlightPlannerAccountRequirementDialog } from "@/components/flight-planner/FlightPlannerAccountRequirementDialog";
 import { getSavedPlanStatusChip, groupSavedFlightPlans } from "@/components/flight-planner/savedPlanSorting";
+import { planNeedsProviderWebhookRecovery } from "@/components/flight-planner/providerSyncRecovery";
 import { AppDownloadBadges } from "@/components/GooglePlayBadge";
 import { PostActionSignupPrompt } from "@/components/conversion/PostActionSignupPrompt";
 import { PageShell } from "@/components/layout/PageShell";
@@ -3175,10 +3176,7 @@ export default function FlightPlanner() {
       ? `${storedTestAcknowledgement.environment}:${storedTestAcknowledgement.acknowledgedAt}`
       : `${effectiveFlightServiceEnvironment.environment}:missing`;
     const recoveryProviderPlans = savedPlansView.filter((plan) =>
-      isGenuineFilingProviderPlanId(plan.filingProviderPlanId) &&
-      getProviderSnapshot(plan).providerWebhookRetrievalPending === true &&
-      !["cancelled", "closed"].includes(normalizedClientFilingStatus(plan)) &&
-      !isCertificationFlightPlan(plan) &&
+      planNeedsProviderWebhookRecovery(plan) &&
       (!isFlightServiceTestMode || Boolean(storedTestAcknowledgement)) &&
       labAcknowledgementBlockedSync[plan.id]?.acknowledgementGeneration !== acknowledgementGeneration
     );
@@ -3226,7 +3224,6 @@ export default function FlightPlanner() {
         }
       }
     };
-    void poll();
     const timer = window.setInterval(poll, 5 * 60_000);
     return () => {
       cancelled = true;

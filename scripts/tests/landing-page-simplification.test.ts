@@ -54,6 +54,17 @@ test("landing hero keeps concise headline and no removed section anchor", () => 
   assert.equal(landingSource.includes("#landing-workflow-section"), false);
 });
 
+test("landing hero offers an understated Aviation Briefings link", () => {
+  const heroIndex = landingSource.indexOf("RSF keeps the pilot workflow in one place");
+  const weatherIndex = landingSource.indexOf("<LandingCurrentConditions");
+  const briefingLinkIndex = landingSource.indexOf('href="/aviation-briefings"', heroIndex);
+
+  assert.ok(briefingLinkIndex > heroIndex && briefingLinkIndex < weatherIndex);
+  assert.match(landingSource, /Read Aviation Briefings/);
+  assert.match(landingSource, /landing_aviation_briefings_click/);
+  assert.match(landingSource, /location: "hero_meta"/);
+});
+
 test("landing premium flat-rate banner is hidden from signed-in users", () => {
   assert.match(landingSource, /!\s*isAuthenticated\s*&&\s*\(/);
   assert.match(landingSource, /New flat rate/);

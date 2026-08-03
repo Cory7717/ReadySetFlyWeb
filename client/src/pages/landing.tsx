@@ -1809,6 +1809,15 @@ export default function Landing() {
               <div className="flex flex-wrap items-center gap-3 text-xs text-[#A8B8CC]">
                 <Badge variant="outline" className="border-[#5d6f85]/35 bg-[#141a22] text-[#d2dbe8]">US-only</Badge>
                 <span className="tracking-[0.16em] text-[#8fa6c8]">Plan. Train. Fly. Manage.</span>
+                <Link
+                  href="/aviation-briefings"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-[#5d6f85]/35 bg-[#141a22]/80 px-3 py-1.5 font-medium text-[#9fc5fa] transition-colors hover:border-[#78aef5]/55 hover:bg-[#192434] hover:text-[#d9e9ff]"
+                  onClick={() => trackEvent("landing_aviation_briefings_click", { target: "/aviation-briefings", location: "hero_meta" })}
+                >
+                  <BookOpen className="h-3.5 w-3.5" aria-hidden="true" />
+                  Read Aviation Briefings
+                  <span aria-hidden="true">→</span>
+                </Link>
               </div>
             </div>
           </div>

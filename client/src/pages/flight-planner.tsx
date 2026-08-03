@@ -13681,13 +13681,24 @@ export default function FlightPlanner() {
               Filing provider events are shown in reverse chronological order. Use Refresh provider sync after a filing action if you need the latest effective route or ARTCC state.
             </DialogDescription>
           </DialogHeader>
-          {providerUpdatesPlan && hasPendingProviderReview(providerUpdatesPlan) && (
+          {providerUpdatesPlan && (() => {
+            const updates = summarizeProviderUpdates(providerUpdatesPlan);
+            const acknowledgedMessageId = String(
+              getProviderSnapshot(providerUpdatesPlan).providerAcknowledgedMessageId || "",
+            ).trim();
+            const reviewPending = hasPendingProviderReview(providerUpdatesPlan);
+            const acknowledgementAvailable = reviewPending || Boolean(
+              updates.latestId && updates.latestId !== acknowledgedMessageId,
+            );
+            return acknowledgementAvailable ? (
             <div className="rounded-lg border border-amber-400/40 bg-amber-500/10 p-3 text-sm text-amber-100">
               <div className="font-semibold">
-                Provider update ready to acknowledge
+                {reviewPending ? "Provider update ready to acknowledge" : "Provider update acknowledgement"}
               </div>
               <div className="mt-1 text-amber-100/85">
-                RSF has applied the provider update where supported. Acknowledge the current provider version before submitting another amendment.
+                {reviewPending
+                  ? "RSF has applied the provider update where supported. Acknowledge the current provider version before submitting another amendment."
+                  : "Acknowledge that you reviewed the latest Flight Service provider update for this plan."}
               </div>
               <Button
                 className="mt-3"
@@ -13695,10 +13706,15 @@ export default function FlightPlanner() {
                 onClick={() => acceptProviderReviewMutation.mutate(providerUpdatesPlan.id)}
                 disabled={acceptProviderReviewMutation.isPending || filingSyncMutation.isPending || filingActionMutation.isPending}
               >
-                {acceptProviderReviewMutation.isPending ? "Acknowledging..." : "Acknowledge provider update"}
+                {acceptProviderReviewMutation.isPending
+                  ? "Acknowledging..."
+                  : reviewPending
+                    ? "Acknowledge provider update"
+                    : "Acknowledge latest update"}
               </Button>
             </div>
-          )}
+            ) : null;
+          })()}
           {providerUpdatesPlan ? <FilingProviderUpdatesList plan={providerUpdatesPlan} /> : null}
         </DialogContent>
       </Dialog>

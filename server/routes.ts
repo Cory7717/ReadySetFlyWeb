@@ -32281,6 +32281,8 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         providerPushNotification = await storage.createUserNotification({
           userId: matchedPlan.userId,
           type: inAppType,
+          isRead: false,
+          readAt: null,
           title:
             syncedNotificationChanges.length > 0
               ? "Provider changes detected"
@@ -34972,21 +34974,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           return res.status(403).json({ error: "Access denied" });
         }
 
-        let currentPlan: any = plan;
-        if (plan.filingProviderPlanId) {
-          try {
-            const syncResult = await syncLeidosPlanMetadata(plan as any);
-            currentPlan = await persistLeidosProviderSync(
-              plan as any,
-              syncResult,
-            );
-          } catch (syncError: any) {
-            console.warn(
-              "Leidos provider review accept sync failed:",
-              syncError?.message || syncError,
-            );
-          }
-        }
+        const currentPlan: any = plan;
 
         const now = new Date();
         const currentSnapshot = getProviderSnapshotRecord(
@@ -35015,9 +35003,50 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           "provider_review_accepted",
           acceptedVersionStamp,
         );
+        const latestProviderMessageId = [...(
+          Array.isArray(currentPlan.filingProviderMessages)
+            ? currentPlan.filingProviderMessages
+            : []
+        )]
+          .filter((message: any) => {
+            const title = String(message?.title || "").trim().toLowerCase();
+            return message?.source !== "rsf" && ![
+              "provider changes accepted",
+              "provider update acknowledged",
+              "provider update marked reviewed",
+            ].includes(title);
+          })
+          .sort((left: any, right: any) =>
+            Date.parse(String(right?.timestamp || "")) -
+            Date.parse(String(left?.timestamp || "")),
+          )[0]?.id || null;
+        const acknowledgePlanNotifications = async () => {
+          await db
+            .update(userNotifications)
+            .set({ isRead: true, readAt: now, updatedAt: now })
+            .where(
+              and(
+                eq(userNotifications.userId, userId),
+                eq(userNotifications.isRead, false),
+                or(
+                  eq(userNotifications.type, "flight_alert"),
+                  eq(userNotifications.type, "flight_change"),
+                  eq(userNotifications.type, "provider_sync"),
+                  sql`${userNotifications.type} LIKE 'flight_plan_%'`,
+                ),
+                or(
+                  sql`${userNotifications.meta}->>'flightPlanId' = ${currentPlan.id}`,
+                  sql`${userNotifications.meta}->>'planId' = ${currentPlan.id}`,
+                ),
+              ),
+            );
+        };
         if (currentSnapshot.providerPendingReview !== true) {
           const alreadyAcceptedSnapshot = {
             ...currentSnapshot,
+            providerAcknowledgedMessageId: latestProviderMessageId,
+            providerAcknowledgedAt: now.toISOString(),
+            providerAcknowledgedBy: userId,
             providerPendingReview: false,
             providerModifiedBySpecialist: false,
             providerEffectivePlanHash:
@@ -35039,13 +35068,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
               currentSnapshot.providerReviewDecisionReason ||
               "already_accepted_effective_plan",
           };
-          const alreadyUpdated =
-            currentSnapshot.providerReviewAcceptedEffectivePlanHash
-              ? currentPlan
-              : await storage.updateFlightPlan(currentPlan.id, {
-                  filingProviderSnapshot: alreadyAcceptedSnapshot as any,
-                  filingLastProviderSyncAt: now,
-                } as any);
+          const alreadyUpdated = await storage.updateFlightPlan(currentPlan.id, {
+            filingProviderSnapshot: alreadyAcceptedSnapshot as any,
+          } as any);
+          await acknowledgePlanNotifications();
           return res.json({
             ok: true,
             alreadyAccepted: true,
@@ -35059,6 +35085,9 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         }
         const acceptedSnapshot = {
           ...currentSnapshot,
+          providerAcknowledgedMessageId: latestProviderMessageId,
+          providerAcknowledgedAt: now.toISOString(),
+          providerAcknowledgedBy: userId,
           providerPendingReview: false,
           providerModifiedBySpecialist: false,
           providerEffectivePlanHash: acceptedEffectivePlanHash,
@@ -35090,7 +35119,6 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             (currentPlan as Record<string, unknown>).filingProviderMessages,
             [acceptanceMessage],
           ) as any,
-          filingLastProviderSyncAt: now,
           updatedAt: now,
         } as any;
         const acceptanceGuard = currentPlan.updatedAt
@@ -35113,6 +35141,8 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             plan: latestPlan || currentPlan,
           });
         }
+
+        await acknowledgePlanNotifications();
 
         res.json({
           ok: true,

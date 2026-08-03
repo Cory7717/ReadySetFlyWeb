@@ -85,6 +85,30 @@ test("manual provider sync uses retrieve persistence and never resubmits a filin
   assert.doesNotMatch(syncRoute, /flightPlanFilingProvider\.stageAction/);
 });
 
+test("provider acknowledgement is local-only and leaves provider lifecycle transport untouched", () => {
+  const acceptRoute = routes.slice(
+    routes.indexOf('"/api/flight-plans/:id/provider-review/accept"'),
+    routes.indexOf('app.get("/api/flight-plans"'),
+  );
+  assert.match(acceptRoute, /providerAcknowledgedMessageId/);
+  assert.match(acceptRoute, /isRead:\s*true/);
+  assert.doesNotMatch(acceptRoute, /syncLeidosPlanMetadata/);
+  assert.doesNotMatch(acceptRoute, /persistLeidosProviderSync/);
+  assert.doesNotMatch(acceptRoute, /flightPlanFilingProvider\.stageAction/);
+  assert.doesNotMatch(acceptRoute, /filingLastProviderSyncAt/);
+});
+
+test("webhook provider notifications are explicitly created unacknowledged", () => {
+  const webhookRoute = routes.slice(
+    routes.indexOf('app.post("/api/leidos/webhooks/flight-service"'),
+    routes.indexOf('"/api/flight-plans/:id/filing-action"'),
+  );
+  assert.match(
+    webhookRoute,
+    /providerPushNotification = await storage\.createUserNotification\([\s\S]*?isRead:\s*false[\s\S]*?readAt:\s*null/,
+  );
+});
+
 test("webhook lifecycle persistence happens before notification and push side effects", () => {
   const webhookRoute = routes.slice(routes.indexOf('app.post("/api/leidos/webhooks/flight-service"'));
   const persistenceIndex = webhookRoute.indexOf("storage.updateFlightPlan(matchedPlan.id");

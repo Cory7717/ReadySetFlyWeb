@@ -13,6 +13,7 @@ type ProviderMessage = {
   title: string;
   details: string;
   providerPlanId?: string | null;
+  source?: string | null;
   raw?: Record<string, unknown> | null;
 };
 
@@ -95,10 +96,18 @@ const displayProviderMessageDetails = (details: unknown) => {
 };
 
 export const summarizeProviderUpdates = (plan: FlightPlan) => {
-  const messages = collapseDuplicateProviderMessages(readProviderMessages(plan));
+  const messages = collapseDuplicateProviderMessages(readProviderMessages(plan)).filter((message) => {
+    const title = String(message.title || "").trim().toLowerCase();
+    return message.source !== "rsf" && ![
+      "provider changes accepted",
+      "provider update acknowledged",
+      "provider update marked reviewed",
+    ].includes(title);
+  });
   const latest = messages[0] || null;
   return {
     count: messages.length,
+    latestId: String(latest?.id || "").trim() || null,
     latestSeverity: latest?.severity || "info",
   };
 };

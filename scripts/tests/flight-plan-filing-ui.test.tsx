@@ -534,6 +534,38 @@ test("rendered lifecycle actions show acknowledge provider update when provider 
   assertButtonVisible(html, lifecycleLabels.cancel, { disabled: false });
 });
 
+test("lifecycle-only provider updates remain available for manual acknowledgement", () => {
+  const providerMessageId = "provider-active-1";
+  const plan = lifecyclePlan({
+    filingStatus: "activated",
+    filingProviderMessages: [{
+      id: providerMessageId,
+      timestamp: "2026-08-03T16:00:00.000Z",
+      severity: "info",
+      title: "Flight Service status update",
+      details: "Provider lifecycle changed to ACTIVE.",
+      source: "leidos_webhook",
+    }],
+    filingProviderSnapshot: {
+      providerLifecycleStatus: "active",
+      providerPendingReview: false,
+      providerActionAvailability: { close: true },
+    },
+  } as any);
+
+  assertButtonVisible(renderLifecycleActions(plan), "Acknowledge latest update", { disabled: false });
+  assert.doesNotMatch(
+    renderLifecycleActions({
+      ...plan,
+      filingProviderSnapshot: {
+        ...(plan.filingProviderSnapshot as Record<string, unknown>),
+        providerAcknowledgedMessageId: providerMessageId,
+      },
+    }),
+    /Acknowledge (?:provider|latest) update/,
+  );
+});
+
 test("rendered lifecycle actions do not offer repeated acknowledgement for historical provider updates", () => {
   const html = renderLifecycleActions(lifecyclePlan({
     filingProviderMessages: [{

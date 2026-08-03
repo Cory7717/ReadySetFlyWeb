@@ -8917,7 +8917,7 @@ export default function FlightPlanner() {
           </CardContent>
         </Card>
       )}
-      <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(300px,0.8fr)_minmax(0,1.2fr)]">
+      <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(620px,1.15fr)_minmax(500px,0.85fr)]">
         <div className="min-w-0 space-y-4">
       <div
         id="planner-workflow"
@@ -11233,7 +11233,7 @@ export default function FlightPlanner() {
               <div>{totalFuel ? `${totalFuel.toFixed(1)} gal` : "-"}</div>
             </div>
           </div>
-          <div className="grid gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(0,0.9fr)]">
+          <div className="grid gap-4 2xl:grid-cols-[minmax(0,1.15fr)_minmax(320px,0.85fr)]">
             <div id="planner-filing-details" className={cn("space-y-4 p-4", plannerSubpanelClass)}>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>

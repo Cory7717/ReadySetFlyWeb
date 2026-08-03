@@ -1386,7 +1386,7 @@ export const normalizeLeidosOtherInfoForTransmission = (otherInfo: string | null
   const normalized = String(otherInfo || "")
     .toUpperCase()
     .replace(/_/g, "")
-    .replace(/[^A-Z0-9/ -]/g, " ")
+    .replace(/[^A-Z0-9/ ]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
   return normalized || null;
@@ -1438,6 +1438,15 @@ export const validateLeidosOtherInfoForTransmission = (otherInfo: string | null 
   }
   return { valid: errors.length === 0, normalized, errors: Array.from(new Set(errors)) };
 };
+
+export class LeidosPreDispatchValidationError extends Error {
+  readonly providerRequestDispatched = false;
+
+  constructor(message: string) {
+    super(message);
+    this.name = "LeidosPreDispatchValidationError";
+  }
+}
 
 const normalizeLeidosRemarksText = (value?: string | null) => {
   const normalized = String(value || "")
@@ -3128,7 +3137,7 @@ export class LeidosFlightPlanFilingProvider implements FlightPlanFilingProvider 
         errors: otherInfoValidation.errors,
       }));
       if (!otherInfoValidation.valid) {
-        throw new Error(`Other ICAO Information is not valid for Flight Service: ${otherInfoValidation.errors.join(" ")}`);
+        throw new LeidosPreDispatchValidationError(`Other ICAO Information is not valid for Flight Service: ${otherInfoValidation.errors.join(" ")}`);
       }
     }
     if (payloadContext.payloadSnapshot) {

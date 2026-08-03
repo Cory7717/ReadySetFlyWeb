@@ -64,6 +64,27 @@ test("ambiguous dispatched provider failures are marked outcome unknown and blin
   assert.match(routes, /provider_accepted_without_flight_identifier/);
 });
 
+test("local payload validation failures are classified before dispatch", () => {
+  assert.match(provider, /class LeidosPreDispatchValidationError/);
+  assert.match(provider, /providerRequestDispatched = false/);
+  assert.match(routes, /error instanceof LeidosPreDispatchValidationError/);
+  assert.match(routes, /status:\s*"failed-before-dispatch"/);
+  assert.match(routes, /statusReason:\s*"local_validation_failed_before_dispatch"/);
+  assert.match(routes, /dispatchedAt:\s*null/);
+  assert.match(routes, /FLIGHT_SERVICE_LOCAL_VALIDATION_FAILED/);
+});
+
+test("manual provider sync uses retrieve persistence and never resubmits a filing action", () => {
+  const syncRoute = routes.slice(
+    routes.indexOf('"/api/flight-plans/:id/filing-sync"'),
+    routes.indexOf('"/api/flight-plans/:id/provider-review/accept"'),
+  );
+  assert.match(syncRoute, /syncLeidosPlanMetadata\(plan as any\)/);
+  assert.match(syncRoute, /persistLeidosProviderSync/);
+  assert.match(routes, /filingLastProviderSyncAt:\s*now/);
+  assert.doesNotMatch(syncRoute, /flightPlanFilingProvider\.stageAction/);
+});
+
 test("webhook lifecycle persistence happens before notification and push side effects", () => {
   const webhookRoute = routes.slice(routes.indexOf('app.post("/api/leidos/webhooks/flight-service"'));
   const persistenceIndex = webhookRoute.indexOf("storage.updateFlightPlan(matchedPlan.id");

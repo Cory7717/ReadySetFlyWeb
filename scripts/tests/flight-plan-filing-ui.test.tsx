@@ -580,9 +580,41 @@ test("rendered lifecycle actions suppress mutation controls for terminal plans",
     assertButtonAbsent(html, lifecycleLabels.activate);
     assertButtonAbsent(html, lifecycleLabels.close);
     assertButtonAbsent(html, lifecycleLabels.cancel);
+    assertButtonVisible(html, lifecycleLabels.sync, { disabled: false });
     assertButtonVisible(html, "Provider updates", { disabled: false });
     assertButtonVisible(html, "Download filing summary", { disabled: false });
   }
+});
+
+test("provider sync remains available while provider outcome is unknown", () => {
+  const html = renderLifecycleActions(lifecyclePlan({
+    filingStatus: "provider-outcome-unknown",
+    filingIsLive: false,
+    filingProviderPlanId: "LEIDOS-RECOVERY-1",
+    filingProviderSnapshot: {
+      providerLifecycleStatus: "unknown",
+      providerOutcomeUnknown: true,
+      providerOutcomeUnknownAction: "amend",
+    },
+  }), {
+    providerActionsPausedReason: "A prior provider action has an uncertain outcome.",
+  });
+
+  assertButtonVisible(html, lifecycleLabels.sync, { disabled: false });
+  assertButtonAbsent(html, lifecycleLabels.amend);
+});
+
+test("provider sync explains when a confirmed provider identifier is unavailable", () => {
+  const html = renderLifecycleActions(lifecyclePlan({
+    filingStatus: "provider-outcome-unknown",
+    filingIsLive: false,
+    filingProviderPlanId: null,
+    filingProviderSnapshot: { providerOutcomeUnknown: true },
+  }));
+  const button = getButtonMarkup(html, lifecycleLabels.sync);
+
+  assert.match(button, /\sdisabled(?:=""|>| )/);
+  assert.match(button, /does not have a confirmed Flight Service flight identifier/i);
 });
 
 test("rendered lifecycle actions ignore stale provider review flags on terminal plans", () => {

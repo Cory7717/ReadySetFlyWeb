@@ -7,7 +7,7 @@ import { formatFlightPlanDepartureTime } from "../../shared/flight-plan-time";
 import { extractFilingProviderPlanId, isGenuineFilingProviderPlanId } from "../../shared/flight-plan-filing";
 import { ICAO_OTHER_INFO_GUIDANCE, ICAO_OTHER_INFO_PREFIX_OPTIONS, ICAO_OTHER_INFO_VALUE_OPTIONS, buildIcaoOtherInfo, parseIcaoOtherInfoEntries, parseIcaoSurveillanceCodes } from "../../shared/icao-filing";
 import { formatDecimalCoordinatesForLeidos, normalizeZzzzActualLocation } from "../../shared/zzzz-location";
-import { LeidosFlightPlanFilingProvider, buildLeidosActionPayload, buildOtherInfoWithAircraftType, buildOtherInfoWithRemarks, buildZzzzOtherInfoForLeidos, buildZzzzSupplementalRemarks, compareRetrievedProviderPlanFields, findLikelyDuplicateFlightPlan, getProviderDepartureInstantForPlan, normalizeLeidosOtherInfoForTransmission, redactLeidosPayloadForLog, setLeidosHttpsRequestForTesting, syncLeidosPlanMetadata, validateFlightPlanForAction, zonedLocalDateTimeToUtcIso } from "../../server/services/flight-plan-filing/provider";
+import { LeidosFlightPlanFilingProvider, LeidosPreDispatchValidationError, buildLeidosActionPayload, buildOtherInfoWithAircraftType, buildOtherInfoWithRemarks, buildZzzzOtherInfoForLeidos, buildZzzzSupplementalRemarks, compareRetrievedProviderPlanFields, findLikelyDuplicateFlightPlan, getProviderDepartureInstantForPlan, normalizeLeidosOtherInfoForTransmission, redactLeidosPayloadForLog, setLeidosHttpsRequestForTesting, syncLeidosPlanMetadata, validateFlightPlanForAction, validateLeidosOtherInfoForTransmission, zonedLocalDateTimeToUtcIso } from "../../server/services/flight-plan-filing/provider";
 
 const futureChicagoDate = new Intl.DateTimeFormat("en-CA", {
   timeZone: "America/Chicago",
@@ -802,6 +802,84 @@ test("ICAO aircraft equipment validation preserves valid equipment separately fr
   const fields = Object.fromEntries(payload.params.entries());
   assert.equal(fields.aircraftEquipment, "SC");
   assert.equal(fields.surveillanceEquipment, "S");
+});
+
+test("VFR SC equipment allows blank Item 18 and omits it when no subfield is generated", () => {
+  const sameDayDeparture = new Date("2026-08-03T16:00:00.000Z");
+  const plan = filingPlan({
+    filingEquipment: "SC",
+    filingOtherInfo: null,
+    filingRemarks: null,
+    notes: null,
+    plannedDepartureAt: sameDayDeparture,
+    plannerState: {
+      departureTimeZone: "America/Chicago",
+      userDisplayDepartureTimeLocal: "2026-08-03T11:00",
+    },
+  });
+
+  const validation = validateFlightPlanForAction(filingPlan({
+    filingEquipment: "SC",
+    filingOtherInfo: null,
+  }), "file");
+  const payload = buildLeidosActionPayload(plan, "file", { otherInfo: null } as any, {
+    now: new Date("2026-08-03T14:00:00.000Z"),
+  });
+
+  assert.equal(validation.ready, true);
+  assert.equal(payload.params.has("otherInfo"), false);
+  assert.equal(payload.payloadSnapshot?.otherInfo, null);
+});
+
+test("equipment R still requires PBN Item 18 information", () => {
+  const validation = validateFlightPlanForAction(filingPlan({
+    filingEquipment: "SCR",
+    filingOtherInfo: null,
+  }), "file");
+
+  assert.equal(validation.ready, false);
+  assert.ok(validation.errors.some((error) => /includes R.*PBN approved.*does not include PBN\//i.test(error)));
+});
+
+test("generated Item 18 remarks sanitize punctuation before strict outbound validation", () => {
+  const payload = buildLeidosActionPayload(filingPlan({
+    filingEquipment: "SC",
+    filingOtherInfo: null,
+    filingRemarks: "NORMAL VFR - TRAINING FLIGHT",
+  }), "file", { otherInfo: null } as any);
+  const otherInfo = String(payload.params.get("otherInfo") || "");
+
+  assert.equal(otherInfo, `DOF/${testDof} RMK/NORMAL VFR TRAINING FLIGHT`);
+  assert.equal(validateLeidosOtherInfoForTransmission(otherInfo).valid, true);
+});
+
+test("malformed nonblank Item 18 remains a readiness failure", () => {
+  const validation = validateFlightPlanForAction(filingPlan({
+    filingEquipment: "SC",
+    filingOtherInfo: "RMK/INVALID-HYPHEN",
+  }), "file");
+
+  assert.equal(validation.ready, false);
+  assert.ok(validation.errors.some((error) => /uppercase letters, numbers, spaces, and slash separators/i.test(error)));
+});
+
+test("generated Item 18 validation failures throw before any provider request", async () => {
+  await withMockedLeidosProvider([], async (calls) => {
+    const provider = new LeidosFlightPlanFilingProvider();
+    await assert.rejects(
+      () => provider.stageAction(filingPlan({
+        filingEquipment: "SC",
+        filingOtherInfo: null,
+        filingRemarks: "X".repeat(51),
+      }), "file"),
+      (error: unknown) => {
+        assert.ok(error instanceof LeidosPreDispatchValidationError);
+        assert.equal(error.providerRequestDispatched, false);
+        return true;
+      },
+    );
+    assert.equal(calls.length, 0);
+  });
 });
 
 test("Flight Service otherInfo transmission preserves ICAO RMK remarks", () => {

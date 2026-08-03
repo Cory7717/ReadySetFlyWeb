@@ -278,6 +278,7 @@ import {
   validateFlightPlanForAction,
   getProviderDepartureInstantForPlan,
   verifyLeidosWebhookAuthorization,
+  LeidosPreDispatchValidationError,
 } from "./services/flight-plan-filing/provider";
 import {
   buildLeidosWebhookEventFingerprint,
@@ -34361,15 +34362,30 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         const isProviderRejected = /Leidos returned an unsuccessful/i.test(
           message,
         );
+        const isLocalPreDispatchValidationError =
+          error instanceof LeidosPreDispatchValidationError;
         const dispatchedAttemptHasUnknownOutcome = Boolean(
           providerActionAttempt?.id &&
+          !isLocalPreDispatchValidationError &&
           !isProviderValidationError &&
           !isProviderStateRejected &&
           !isProviderRejected,
         );
         let syncedPlan: any = null;
         if (providerActionAttempt?.id) {
-          if (dispatchedAttemptHasUnknownOutcome) {
+          if (isLocalPreDispatchValidationError) {
+            await markFlightServiceProviderActionAttempt(
+              providerActionAttempt.id,
+              {
+                status: "failed-before-dispatch",
+                statusReason: "local_validation_failed_before_dispatch",
+                errorCode: "LOCAL_VALIDATION_FAILED",
+                errorMessage: message,
+                dispatchedAt: null,
+                completedAt: new Date(),
+              },
+            ).catch(() => undefined);
+          } else if (dispatchedAttemptHasUnknownOutcome) {
             await markFlightServiceProviderActionAttempt(
               providerActionAttempt.id,
               {
@@ -34482,9 +34498,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             updated: syncedPlan || planForErrorSync,
             previousLocalLifecycle: previousLocalLifecycleForCompletionLog,
             error,
-            failureStage: providerActionAttempt?.id
-              ? "provider_action_after_dispatch"
-              : "before_provider_dispatch",
+            failureStage:
+              !providerActionAttempt?.id || isLocalPreDispatchValidationError
+                ? "before_provider_dispatch"
+                : "provider_action_after_dispatch",
             localPersistenceCompleted: Boolean(syncedPlan),
           });
         }
@@ -34492,6 +34509,8 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           .status(
             isTimeout
               ? 504
+              : isLocalPreDispatchValidationError
+                ? 400
               : isProviderStateRejected
                 ? 409
                 : isProviderValidationError || isProviderRejected
@@ -34506,7 +34525,9 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
                 : message,
             code: dispatchedAttemptHasUnknownOutcome
               ? "FLIGHT_SERVICE_PROVIDER_OUTCOME_UNKNOWN"
-              : undefined,
+              : isLocalPreDispatchValidationError
+                ? "FLIGHT_SERVICE_LOCAL_VALIDATION_FAILED"
+                : undefined,
             providerMessage: message,
             plan: syncedPlan,
           });

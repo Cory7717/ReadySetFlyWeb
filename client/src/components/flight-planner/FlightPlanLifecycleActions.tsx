@@ -315,6 +315,7 @@ export function FlightPlanLifecycleActions({
 }: FlightPlanLifecycleActionsProps) {
   const terminal = isTerminalFilingPlan(plan);
   const liveProviderPlan = hasLiveProviderPlan(plan);
+  const providerPlanIdPresent = isGenuineFilingProviderPlanId(plan.filingProviderPlanId);
   const providerReviewPending = hasPendingProviderReview(plan);
   const providerUpdatesSummary = summarizeProviderUpdates(plan);
   const providerAcknowledgementAvailable = providerReviewPending;
@@ -432,17 +433,21 @@ export function FlightPlanLifecycleActions({
           >
             {labels.amend}
           </Button>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={onSync}
-            disabled={actionPending || syncPending || providerActionsPaused}
-            title={providerActionsPausedReason || "Refresh this plan from the filing provider."}
-          >
-            {syncLabel || labels.sync}
-          </Button>
         </>
       )}
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={onSync}
+        disabled={actionPending || syncPending || !providerPlanIdPresent}
+        title={
+          providerPlanIdPresent
+            ? "Retrieve the current plan state from Flight Service without resubmitting an action."
+            : "Provider sync is unavailable because this plan does not have a confirmed Flight Service flight identifier."
+        }
+      >
+        {syncLabel || labels.sync}
+      </Button>
       {providerAcknowledgementAvailable && (
         <Button
           size="sm"

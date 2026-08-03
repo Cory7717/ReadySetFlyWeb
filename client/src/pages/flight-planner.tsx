@@ -2568,7 +2568,6 @@ export default function FlightPlanner() {
         [user?.firstName, user?.lastName].filter(Boolean).join(" ") ||
         user?.email ||
         "",
-      remarks: current.remarks || "RSF internal filing preview",
     }));
   }, [form.tailNumber, user?.firstName, user?.lastName, user?.email]);
 
@@ -4787,7 +4786,7 @@ export default function FlightPlanner() {
     departureName: filingDraft.departureName.trim() || null,
     destinationName: filingDraft.destinationName.trim() || null,
     alternateName: filingDraft.alternateName.trim() || null,
-    remarks: [filingDraft.remarks.trim(), form.notes.trim()].filter(Boolean).join(" | ") || null,
+    remarks: filingDraft.remarks.trim() || null,
   }), [
     filingDraft,
     effectiveDepartureCode,
@@ -7629,17 +7628,6 @@ export default function FlightPlanner() {
       severity: "required",
       message: "Type of flight is required.",
       why: "ICAO filing includes type of flight so the provider can classify the operation correctly.",
-      actionLabel: "Edit",
-      actionTab: fileTab,
-    });
-    addIssue(!Boolean(filingDraft.remarks.trim() || form.notes.trim()), {
-      id: "filing-remarks",
-      category: "Filing Requirements",
-      field: "remarks",
-      label: "Filing Remarks / ATC Remarks",
-      severity: "required",
-      message: "Filing remarks / ATC remarks are required.",
-      why: "RSF requires filing remarks so the provider packet has explicit ATC remarks rather than an empty operational note.",
       actionLabel: "Edit",
       actionTab: fileTab,
     });

@@ -1452,6 +1452,8 @@ const normalizeLeidosRemarksText = (value?: string | null) => {
   const normalized = String(value || "")
     .trim()
     .replace(/^RMK\//i, "")
+    .replace(/\bRSF\s+(?:INTERNAL\s+)?FILING\s+PREVIEW\b/gi, " ")
+    .replace(/\bRSF\s+INTERNAL\s+PREVIEW\b/gi, " ")
     .replace(/_/g, " ")
     .replace(/[^A-Z0-9/ -]/gi, " ")
     .replace(/\s+/g, " ")
@@ -1938,7 +1940,9 @@ export const buildLeidosActionPayload = (
     append("wakeTurbulence", getLeidosWakeTurbulence(plan));
     append("aircraftEquipment", normalizeLeidosEquipmentCode(plan.filingEquipment));
     append("route", routeNormalization.normalizedRoute || "DCT");
-    const primaryRemarks = String(plan.filingRemarks || plan.notes || "").trim();
+    const primaryRemarks = normalizeLeidosRemarksText(
+      plan.filingRemarks || null,
+    );
     append("remarks", primaryRemarks);
     append("fuelOnBoard", minutesToIsoDuration(plan.filingEnduranceMinutes));
     append("pilotData", buildLeidosPilotData(plan));
@@ -1949,7 +1953,7 @@ export const buildLeidosActionPayload = (
     append("pilotInCommandExtended", plan.filingPilotName);
     append("pilotPhone", plan.filingPilotPhone);
     append("aircraftHomeBase", plan.filingAircraftHomeBase);
-    const supplementalRemarks = buildZzzzSupplementalRemarks(plan.filingRemarks || plan.notes || null, {
+    const supplementalRemarks = buildZzzzSupplementalRemarks(primaryRemarks, {
       departureName: plan.departure?.toUpperCase() === "ZZZZ" ? plan.filingDepartureName : null,
       destinationName: plan.destination?.toUpperCase() === "ZZZZ" ? plan.filingDestinationName : null,
       alternateName: plan.alternate?.toUpperCase() === "ZZZZ" ? plan.filingAlternateName : null,
@@ -2900,9 +2904,6 @@ export const validateFlightPlanForAction = (plan: FlightPlan, action: FlightPlan
   }
   if ((action === "file" || action === "amend") && !plan.filingAircraftHomeBase) {
     errors.push("Aircraft home base is required before sending this filing action to the filing provider.");
-  }
-  if ((action === "file" || action === "amend") && !plan.filingRemarks && !plan.notes) {
-    errors.push("Filing Remarks / ATC Remarks are required before sending this filing action to the filing provider.");
   }
   if ((action === "file" || action === "amend") && rules === "VFR" && Number(plan.filingPlannedAltitudeFt || 0) >= 18000) {
     errors.push("VFR flight plans cannot be filed at or above FL180. Use IFR or choose a lower altitude.");

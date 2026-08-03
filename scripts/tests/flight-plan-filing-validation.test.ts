@@ -853,6 +853,51 @@ test("generated Item 18 remarks sanitize punctuation before strict outbound vali
   assert.equal(validateLeidosOtherInfoForTransmission(otherInfo).valid, true);
 });
 
+test("blank filing remarks produce no outbound RMK field", () => {
+  const payload = buildLeidosActionPayload(filingPlan({
+    filingRemarks: null,
+    notes: "LOCAL PLANNING NOTE",
+    filingOtherInfo: null,
+  }), "file", { otherInfo: null } as any);
+  const fields = Object.fromEntries(payload.params.entries());
+
+  assert.equal(fields.remarks, undefined);
+  assert.doesNotMatch(fields.otherInfo || "", /(?:^|\s)RMK\//);
+});
+
+test("internal filing preview labels are never transmitted", () => {
+  const payload = buildLeidosActionPayload(filingPlan({
+    filingRemarks: "RSF INTERNAL FILING PREVIEW",
+    filingOtherInfo: "PBN/B2 RMK/RSF INTERNAL FILING PREVIEW",
+    filingEquipment: "R",
+  }), "file", { otherInfo: null } as any);
+  const fields = Object.fromEntries(payload.params.entries());
+
+  assert.doesNotMatch(fields.remarks || "", /RSF INTERNAL|FILING PREVIEW/i);
+  assert.doesNotMatch(fields.otherInfo || "", /RSF INTERNAL|FILING PREVIEW|RMK\//i);
+  assert.match(fields.otherInfo || "", /PBN\/B2/);
+});
+
+test("user remarks and required ICAO subfields survive outbound normalization once", () => {
+  const payload = buildLeidosActionPayload(filingPlan({
+    departure: "ZZZZ",
+    filingRemarks: "Training flight - student pilot",
+    filingOtherInfo: "PBN/B2",
+    filingEquipment: "R",
+    plannerState: {
+      planningReferenceDepartureAirport: "KEDC",
+      actualDepartureLocation: "0TX1",
+      actualDepartureLocationMode: "identifier",
+    },
+  }), "amend", { otherInfo: null } as any);
+  const fields = Object.fromEntries(payload.params.entries());
+
+  assert.match(fields.otherInfo || "", /PBN\/B2/);
+  assert.match(fields.otherInfo || "", /DEP\/0TX1/);
+  assert.match(fields.otherInfo || "", /RMK\/TRAINING FLIGHT STUDENT PILOT/);
+  assert.equal((fields.otherInfo?.match(/RMK\//g) || []).length, 1);
+});
+
 test("malformed nonblank Item 18 remains a readiness failure", () => {
   const validation = validateFlightPlanForAction(filingPlan({
     filingEquipment: "SC",

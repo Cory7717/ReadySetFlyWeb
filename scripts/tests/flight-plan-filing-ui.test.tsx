@@ -962,6 +962,12 @@ test("blank Fuel On Board is not treated as full usable fuel capacity", () => {
   assert.doesNotMatch(source, /return planningFuel;\s*\}, \[form\.fuelOnBoard, planningFuel\]\);/);
 });
 
+test("flight planner does not manufacture internal filing remarks", () => {
+  const source = readFileSync(resolve(process.cwd(), "client/src/pages/flight-planner.tsx"), "utf8");
+  assert.doesNotMatch(source, /remarks:\s*current\.remarks\s*\|\|\s*["']RSF internal filing preview["']/i);
+  assert.doesNotMatch(source, /id:\s*["']filing-remarks["'][\s\S]{0,300}severity:\s*["']required["']/);
+});
+
 test("flight planner uses notification polling only to surface webhook persistence", () => {
   const source = readFileSync(resolve(process.cwd(), "client/src/pages/flight-planner.tsx"), "utf8");
   assert.match(source, /queryKey:\s*\["\/api\/notifications\/unread"\]/);

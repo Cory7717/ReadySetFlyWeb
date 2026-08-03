@@ -1596,6 +1596,10 @@ type FilingReadinessCategorySummary = {
 };
 
 const FLIGHT_PLANNER_DRAFT_KEY = "rsf_flight_planner_draft_v1";
+const editableFilingRemarks = (value: unknown) => {
+  const text = typeof value === "string" ? value : "";
+  return /^RSF\s+(?:INTERNAL\s+)?FILING\s+PREVIEW$/i.test(text.trim()) ? "" : text;
+};
 const FLIGHT_PLANNER_AUTH_RETURN_KEY = "rsf_flight_planner_auth_return_v1";
 const FLIGHT_PLANNER_AUTH_RETURN_TTL_MS = 30 * 60 * 1000;
 const FLIGHT_PLANNER_ACTIVE_TAB_KEY = "rsf_planner_active_tab";
@@ -2610,7 +2614,13 @@ export default function FlightPlanner() {
       if (typeof parsed?.showTfrOverlay === "boolean") setShowTfrOverlay(parsed.showTfrOverlay);
       if (typeof parsed?.plannedAltitude === "string") setPlannedAltitude(parsed.plannedAltitude);
       if (typeof parsed?.arrivalAuto === "boolean") setArrivalAuto(parsed.arrivalAuto);
-      if (parsed?.filingDraft) setFilingDraft((current) => ({ ...current, ...parsed.filingDraft }));
+      if (parsed?.filingDraft) {
+        setFilingDraft((current) => ({
+          ...current,
+          ...parsed.filingDraft,
+          remarks: editableFilingRemarks(parsed.filingDraft.remarks),
+        }));
+      }
       if (parsed?.customProfile) setCustomProfile((current) => ({ ...current, ...parsed.customProfile }));
     } catch {
       window.localStorage.removeItem(FLIGHT_PLANNER_DRAFT_KEY);
@@ -3262,7 +3272,6 @@ export default function FlightPlanner() {
     selectedProfile?.filingSoulsOnBoardDefault ||
     selectedProfile?.filingAircraftColorDefault ||
     selectedProfile?.filingPilotNameDefault ||
-    selectedProfile?.filingRemarksDefault ||
     selectedProfile?.filingWakeTurbulenceDefault ||
     selectedProfile?.filingTypeOfFlightDefault ||
     selectedProfile?.filingSurveillanceEquipmentDefault ||
@@ -3283,7 +3292,6 @@ export default function FlightPlanner() {
       soulsOnBoard: selectedProfile.filingSoulsOnBoardDefault?.trim() || current.soulsOnBoard,
       aircraftColor: selectedProfile.filingAircraftColorDefault?.trim() || current.aircraftColor,
       pilotName: selectedProfile.filingPilotNameDefault?.trim() || current.pilotName,
-      remarks: selectedProfile.filingRemarksDefault?.trim() || current.remarks,
       wakeTurbulence: selectedProfile.filingWakeTurbulenceDefault?.trim() || current.wakeTurbulence,
       typeOfFlight: selectedProfile.filingTypeOfFlightDefault?.trim() || current.typeOfFlight,
       surveillanceEquipment: selectedProfile.filingSurveillanceEquipmentDefault?.trim() || current.surveillanceEquipment,
@@ -8314,7 +8322,7 @@ export default function FlightPlanner() {
       pilotName: editingPlan.filingPilotName || current.pilotName,
       pilotPhone: (editingPlan as any).filingPilotPhone || current.pilotPhone || String((user as any)?.phone || ""),
       aircraftHomeBase: (editingPlan as any).filingAircraftHomeBase || current.aircraftHomeBase || String((user as any)?.homeBase || "").toUpperCase(),
-      remarks: editingPlan.filingRemarks || editingPlan.notes || current.remarks,
+      remarks: editableFilingRemarks(editingPlan.filingRemarks),
       wakeTurbulence: editingPlan.filingWakeTurbulence || current.wakeTurbulence,
       typeOfFlight: editingPlan.filingTypeOfFlight || current.typeOfFlight,
       surveillanceEquipment: editingPlan.filingSurveillanceEquipment || current.surveillanceEquipment,
@@ -8467,7 +8475,6 @@ export default function FlightPlanner() {
       soulsOnBoard: current.soulsOnBoard.trim() || selectedProfile.filingSoulsOnBoardDefault?.trim() || current.soulsOnBoard,
       aircraftColor: current.aircraftColor.trim() || selectedProfile.filingAircraftColorDefault?.trim() || current.aircraftColor,
       pilotName: current.pilotName.trim() || selectedProfile.filingPilotNameDefault?.trim() || current.pilotName,
-      remarks: current.remarks.trim() || selectedProfile.filingRemarksDefault?.trim() || current.remarks,
       wakeTurbulence: current.wakeTurbulence.trim() || selectedProfile.filingWakeTurbulenceDefault?.trim() || current.wakeTurbulence,
       typeOfFlight: current.typeOfFlight.trim() || selectedProfile.filingTypeOfFlightDefault?.trim() || current.typeOfFlight,
       surveillanceEquipment: current.surveillanceEquipment.trim() || selectedProfile.filingSurveillanceEquipmentDefault?.trim() || current.surveillanceEquipment,
@@ -11835,14 +11842,17 @@ export default function FlightPlanner() {
             </div>
           </div>
           <div className="space-y-2">
-            <Label>Filing Remarks / ATC Remarks</Label>
-            <Textarea
+            <Label htmlFor="planner-field-filing-remarks">Filing Remarks (Optional)</Label>
+            <Input
               id="planner-field-filing-remarks"
               value={filingDraft.remarks}
               onChange={(e) => setFilingDraft((current) => ({ ...current, remarks: e.target.value }))}
-              rows={2}
-              placeholder="Route notes or filing remarks"
+              placeholder="Enter an optional operational remark"
+              aria-describedby="planner-field-filing-remarks-help"
             />
+            <p id="planner-field-filing-remarks-help" className="text-xs text-muted-foreground">
+              Optional operational remarks transmitted to Flight Service as ICAO Item 18 RMK/. Leave blank if no remarks are needed.
+            </p>
           </div>
           <Alert>
             <AlertDescription>

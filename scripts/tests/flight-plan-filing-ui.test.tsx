@@ -968,6 +968,29 @@ test("flight planner does not manufacture internal filing remarks", () => {
   assert.doesNotMatch(source, /id:\s*["']filing-remarks["'][\s\S]{0,300}severity:\s*["']required["']/);
 });
 
+test("flight planner presents filing remarks as one optional free-text field", () => {
+  const source = readFileSync(resolve(process.cwd(), "client/src/pages/flight-planner.tsx"), "utf8");
+  assert.match(source, /<Label htmlFor="planner-field-filing-remarks">Filing Remarks \(Optional\)<\/Label>/);
+  assert.match(source, /<Input[\s\S]{0,180}id="planner-field-filing-remarks"[\s\S]{0,180}value=\{filingDraft\.remarks\}/);
+  assert.match(source, /Optional operational remarks transmitted to Flight Service as ICAO Item 18 RMK\/\. Leave blank if no remarks are needed\./);
+  assert.doesNotMatch(source, /<Select[\s\S]{0,300}id="planner-field-filing-remarks"/);
+});
+
+test("saved filing remarks hydrate exactly while blank remarks remain blank", () => {
+  const source = readFileSync(resolve(process.cwd(), "client/src/pages/flight-planner.tsx"), "utf8");
+  assert.match(source, /remarks:\s*editableFilingRemarks\(editingPlan\.filingRemarks\)/);
+  assert.doesNotMatch(source, /remarks:\s*editingPlan\.filingRemarks\s*\|\|\s*editingPlan\.notes/);
+  assert.match(source, /filingRemarks:\s*filingDraft\.remarks\.trim\(\)\s*\|\|\s*null/);
+});
+
+test("internal preview labels and aircraft presets do not populate filing remarks", () => {
+  const source = readFileSync(resolve(process.cwd(), "client/src/pages/flight-planner.tsx"), "utf8");
+  assert.match(source, /const editableFilingRemarks = \(value: unknown\)/);
+  assert.match(source, /remarks:\s*editableFilingRemarks\(parsed\.filingDraft\.remarks\)/);
+  assert.doesNotMatch(source, /remarks:\s*selectedProfile\.filingRemarksDefault/);
+  assert.doesNotMatch(source, /remarks:\s*current\.remarks\.trim\(\)\s*\|\|\s*selectedProfile\.filingRemarksDefault/);
+});
+
 test("flight planner uses notification polling only to surface webhook persistence", () => {
   const source = readFileSync(resolve(process.cwd(), "client/src/pages/flight-planner.tsx"), "utf8");
   assert.match(source, /queryKey:\s*\["\/api\/notifications\/unread"\]/);

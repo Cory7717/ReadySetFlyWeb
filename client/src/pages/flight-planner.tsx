@@ -3051,7 +3051,6 @@ export default function FlightPlanner() {
   const { data: savedPlansRaw = [], isLoading: plansLoading } = useQuery<FlightPlan[]>({
     queryKey: [showCertificationTestPlans ? "/api/flight-plans?showCertificationTests=true" : "/api/flight-plans"],
     enabled: isAuthenticated,
-    refetchInterval: isAuthenticated && activeTab === "file" ? 15_000 : false,
     refetchOnWindowFocus: true,
   });
   const { data: unreadNotificationState } = useQuery<{ count: number; latestActivityAt?: string | null }>({
@@ -3166,18 +3165,19 @@ export default function FlightPlanner() {
     const acknowledgementGeneration = storedTestAcknowledgement
       ? `${storedTestAcknowledgement.environment}:${storedTestAcknowledgement.acknowledgedAt}`
       : `${effectiveFlightServiceEnvironment.environment}:missing`;
-    const visibleProviderPlans = savedPlansView.filter((plan) =>
+    const recoveryProviderPlans = savedPlansView.filter((plan) =>
       isGenuineFilingProviderPlanId(plan.filingProviderPlanId) &&
+      getProviderSnapshot(plan).providerWebhookRetrievalPending === true &&
       !["cancelled", "closed"].includes(normalizedClientFilingStatus(plan)) &&
       !isCertificationFlightPlan(plan) &&
       (!isFlightServiceTestMode || Boolean(storedTestAcknowledgement)) &&
       labAcknowledgementBlockedSync[plan.id]?.acknowledgementGeneration !== acknowledgementGeneration
     );
-    if (visibleProviderPlans.length === 0) return;
+    if (recoveryProviderPlans.length === 0) return;
     let cancelled = false;
     const poll = async () => {
       const now = Date.now();
-      for (const plan of visibleProviderPlans.slice(0, 5)) {
+      for (const plan of recoveryProviderPlans.slice(0, 5)) {
         const syncThrottleKey = `${plan.id}:${acknowledgementGeneration}`;
         const lastAttemptAt = backgroundSyncLastAttemptRef.current.get(syncThrottleKey) ?? 0;
         if (now - lastAttemptAt < 55_000) continue;
@@ -3218,7 +3218,7 @@ export default function FlightPlanner() {
       }
     };
     void poll();
-    const timer = window.setInterval(poll, 60000);
+    const timer = window.setInterval(poll, 5 * 60_000);
     return () => {
       cancelled = true;
       window.clearInterval(timer);

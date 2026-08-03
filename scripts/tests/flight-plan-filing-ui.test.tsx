@@ -962,7 +962,7 @@ test("blank Fuel On Board is not treated as full usable fuel capacity", () => {
   assert.doesNotMatch(source, /return planningFuel;\s*\}, \[form\.fuelOnBoard, planningFuel\]\);/);
 });
 
-test("flight planner refreshes saved plans when notification polling changes", () => {
+test("flight planner uses notification polling only to surface webhook persistence", () => {
   const source = readFileSync(resolve(process.cwd(), "client/src/pages/flight-planner.tsx"), "utf8");
   assert.match(source, /queryKey:\s*\["\/api\/notifications\/unread"\]/);
   assert.match(source, /refetchInterval:\s*isAuthenticated\s*\?\s*15_000\s*:\s*false/);
@@ -973,7 +973,9 @@ test("flight planner refreshes saved plans when notification polling changes", (
   assert.match(source, /const invalidateFlightPlanQueries = useCallback\(\(\) => \{/);
   assert.match(source, /predicate:\s*\(query\) => String\(query\.queryKey\?\.\[0\] \|\| ""\)\.startsWith\("\/api\/flight-plans"\)/);
   assert.match(source, /invalidateFlightPlanQueries\(\);/);
-  assert.match(source, /void poll\(\);\s*const timer = window\.setInterval\(poll, 60000\)/);
+  assert.doesNotMatch(source, /activeTab === "file" \? 15_000 : false/);
+  assert.match(source, /providerWebhookRetrievalPending === true/);
+  assert.match(source, /void poll\(\);\s*const timer = window\.setInterval\(poll, 5 \* 60_000\)/);
 });
 
 test("timezone-less display strings are not canonical lifecycle-action instants", () => {

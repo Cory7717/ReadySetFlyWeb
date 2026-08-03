@@ -109,6 +109,44 @@ test("webhook provider notifications are explicitly created unacknowledged", () 
   );
 });
 
+test("webhook synchronization retrieves only the affected provider plan", () => {
+  const webhookRoute = routes.slice(
+    routes.indexOf('app.post("/api/leidos/webhooks/flight-service"'),
+    routes.indexOf('"/api/flight-plans/:id/filing-action"'),
+  );
+  assert.match(webhookRoute, /eq\(flightPlans\.filingProviderPlanId, flightIdentifier\)/);
+  assert.match(webhookRoute, /const webhookSyncResult = await syncLeidosPlanMetadata\(\s*matchedPlan as any,?\s*\)/);
+  assert.match(webhookRoute, /persistLeidosProviderSync\(\s*matchedPlan as any,/);
+  assert.match(webhookRoute, /const syncResult = webhookSyncResult/);
+  assert.doesNotMatch(webhookRoute, /for \(const .*flightPlans/);
+  const reservationIndex = webhookRoute.indexOf("reserveLeidosWebhookEvent");
+  const duplicateReturnIndex = webhookRoute.indexOf("leidos_webhook_duplicate_ignored");
+  const retrieveIndex = webhookRoute.indexOf("const webhookSyncResult = await syncLeidosPlanMetadata");
+  assert.ok(reservationIndex >= 0 && duplicateReturnIndex > reservationIndex);
+  assert.ok(retrieveIndex > duplicateReturnIndex, "duplicate deliveries must return before provider retrieval");
+});
+
+test("continuous provider polling is replaced by targeted failed-webhook recovery", () => {
+  const planner = readFileSync("client/src/pages/flight-planner.tsx", "utf8");
+  assert.doesNotMatch(planner, /activeTab === "file" \? 15_000 : false/);
+  assert.match(planner, /providerWebhookRetrievalPending === true/);
+  assert.match(planner, /setInterval\(poll, 5 \* 60_000\)/);
+  assert.match(routes, /providerWebhookRetrievalPending:\s*true/);
+  assert.match(routes, /providerWebhookRetrievalPending:\s*false/);
+});
+
+test("post-action reconciliation remains enabled for every filing lifecycle action", () => {
+  const actionRoute = routes.slice(
+    routes.indexOf('"/api/flight-plans/:id/filing-action"'),
+    routes.indexOf('"/api/flight-plans/:id/filing-sync"'),
+  );
+  for (const action of ["file", "amend", "activate", "cancel", "close"]) {
+    assert.match(actionRoute, new RegExp(`"${action}"`));
+  }
+  assert.match(actionRoute, /const postActionSync = await syncLeidosPlanMetadata\(updated as any\)/);
+  assert.match(actionRoute, /persistLeidosProviderSync/);
+});
+
 test("webhook lifecycle persistence happens before notification and push side effects", () => {
   const webhookRoute = routes.slice(routes.indexOf('app.post("/api/leidos/webhooks/flight-service"'));
   const persistenceIndex = webhookRoute.indexOf("storage.updateFlightPlan(matchedPlan.id");

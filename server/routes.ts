@@ -30439,7 +30439,11 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     const nextProviderSnapshot = applyProviderEffectiveReviewDecision(
       plan,
       previousProviderSnapshot,
-      nextProviderSnapshotBase,
+      {
+        ...nextProviderSnapshotBase,
+        providerWebhookRetrievalPending: false,
+        providerWebhookRetrievalFailureAt: null,
+      },
       "provider_retrieve",
     );
     const providerAuthoredPlanUpdates =
@@ -31919,9 +31923,28 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             hasArtccState: Boolean(artccState),
           }),
         );
+        const webhookSyncResult = await syncLeidosPlanMetadata(
+          matchedPlan as any,
+        ).catch(() => null);
         if (!hasExplicitProviderChange) {
+          const noOpSyncedPlan = webhookSyncResult
+            ? await persistLeidosProviderSync(
+                matchedPlan as any,
+                webhookSyncResult,
+                { suppressTransitionLog: true },
+              )
+            : matchedPlan;
+          const noOpSnapshot = getProviderSnapshotRecord(
+            (noOpSyncedPlan as Record<string, unknown>).filingProviderSnapshot,
+          );
           const finalWebhookSnapshot = appendProcessedWebhookEvent(
-            previousProviderSnapshot,
+            {
+              ...noOpSnapshot,
+              providerWebhookRetrievalPending: !webhookSyncResult,
+              providerWebhookRetrievalFailureAt: webhookSyncResult
+                ? null
+                : new Date().toISOString(),
+            },
             {
               eventHash,
               processingId,
@@ -32057,9 +32080,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           ).trim() || null;
         let notificationProviderEffectivePlanHash: string | null = null;
         let notificationProviderPendingReview = false;
-        const syncResult = await syncLeidosPlanMetadata(
-          matchedPlan as any,
-        ).catch(() => null);
+        const syncResult = webhookSyncResult;
         if (syncResult) {
           const syncedPlan = await persistLeidosProviderSync(
             matchedPlan as any,
@@ -32242,6 +32263,8 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             {
               ...existingSnapshot,
               ...providerReviewSnapshot,
+              providerWebhookRetrievalPending: true,
+              providerWebhookRetrievalFailureAt: new Date().toISOString(),
               versionStamp:
                 providerReviewSnapshot.versionStamp ||
                 existingSnapshot.versionStamp ||

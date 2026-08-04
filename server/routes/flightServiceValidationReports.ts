@@ -3,7 +3,7 @@ import { desc, eq } from "drizzle-orm";
 import { db } from "../db";
 import { isAdmin, isAuthenticated } from "../auth";
 import { flightServiceValidationReports } from "@shared/schema";
-import { validatePublicValidationReport } from "@shared/config/flightServiceValidationReports";
+import { removeRestrictedProviderBranding, validatePublicValidationReport } from "@shared/config/flightServiceValidationReports";
 
 const MAX_REPORT_BYTES = 2 * 1024 * 1024;
 
@@ -24,7 +24,7 @@ export function registerFlightServiceValidationReportRoutes(app: Express) {
     try {
       const rows = await db.select({ reportId: flightServiceValidationReports.reportId, reportJson: flightServiceValidationReports.reportJson, isCurrent: flightServiceValidationReports.isCurrent, publishedAt: flightServiceValidationReports.publishedAt })
         .from(flightServiceValidationReports).orderBy(desc(flightServiceValidationReports.isCurrent), desc(flightServiceValidationReports.publishedAt));
-      res.json({ reports: rows });
+      res.json({ reports: rows.map((row) => ({ ...row, reportJson: removeRestrictedProviderBranding(row.reportJson) })) });
     } catch (error) { next(error); }
   });
 
@@ -32,7 +32,7 @@ export function registerFlightServiceValidationReportRoutes(app: Express) {
     try {
       const [row] = await db.select().from(flightServiceValidationReports).where(eq(flightServiceValidationReports.reportId, String(req.params.reportId))).limit(1);
       if (!row) return res.status(404).json({ error: "Validation report not found." });
-      res.json({ report: row.reportJson, isCurrent: row.isCurrent, publishedAt: row.publishedAt });
+      res.json({ report: removeRestrictedProviderBranding(row.reportJson), isCurrent: row.isCurrent, publishedAt: row.publishedAt });
     } catch (error) { next(error); }
   });
 
@@ -42,7 +42,7 @@ export function registerFlightServiceValidationReportRoutes(app: Express) {
       if (!row) return res.status(404).json({ error: "Validation report not found." });
       res.setHeader("Content-Type", "application/json; charset=utf-8");
       res.setHeader("Content-Disposition", `attachment; filename="${row.reportId}.json"`);
-      res.send(`${JSON.stringify(row.reportJson, null, 2)}\n`);
+      res.send(`${JSON.stringify(removeRestrictedProviderBranding(row.reportJson), null, 2)}\n`);
     } catch (error) { next(error); }
   });
 

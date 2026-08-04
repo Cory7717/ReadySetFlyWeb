@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { validatePublicValidationReport } from "../../shared/config/flightServiceValidationReports";
+import { removeRestrictedProviderBranding, validatePublicValidationReport } from "../../shared/config/flightServiceValidationReports";
 
 const validReport = {
   schemaVersion: "1.0.0",
@@ -33,6 +33,19 @@ test("explicit redaction placeholders are accepted while raw identifiers remain 
   assert.equal(validatePublicValidationReport(sanitized).ok, true);
   sanitized.evidence[0].providerPlanId = "raw-provider-123";
   assert.equal(validatePublicValidationReport(sanitized).ok, false);
+});
+
+test("restricted provider branding is removed from public report content", () => {
+  const branded = { subtitle: "RSF and Leidos Flight Services", event: "leidos_push_received" };
+  const publicValue = removeRestrictedProviderBranding(branded);
+  assert.deepEqual(publicValue, { subtitle: "RSF and Flight Services", event: "flight_services_push_received" });
+  assert.doesNotMatch(JSON.stringify(publicValue), /leidos/i);
+
+  const candidate = structuredClone(validReport) as any;
+  candidate.subtitle = "Ready Set Fly ↔ Leidos Flight Services eLab2";
+  const result = validatePublicValidationReport(candidate);
+  assert.equal(result.ok, true);
+  if (result.ok) assert.doesNotMatch(JSON.stringify(result.report), /leidos/i);
 });
 
 test("invalid report type, schema version, and missing fields are rejected", () => {

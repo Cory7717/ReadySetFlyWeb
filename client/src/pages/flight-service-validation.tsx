@@ -75,7 +75,7 @@ type FlightServiceValidationReport = {
 
 export const flightServiceValidationReport = {
   title: "Ready Set Fly Flight Service Validation",
-  subtitle: "Ready Set Fly ↔ Leidos Flight Service Integration Validation",
+  subtitle: "Ready Set Fly ↔ Flight Services Integration Validation",
   banner: {
     label: "Engineering Validation Report",
     description:

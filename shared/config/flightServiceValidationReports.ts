@@ -23,6 +23,17 @@ export const flightServiceValidationReportImportSchema = z.object({
 
 export type FlightServiceValidationReportImport = z.infer<typeof flightServiceValidationReportImportSchema>;
 
+export function removeRestrictedProviderBranding<T>(value: T): T {
+  if (Array.isArray(value)) return value.map((item) => removeRestrictedProviderBranding(item)) as T;
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, nested]) => [key, removeRestrictedProviderBranding(nested)])) as T;
+  }
+  if (typeof value === "string") {
+    return value.replace(/leidos_/gi, "flight_services_").replace(/\bleidos\s+flight services\b/gi, "Flight Services").replace(/\bleidos\b/gi, "Flight Services") as T;
+  }
+  return value;
+}
+
 const sensitiveKey = /(^|\.)(authorization|password|passwd|secret|api.?key|access.?token|database.?url|webhook.?url|provider.?plan.?id|internal.?plan.?id|flight.?identifier|user.?id|request.?id|event.?hash|stack|stack.?trace)$/i;
 const safeRedaction = /^\s*(?:\[REDACTED\]|\[REMOVED\]|PII restricted|null|none|not applicable)\s*$/i;
 const sensitiveValues: Array<{ label: string; pattern: RegExp }> = [
@@ -61,7 +72,8 @@ export function findSensitiveValidationReportValue(value: unknown, path = "$"): 
 export function validatePublicValidationReport(value: unknown) {
   const parsed = flightServiceValidationReportImportSchema.safeParse(value);
   if (!parsed.success) return { ok: false as const, error: "The report does not match the supported v1 validation-report schema.", details: parsed.error.flatten() };
-  const finding = findSensitiveValidationReportValue(parsed.data);
+  const publicReport = removeRestrictedProviderBranding(parsed.data);
+  const finding = findSensitiveValidationReportValue(publicReport);
   if (finding) return { ok: false as const, error: `Sensitive-looking content detected at ${finding.path}: ${finding.reason}.` };
-  return { ok: true as const, report: parsed.data };
+  return { ok: true as const, report: publicReport };
 }

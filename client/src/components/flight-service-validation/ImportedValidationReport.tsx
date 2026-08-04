@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAuth } from "@/hooks/useAuth";
 import { apiRequest, getQueryFn, queryClient } from "@/lib/queryClient";
 import { apiUrl } from "@/lib/api";
-import { validatePublicValidationReport, type FlightServiceValidationReportImport } from "@shared/config/flightServiceValidationReports";
+import { removeRestrictedProviderBranding, validatePublicValidationReport, type FlightServiceValidationReportImport } from "@shared/config/flightServiceValidationReports";
 
 type PublishedReport = { report: FlightServiceValidationReportImport; isCurrent: boolean; publishedAt: string };
 
@@ -92,7 +92,7 @@ export function ImportedValidationReportPage({ reportId }: { reportId?: string }
   const listQuery = useQuery<{ reports: Array<{ reportId: string; reportJson: FlightServiceValidationReportImport; isCurrent: boolean; publishedAt: string }> }>({ queryKey: ["/api/public/flight-service-validation/reports"], queryFn: getQueryFn({ on401: "throw" }) });
   const selected = reportId ? listQuery.data?.reports.find((item) => item.reportId === reportId) : listQuery.data?.reports.find((item) => item.isCurrent);
   if (!selected) return null;
-  const report = selected.reportJson;
+  const report = removeRestrictedProviderBranding(selected.reportJson);
   const metadata = report.metadata as Record<string, unknown>;
   return <PageShell kicker={selected.isCurrent ? "Current Published Report" : "Published Validation Report"} title={report.title} description={report.subtitle} className="bg-[#090e15] text-[#E8EDF4]" contentClassName="max-w-7xl space-y-12">
     <ValidationReportImportControl />

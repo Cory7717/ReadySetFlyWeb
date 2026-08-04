@@ -113,6 +113,7 @@ test("public validation content contains no operational identifiers or personal 
   assert.doesNotMatch(pageSource, /[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/);
   assert.doesNotMatch(pageSource, /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/i);
   assert.doesNotMatch(pageSource, /flightIdentifier|providerPlanId|userId|pilotName|phoneNumber|authToken|apiKey|requestId|databaseId/);
+  assert.doesNotMatch(`${pageSource}\n${importedReportSource}`, /\bLeidos\b/i);
 });
 
 test("displayed report content is sourced from the typed page configuration", () => {

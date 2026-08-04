@@ -19,6 +19,17 @@ test("validation page renders every required report section", () => {
   assert.ok(pageSource.includes(flightServiceValidationReport.subtitle));
 });
 
+test("overall validation status presents the current certification snapshot", () => {
+  assert.equal(flightServiceValidationReport.overallValidation.headline, "118 / 118 Validation Tests Passed");
+  assert.deepEqual(flightServiceValidationReport.overallValidation.metrics, [
+    { label: "Critical Issues", value: "0" },
+    { label: "Major Issues", value: "0" },
+    { label: "Environment", value: "LAB / Elab2" },
+    { label: "Integration Status", value: "Awaiting Final Flight Services Demonstration" },
+  ]);
+  assert.match(pageSource, /report\.overallValidation\.metrics\.map/);
+});
+
 test("validation matrix renders all required tests and status badge variants", () => {
   assert.equal(flightServiceValidationReport.testMatrix.length, 18);
   for (const row of flightServiceValidationReport.testMatrix) {
@@ -36,7 +47,44 @@ test("sanitized evidence uses keyboard-accessible collapsible controls", () => {
   assert.match(pageSource, /<AccordionContent>/);
   for (const evidence of flightServiceValidationReport.evidence) {
     assert.ok(pageSource.includes(evidence.title));
+    assert.ok(evidence.objective.length > 0);
+    assert.ok(evidence.procedure.length > 0);
+    assert.ok(evidence.expectedResult.length > 0);
   }
+  for (const label of Object.values(flightServiceValidationReport.evidenceLabels)) {
+    assert.ok(pageSource.includes(label), `Missing evidence label: ${label}`);
+  }
+  assert.match(pageSource, /<Button type="button" variant="secondary" disabled>/);
+});
+
+test("validation methodology documents the dual-channel verification workflow", () => {
+  assert.deepEqual(flightServiceValidationReport.methodology.steps, [
+    "File Flight Plan",
+    "Retrieve Provider Response",
+    "Validate Provider Data",
+    "Verify Lifecycle",
+    "Confirm Webhook Processing",
+    "Compare Expected Results",
+    "Record Validation",
+  ]);
+  assert.deepEqual(flightServiceValidationReport.methodology.verificationChannels, [
+    "RSF user interface",
+    "Direct provider retrieval through Postman",
+  ]);
+  assert.match(pageSource, /report\.methodology\.steps\.map/);
+});
+
+test("future validation reports are presentation-only disabled cards", () => {
+  assert.deepEqual(
+    flightServiceValidationReport.futureReports.map(({ label, title, button }) => ({ label, title, button })),
+    [
+      { label: "Validation Report 1", title: "Flight Service Integration Validation v1.0", button: "Current Report" },
+      { label: "Validation Report 2", title: "Flight Services Demonstration Validation", button: "Coming After Demo" },
+      { label: "Validation Report 3", title: "Production Readiness Validation", button: "Future" },
+    ],
+  );
+  assert.match(pageSource, /report\.futureReports\.map/);
+  assert.match(pageSource, /<Button type="button" variant="secondary" disabled>\{item\.button\}<\/Button>/);
 });
 
 test("validation footer returns visitors to the public home page", () => {

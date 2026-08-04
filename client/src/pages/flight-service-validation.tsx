@@ -18,10 +18,16 @@ type FlightServiceValidationReport = {
     executiveSummary: string;
     testMatrix: string;
     lifecycleTimeline: string;
-    regressionFixes: string;
+    engineeringChanges: string;
+    validationMethodology: string;
     validationEvidence: string;
     openItems: string;
     futureReports: string;
+  };
+  overallValidation: {
+    title: string;
+    headline: string;
+    metrics: Array<{ label: string; value: string }>;
   };
   testMatrixColumns: [string, string, string, string];
   metadata: Array<{ label: string; value: string; status?: ValidationStatus }>;
@@ -35,9 +41,18 @@ type FlightServiceValidationReport = {
   }>;
   lifecycle: string[];
   verifiedFixes: string[];
-  evidence: Array<{ id: string; title: string; payload: Record<string, unknown> }>;
-  openItems: Array<{ item: string; status: ValidationStatus }>;
-  futureReports: Array<{ title: string; description: string }>;
+  methodology: { description: string; steps: string[]; verificationLabel: string; verificationChannels: string[] };
+  evidenceLabels: { objective: string; procedure: string; expectedResult: string; providerEvidence: string; download: string; comingSoon: string };
+  evidence: Array<{
+    id: string;
+    title: string;
+    objective: string;
+    procedure: string[];
+    expectedResult: string[];
+    payload: Record<string, unknown>;
+  }>;
+  openItems: Array<{ title: string; description: string; status: ValidationStatus }>;
+  futureReports: Array<{ label: string; title: string; description: string; button: string }>;
   footer: { title: string; description: string; button: string };
 };
 
@@ -54,10 +69,21 @@ export const flightServiceValidationReport = {
     executiveSummary: "Executive Summary",
     testMatrix: "Test Matrix",
     lifecycleTimeline: "Lifecycle Timeline",
-    regressionFixes: "Regression Fixes Verified",
+    engineeringChanges: "Engineering Changes Verified",
+    validationMethodology: "Validation Methodology",
     validationEvidence: "Validation Evidence",
     openItems: "Open Items",
     futureReports: "Future Validation Reports",
+  },
+  overallValidation: {
+    title: "Overall Validation Status",
+    headline: "118 / 118 Validation Tests Passed",
+    metrics: [
+      { label: "Critical Issues", value: "0" },
+      { label: "Major Issues", value: "0" },
+      { label: "Environment", value: "LAB / Elab2" },
+      { label: "Integration Status", value: "Awaiting Final Flight Services Demonstration" },
+    ],
   },
   testMatrixColumns: ["Test", "Expected Result", "Actual Result", "Status"],
   metadata: [
@@ -117,22 +143,79 @@ export const flightServiceValidationReport = {
     "User remarks correctly transmitted",
     "Healthy ACTIVE and PROPOSED plans no longer background synchronize",
   ],
+  methodology: {
+    description: "Every workflow is verified through both the Ready Set Fly user experience and direct provider retrieval, then compared with its documented expected result.",
+    steps: [
+      "File Flight Plan",
+      "Retrieve Provider Response",
+      "Validate Provider Data",
+      "Verify Lifecycle",
+      "Confirm Webhook Processing",
+      "Compare Expected Results",
+      "Record Validation",
+    ],
+    verificationLabel: "Each workflow is verified using both:",
+    verificationChannels: ["RSF user interface", "Direct provider retrieval through Postman"],
+  },
+  evidenceLabels: {
+    objective: "Objective",
+    procedure: "Procedure",
+    expectedResult: "Expected Result",
+    providerEvidence: "Provider Evidence",
+    download: "Download JSON",
+    comingSoon: "Coming Soon",
+  },
   evidence: [
-    { id: "retrieve-filing", title: "Retrieve after Filing", payload: { operation: "retrieve", lifecycle: "PROPOSED", result: "sanitized example" } },
-    { id: "retrieve-amendment", title: "Retrieve after Amendment", payload: { operation: "retrieve", lifecycle: "PROPOSED", change: "sanitized amendment example" } },
-    { id: "retrieve-activation", title: "Retrieve after Activation", payload: { operation: "retrieve", lifecycle: "ACTIVE", result: "sanitized example" } },
-    { id: "retrieve-closure", title: "Retrieve after Closure", payload: { operation: "retrieve", lifecycle: "CLOSED", result: "sanitized example" } },
-    { id: "webhook-lifecycle", title: "Webhook Lifecycle Example", payload: { event: "lifecycle update", lifecycle: "ACTIVE", processing: "authenticated and sanitized" } },
+    {
+      id: "retrieve-filing",
+      title: "Retrieve After Filing",
+      objective: "Verify successful filing and provider acceptance.",
+      procedure: ["File a flight plan.", "Retrieve the provider response through Postman.", "Compare the sanitized provider response with the submitted plan."],
+      expectedResult: ["Successful return status", "Current lifecycle state is PROPOSED", "Provider revision is present"],
+      payload: { operation: "retrieve", lifecycle: "PROPOSED", result: "sanitized example" },
+    },
+    {
+      id: "retrieve-amendment",
+      title: "Retrieve After Amendment",
+      objective: "Verify that an accepted amendment is reflected in the provider record.",
+      procedure: ["Submit an amendment from RSF.", "Retrieve the updated provider response through Postman.", "Compare the amended fields with expected values."],
+      expectedResult: ["Successful return status", "Current lifecycle state remains PROPOSED", "Amended fields are reflected"],
+      payload: { operation: "retrieve", lifecycle: "PROPOSED", change: "sanitized amendment example" },
+    },
+    {
+      id: "retrieve-activation",
+      title: "Retrieve After Activation",
+      objective: "Verify provider lifecycle progression after activation.",
+      procedure: ["Activate an eligible plan.", "Retrieve the provider response through Postman.", "Compare lifecycle data with the expected active state."],
+      expectedResult: ["Successful return status", "Current lifecycle state is ACTIVE", "Provider data remains internally consistent"],
+      payload: { operation: "retrieve", lifecycle: "ACTIVE", result: "sanitized example" },
+    },
+    {
+      id: "retrieve-closure",
+      title: "Retrieve After Closure",
+      objective: "Verify provider confirmation of the closed lifecycle state.",
+      procedure: ["Close an eligible active plan.", "Retrieve the provider response through Postman.", "Confirm the terminal lifecycle state."],
+      expectedResult: ["Successful return status", "Current lifecycle state is CLOSED", "No additional action remains pending"],
+      payload: { operation: "retrieve", lifecycle: "CLOSED", result: "sanitized example" },
+    },
+    {
+      id: "webhook-lifecycle",
+      title: "Webhook Lifecycle Response",
+      objective: "Verify that an authenticated provider event triggers targeted lifecycle reconciliation.",
+      procedure: ["Receive a sanitized lifecycle event.", "Retrieve only the affected provider record.", "Compare the persisted lifecycle with the provider response."],
+      expectedResult: ["Event is authenticated", "Only the affected record is retrieved", "Authoritative lifecycle data is persisted"],
+      payload: { event: "lifecycle update", lifecycle: "ACTIVE", processing: "authenticated and sanitized" },
+    },
   ],
   openItems: [
-    { item: "Squawk / Beacon Code update not yet observed during current LAB testing", status: "Not Yet Observed" },
-    { item: "Final Flight Services demonstration pending", status: "Pending" },
-    { item: "Production authorization pending", status: "Pending" },
+    { title: "Beacon / Squawk Assignment", description: "Waiting for provider-generated beacon code during LAB validation.", status: "Not Yet Observed" },
+    { title: "Final Flight Services Demonstration", description: "Pending coordinated demonstration with Flight Services personnel.", status: "Pending" },
+    { title: "Production Authorization", description: "Pending transition from LAB validation to production approval.", status: "Pending" },
   ],
   futureReports: [
-    { title: "Validation Report 1", description: "Reserved for the next documented validation cycle." },
-    { title: "Validation Report 2", description: "Reserved for expanded operational evidence." },
-    { title: "Validation Report 3", description: "Reserved for future production-readiness reporting." },
+    { label: "Validation Report 1", title: "Flight Service Integration Validation v1.0", description: "Initial engineering validation covering filing, lifecycle management, webhooks, provider synchronization, and regression testing.", button: "Current Report" },
+    { label: "Validation Report 2", title: "Flight Services Demonstration Validation", description: "Reserved for documenting Flight Services demonstration scenarios, reviewer feedback, and validation outcomes.", button: "Coming After Demo" },
+    { label: "Validation Report 3", title: "Production Readiness Validation", description: "Reserved for documenting production environment validation, operational readiness, and final deployment verification.", button: "Future" },
   ],
   footer: {
     title: "Ready Set Fly Engineering Validation",
@@ -174,6 +257,21 @@ export default function FlightServiceValidationPage() {
           </div>
         </div>
       </aside>
+
+      <Card className="overflow-hidden border-emerald-400/35 bg-[linear-gradient(135deg,rgba(12,43,38,.96),rgba(15,30,43,.98))] text-[#E8EDF4] shadow-[0_24px_65px_-42px_rgba(52,211,153,.75)]">
+        <CardHeader className="border-b border-emerald-300/15">
+          <CardTitle className="flex items-center gap-3 text-2xl text-white"><CheckCircle2 className="h-7 w-7 text-emerald-300" aria-hidden="true" />{report.overallValidation.title}</CardTitle>
+          <div className="text-xl font-bold text-emerald-200 sm:text-2xl">{report.overallValidation.headline}</div>
+        </CardHeader>
+        <CardContent className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-4">
+          {report.overallValidation.metrics.map((metric) => (
+            <div key={metric.label} className="rounded-xl border border-white/10 bg-black/15 p-4">
+              <div className="text-xs font-semibold uppercase tracking-[0.14em] text-[#9FB5C9]">{metric.label}</div>
+              <div className="mt-2 font-semibold leading-6 text-[#F4F8FC]">{metric.value}</div>
+            </div>
+          ))}
+        </CardContent>
+      </Card>
 
       <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5" aria-label="Report metadata">
         {report.metadata.map((item) => (
@@ -247,8 +345,8 @@ export default function FlightServiceValidationPage() {
         </ol>
       </section>
 
-      <section id="regression-fixes" className={sectionClass} aria-labelledby="regression-heading">
-        <h2 id="regression-heading" className={sectionHeadingClass}>{report.sections.regressionFixes}</h2>
+      <section id="engineering-changes" className={sectionClass} aria-labelledby="engineering-changes-heading">
+        <h2 id="engineering-changes-heading" className={sectionHeadingClass}>{report.sections.engineeringChanges}</h2>
         <ul className="grid gap-3 md:grid-cols-2">
           {report.verifiedFixes.map((fix) => (
             <li key={fix} className="flex gap-3 rounded-xl border border-emerald-400/20 bg-emerald-500/[0.06] p-4 text-sm text-[#DCE9E4]">
@@ -258,6 +356,29 @@ export default function FlightServiceValidationPage() {
         </ul>
       </section>
 
+      <section id="validation-methodology" className={sectionClass} aria-labelledby="methodology-heading">
+        <h2 id="methodology-heading" className={sectionHeadingClass}>{report.sections.validationMethodology}</h2>
+        <Card className="border-[#5d6f85]/25 bg-[#111923] text-[#E8EDF4]">
+          <CardContent className="space-y-6 p-6">
+            <p className="max-w-5xl text-sm leading-7 text-[#BFCBDC] sm:text-base">{report.methodology.description}</p>
+            <ol className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4" aria-label={report.sections.validationMethodology}>
+              {report.methodology.steps.map((step, index) => (
+                <li key={step} className="flex flex-col items-center gap-2 text-center">
+                  <div className="w-full rounded-lg border border-[#4e78a8]/35 bg-[#13243A] px-3 py-3 font-semibold text-[#EAF3FF]">{step}</div>
+                  {index < report.methodology.steps.length - 1 ? <ArrowDown className="h-4 w-4 text-[#79A9E5]" aria-hidden="true" /> : null}
+                </li>
+              ))}
+            </ol>
+            <div className="rounded-xl border border-[#4e78a8]/25 bg-[#0C151F] p-4">
+              <div className="font-semibold text-[#F0F5FB]">{report.methodology.verificationLabel}</div>
+              <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+                {report.methodology.verificationChannels.map((channel) => <li key={channel} className="flex items-center gap-2 text-sm text-[#BFD0E2]"><CheckCircle2 className="h-4 w-4 text-emerald-300" aria-hidden="true" />{channel}</li>)}
+              </ul>
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
       <section id="validation-evidence" className={sectionClass} aria-labelledby="evidence-heading">
         <h2 id="evidence-heading" className={sectionHeadingClass}>{report.sections.validationEvidence}</h2>
         <Accordion type="single" collapsible className="space-y-3">
@@ -265,7 +386,13 @@ export default function FlightServiceValidationPage() {
             <AccordionItem key={item.id} value={item.id} className="rounded-xl border border-[#5d6f85]/25 bg-[#111923] px-4">
               <AccordionTrigger className="text-left text-[#EEF4FB]">{item.title}</AccordionTrigger>
               <AccordionContent>
-                <pre className="overflow-x-auto rounded-lg border border-[#5d6f85]/20 bg-[#090E15] p-4 text-xs leading-6 text-[#AFC4DC]">{JSON.stringify(item.payload, null, 2)}</pre>
+                <div className="space-y-5 pb-2">
+                  <div><h3 className="font-semibold text-[#EAF2FC]">{report.evidenceLabels.objective}</h3><p className="mt-2 text-sm leading-6 text-[#B8C7D8]">{item.objective}</p></div>
+                  <div><h3 className="font-semibold text-[#EAF2FC]">{report.evidenceLabels.procedure}</h3><ol className="mt-2 list-decimal space-y-1 pl-5 text-sm leading-6 text-[#B8C7D8]">{item.procedure.map((step) => <li key={step}>{step}</li>)}</ol></div>
+                  <div><h3 className="font-semibold text-[#EAF2FC]">{report.evidenceLabels.expectedResult}</h3><ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-[#B8C7D8]">{item.expectedResult.map((result) => <li key={result}>{result}</li>)}</ul></div>
+                  <div><h3 className="font-semibold text-[#EAF2FC]">{report.evidenceLabels.providerEvidence}</h3><pre className="mt-2 overflow-x-auto rounded-lg border border-[#5d6f85]/20 bg-[#090E15] p-4 text-xs leading-6 text-[#AFC4DC]">{JSON.stringify(item.payload, null, 2)}</pre></div>
+                  <Button type="button" variant="secondary" disabled>{report.evidenceLabels.download} · {report.evidenceLabels.comingSoon}</Button>
+                </div>
               </AccordionContent>
             </AccordionItem>
           ))}
@@ -276,8 +403,8 @@ export default function FlightServiceValidationPage() {
         <h2 id="open-items-heading" className={sectionHeadingClass}>{report.sections.openItems}</h2>
         <ul className="space-y-3">
           {report.openItems.map((item) => (
-            <li key={item.item} className="flex flex-col justify-between gap-3 rounded-xl border border-[#5d6f85]/25 bg-[#111923] p-4 sm:flex-row sm:items-center">
-              <div className="flex gap-3 text-sm text-[#D2DDE9]">{item.status === "Pending" ? <Clock3 className="h-5 w-5 shrink-0 text-amber-300" /> : <CircleDashed className="h-5 w-5 shrink-0 text-slate-300" />}<span>{item.item}</span></div>
+            <li key={item.title} className="flex flex-col justify-between gap-3 rounded-xl border border-[#5d6f85]/25 bg-[#111923] p-4 sm:flex-row sm:items-center">
+              <div className="flex gap-3 text-sm text-[#D2DDE9]">{item.status === "Pending" ? <Clock3 className="h-5 w-5 shrink-0 text-amber-300" /> : <CircleDashed className="h-5 w-5 shrink-0 text-slate-300" />}<div><div className="font-semibold text-[#EEF4FB]">{item.title}</div><div className="mt-1 leading-6 text-[#AEBCCD]">{item.description}</div></div></div>
               <StatusBadge status={item.status} />
             </li>
           ))}
@@ -289,8 +416,8 @@ export default function FlightServiceValidationPage() {
         <div className="grid gap-4 md:grid-cols-3">
           {report.futureReports.map((item) => (
             <Card key={item.title} className="border-dashed border-[#5d6f85]/35 bg-[#111923] text-[#E8EDF4]">
-              <CardHeader><FileCheck2 className="h-5 w-5 text-[#87B9FF]" aria-hidden="true" /><CardTitle className="text-lg">{item.title}</CardTitle></CardHeader>
-              <CardContent className="text-sm leading-6 text-[#AEBCCD]">{item.description}</CardContent>
+              <CardHeader><div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#87B9FF]"><FileCheck2 className="h-5 w-5" aria-hidden="true" />{item.label}</div><CardTitle className="text-lg">{item.title}</CardTitle></CardHeader>
+              <CardContent className="flex h-full flex-col items-start justify-between gap-5 text-sm leading-6 text-[#AEBCCD]"><p>{item.description}</p><Button type="button" variant="secondary" disabled>{item.button}</Button></CardContent>
             </Card>
           ))}
         </div>

@@ -6,6 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { cn } from "@/lib/utils";
+import { useQuery } from "@tanstack/react-query";
+import { getQueryFn } from "@/lib/queryClient";
+import { ImportedValidationReportPage, ValidationReportImportControl } from "@/components/flight-service-validation/ImportedValidationReport";
 
 type ValidationStatus = "Passed" | "Pending" | "Not Yet Observed";
 
@@ -288,8 +291,16 @@ function SyntaxHighlightedJson({ value }: { value: Record<string, unknown> }) {
 const sectionClass = "scroll-mt-24 space-y-5";
 const sectionHeadingClass = "font-display text-2xl font-bold tracking-tight text-[#F4F7FB] sm:text-3xl";
 
-export default function FlightServiceValidationPage() {
+export default function FlightServiceValidationPage({ params }: { params?: { reportId?: string } }) {
   const report = flightServiceValidationReport;
+  const publishedReports = useQuery<{ reports: Array<{ reportId: string; isCurrent: boolean }> }>({
+    queryKey: ["/api/public/flight-service-validation/reports"],
+    queryFn: getQueryFn({ on401: "throw" }),
+  });
+  const hasImportedReport = params?.reportId
+    ? publishedReports.data?.reports.some((item) => item.reportId === params.reportId)
+    : publishedReports.data?.reports.some((item) => item.isCurrent);
+  if (hasImportedReport) return <ImportedValidationReportPage reportId={params?.reportId} />;
   return (
     <PageShell
       kicker={report.banner.label}
@@ -299,6 +310,7 @@ export default function FlightServiceValidationPage() {
       canopyClassName="border-b border-[#5d6f85]/25 bg-[radial-gradient(circle_at_top_right,rgba(43,105,178,.24),transparent_45%),linear-gradient(180deg,#101923,#0b1119)]"
       contentClassName="max-w-7xl space-y-14"
     >
+      <ValidationReportImportControl />
       <aside className="rounded-2xl border border-[#4e78a8]/35 bg-[#102033]/70 p-5 shadow-[0_18px_45px_-34px_rgba(44,116,198,.9)]" aria-label="Report notice">
         <div className="flex gap-3">
           <ShieldCheck className="mt-0.5 h-6 w-6 shrink-0 text-[#87b9ff]" aria-hidden="true" />

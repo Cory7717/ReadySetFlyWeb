@@ -327,6 +327,7 @@ function Router() {
       <Route path="/verify-email" component={VerifyEmail} />
       <Route path="/faq" component={FaqPage} />
       <Route path="/flight-service-validation" component={FlightServiceValidationPage} />
+      <Route path="/flight-service-validation/reports/:reportId" component={FlightServiceValidationPage} />
       <Route path="/aviation-briefings" component={AviationBriefingsPage} />
       <Route
         path="/aviation-briefings/contribute"

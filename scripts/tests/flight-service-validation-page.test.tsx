@@ -5,9 +5,11 @@ import { flightServiceValidationReport } from "../../client/src/pages/flight-ser
 
 const pageSource = readFileSync("client/src/pages/flight-service-validation.tsx", "utf8");
 const appSource = readFileSync("client/src/App.tsx", "utf8");
+const importedReportSource = readFileSync("client/src/components/flight-service-validation/ImportedValidationReport.tsx", "utf8");
 
 test("Flight Service Validation is registered as an unconditional public route", () => {
   assert.match(appSource, /<Route path="\/flight-service-validation" component=\{FlightServiceValidationPage\} \/>/);
+  assert.match(appSource, /<Route path="\/flight-service-validation\/reports\/:reportId" component=\{FlightServiceValidationPage\} \/>/);
   assert.doesNotMatch(appSource, /path="\/flight-service-validation"[\s\S]{0,160}(RequireAuth|isAuthenticated\s*\?)/);
 });
 
@@ -101,9 +103,10 @@ test("validation footer returns visitors to the public home page", () => {
   assert.ok(pageSource.includes("Return to Ready Set Fly"));
 });
 
-test("static validation page performs no authentication, network, or provider operations", () => {
-  assert.doesNotMatch(pageSource, /useAuth|RequireAuth|isAuthenticated|useQuery|apiRequest|fetch\s*\(|\/api\//);
-  assert.doesNotMatch(pageSource, /syncLeidos|filing-sync|filing-action|webhooks\/flight-service/);
+test("validation report management remains admin-only without provider operations", () => {
+  assert.match(importedReportSource, /if \(!user\?\.isAdmin && !user\?\.isSuperAdmin\) return null/);
+  assert.match(importedReportSource, /accept="application\/json,.json"/);
+  assert.doesNotMatch(`${pageSource}\n${importedReportSource}`, /syncLeidos|filing-sync|filing-action|webhooks\/flight-service|fetchLeidos/);
 });
 
 test("public validation content contains no operational identifiers or personal data", () => {

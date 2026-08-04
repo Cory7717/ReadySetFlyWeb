@@ -260,6 +260,7 @@ import { registerCourtyardSalesIntelligenceRoutes } from "./routes/courtyardSale
 import { registerComptrollerRoutes } from "./routes/comptroller";
 import { registerVehicleListingRoutes } from "./routes/vehicleListings";
 import { registerAviationBriefingRoutes } from "./routes/aviationBriefings";
+import { registerFlightServiceValidationReportRoutes } from "./routes/flightServiceValidationReports";
 import { registerAviationBriefingSubmissionRoutes } from "./routes/aviationBriefingSubmissions";
 import { registerAviationBriefingEngagementRoutes } from "./routes/aviationBriefingEngagement";
 import { registerAviationBriefingPhotoSubmissionRoutes } from "./routes/aviationBriefingPhotoSubmissions";
@@ -6908,6 +6909,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerAviationBriefingPhotoSubmissionRoutes(app);
   registerAviationBriefingSubscriptionRoutes(app);
   registerAviationBriefingRoutes(app);
+  registerFlightServiceValidationReportRoutes(app);
   registerAviationBriefingSubmissionRoutes(app);
   app.use("/api/fuel-prices", fuelPricesRouter);
   app.use("/api/ai-tools", aiToolsRouter);

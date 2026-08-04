@@ -5495,6 +5495,23 @@ export const aircraftProfiles = pgTable(
   ],
 );
 
+export const flightServiceValidationReports = pgTable(
+  "flight_service_validation_reports",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    reportId: varchar("report_id", { length: 160 }).notNull(),
+    reportJson: jsonb("report_json").$type<Record<string, unknown>>().notNull(),
+    isCurrent: boolean("is_current").notNull().default(false),
+    publishedByUserId: varchar("published_by_user_id").references(() => users.id, { onDelete: "set null" }),
+    publishedAt: timestamp("published_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("idx_flight_service_validation_reports_report_id").on(table.reportId),
+    index("idx_flight_service_validation_reports_current").on(table.isCurrent, table.publishedAt),
+  ],
+);
+
 export const aviationBriefings = pgTable(
   "aviation_briefings",
   {

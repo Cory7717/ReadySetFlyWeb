@@ -103,6 +103,8 @@ test("import UI previews before publishing and keeps evidence collapsed", () => 
   assert.match(source, /function TestCaseWorkspace/);
   assert.match(source, /Selected test case/);
   assert.match(source, /testCases\.length > 0 \? testCases : results\.map/);
+  assert.match(source, /testCases=\{report\.testCases \?\? \[\]\}/);
+  assert.match(source, /results=\{report\.validationResults \?\? \[\]\}/);
   assert.match(source, /Linked Evidence/);
   assert.match(source, /Download Sanitized JSON/);
 });

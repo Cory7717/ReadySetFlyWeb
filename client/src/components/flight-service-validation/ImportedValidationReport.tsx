@@ -101,7 +101,7 @@ export function ImportedValidationReportPage({ reportId }: { reportId?: string }
     <ReportSection title="Executive Summary"><ReportValue value={report.executiveSummary} /></ReportSection>
     <ReportSection title="Test Scenario"><ScenarioGrid value={report.testScenario} /></ReportSection>
     <ReportSection title="Lifecycle Timeline"><LifecycleTimeline value={report.lifecycleTimeline} /></ReportSection>
-    <ReportSection title="Test Cases"><TestCaseWorkspace testCases={report.testCases} results={report.validationResults} evidence={report.evidence} /></ReportSection>
+    <ReportSection title="Test Cases"><TestCaseWorkspace testCases={report.testCases ?? []} results={report.validationResults ?? []} evidence={report.evidence ?? []} /></ReportSection>
     <ReportSection title="Engineering Observations"><ObservationList value={report.engineeringObservations} /></ReportSection>
     <ReportSection title="Open Items"><OpenItemCards value={report.openItems} /></ReportSection>
     <ReportSection title="Validation Conclusion"><Conclusion value={report.conclusion} /></ReportSection>

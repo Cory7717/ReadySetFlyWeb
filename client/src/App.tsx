@@ -121,6 +121,7 @@ import IncidentReportPage from "@/pages/incident-report";
 import IncidentReportSharePage from "@/pages/incident-report-share";
 import VwBeetlePage from "@/pages/vw-beetle";
 import AviationBriefingsPage from "@/pages/aviation-briefings";
+import FlightServiceValidationPage from "@/pages/flight-service-validation";
 import AviationBriefingDetailPage from "@/pages/aviation-briefing-detail";
 import AdminAviationBriefingsPage from "@/pages/admin-aviation-briefings";
 import AviationBriefingSubmitPage from "@/pages/aviation-briefing-submit";
@@ -325,6 +326,7 @@ function Router() {
       <Route path="/abs/redeem" component={AbsRedeem} />
       <Route path="/verify-email" component={VerifyEmail} />
       <Route path="/faq" component={FaqPage} />
+      <Route path="/flight-service-validation" component={FlightServiceValidationPage} />
       <Route path="/aviation-briefings" component={AviationBriefingsPage} />
       <Route
         path="/aviation-briefings/contribute"

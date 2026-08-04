@@ -42,14 +42,28 @@ type FlightServiceValidationReport = {
   lifecycle: string[];
   verifiedFixes: string[];
   methodology: { description: string; steps: string[]; verificationLabel: string; verificationChannels: string[] };
-  evidenceLabels: { objective: string; procedure: string; expectedResult: string; providerEvidence: string; download: string; comingSoon: string };
+  evidenceLabels: {
+    validationSummary: string;
+    purpose: string;
+    result: string;
+    environment: string;
+    providerResponse: string;
+    lifecycle: string;
+    expand: string;
+    rawResponse: string;
+    download: string;
+    comingSoon: string;
+  };
   evidence: Array<{
     id: string;
     title: string;
-    objective: string;
-    procedure: string[];
-    expectedResult: string[];
-    payload: Record<string, unknown>;
+    purpose: string;
+    expectedLifecycle: string;
+    result: "PASS";
+    environment: string;
+    httpStatus: string;
+    summary: string;
+    json: Record<string, unknown>;
   }>;
   openItems: Array<{ title: string; description: string; status: ValidationStatus }>;
   futureReports: Array<{ label: string; title: string; description: string; button: string }>;
@@ -158,10 +172,14 @@ export const flightServiceValidationReport = {
     verificationChannels: ["RSF user interface", "Direct provider retrieval through Postman"],
   },
   evidenceLabels: {
-    objective: "Objective",
-    procedure: "Procedure",
-    expectedResult: "Expected Result",
-    providerEvidence: "Provider Evidence",
+    validationSummary: "Validation Summary",
+    purpose: "Purpose",
+    result: "Result",
+    environment: "Environment",
+    providerResponse: "Provider Response",
+    lifecycle: "Lifecycle",
+    expand: "Expand Raw Provider Response",
+    rawResponse: "Sanitized Postman Response",
     download: "Download JSON",
     comingSoon: "Coming Soon",
   },
@@ -169,42 +187,57 @@ export const flightServiceValidationReport = {
     {
       id: "retrieve-filing",
       title: "Retrieve After Filing",
-      objective: "Verify successful filing and provider acceptance.",
-      procedure: ["File a flight plan.", "Retrieve the provider response through Postman.", "Compare the sanitized provider response with the submitted plan."],
-      expectedResult: ["Successful return status", "Current lifecycle state is PROPOSED", "Provider revision is present"],
-      payload: { operation: "retrieve", lifecycle: "PROPOSED", result: "sanitized example" },
+      purpose: "Verify successful provider filing.",
+      expectedLifecycle: "PROPOSED",
+      result: "PASS",
+      environment: "Flight Services LAB (Elab2)",
+      httpStatus: "200 OK",
+      summary: "Provider accepted the filing and returned the expected proposed lifecycle state.",
+      json: { returnStatus: true, operation: "retrieve", currentState: "PROPOSED", versionStamp: "sanitized" },
     },
     {
       id: "retrieve-amendment",
       title: "Retrieve After Amendment",
-      objective: "Verify that an accepted amendment is reflected in the provider record.",
-      procedure: ["Submit an amendment from RSF.", "Retrieve the updated provider response through Postman.", "Compare the amended fields with expected values."],
-      expectedResult: ["Successful return status", "Current lifecycle state remains PROPOSED", "Amended fields are reflected"],
-      payload: { operation: "retrieve", lifecycle: "PROPOSED", change: "sanitized amendment example" },
+      purpose: "Verify amendments are accepted.",
+      expectedLifecycle: "PROPOSED",
+      result: "PASS",
+      environment: "Flight Services LAB (Elab2)",
+      httpStatus: "200 OK",
+      summary: "The amended provider record retained the expected proposed lifecycle and reflected the sanitized change.",
+      json: { returnStatus: true, operation: "retrieve", currentState: "PROPOSED", amendment: "sanitized", versionStamp: "sanitized" },
     },
     {
       id: "retrieve-activation",
       title: "Retrieve After Activation",
-      objective: "Verify provider lifecycle progression after activation.",
-      procedure: ["Activate an eligible plan.", "Retrieve the provider response through Postman.", "Compare lifecycle data with the expected active state."],
-      expectedResult: ["Successful return status", "Current lifecycle state is ACTIVE", "Provider data remains internally consistent"],
-      payload: { operation: "retrieve", lifecycle: "ACTIVE", result: "sanitized example" },
+      purpose: "Verify successful activation.",
+      expectedLifecycle: "ACTIVE",
+      result: "PASS",
+      environment: "Flight Services LAB (Elab2)",
+      httpStatus: "200 OK",
+      summary: "Provider retrieval confirmed that the eligible flight plan progressed to the active lifecycle.",
+      json: { returnStatus: true, operation: "retrieve", currentState: "ACTIVE", versionStamp: "sanitized" },
     },
     {
       id: "retrieve-closure",
       title: "Retrieve After Closure",
-      objective: "Verify provider confirmation of the closed lifecycle state.",
-      procedure: ["Close an eligible active plan.", "Retrieve the provider response through Postman.", "Confirm the terminal lifecycle state."],
-      expectedResult: ["Successful return status", "Current lifecycle state is CLOSED", "No additional action remains pending"],
-      payload: { operation: "retrieve", lifecycle: "CLOSED", result: "sanitized example" },
+      purpose: "Verify successful closure.",
+      expectedLifecycle: "CLOSED",
+      result: "PASS",
+      environment: "Flight Services LAB (Elab2)",
+      httpStatus: "200 OK",
+      summary: "Provider retrieval confirmed the terminal closed lifecycle with no additional action pending.",
+      json: { returnStatus: true, operation: "retrieve", currentState: "CLOSED", versionStamp: "sanitized" },
     },
     {
       id: "webhook-lifecycle",
       title: "Webhook Lifecycle Response",
-      objective: "Verify that an authenticated provider event triggers targeted lifecycle reconciliation.",
-      procedure: ["Receive a sanitized lifecycle event.", "Retrieve only the affected provider record.", "Compare the persisted lifecycle with the provider response."],
-      expectedResult: ["Event is authenticated", "Only the affected record is retrieved", "Authoritative lifecycle data is persisted"],
-      payload: { event: "lifecycle update", lifecycle: "ACTIVE", processing: "authenticated and sanitized" },
+      purpose: "Verify webhook-driven lifecycle synchronization.",
+      expectedLifecycle: "Provider lifecycle reflected in RSF",
+      result: "PASS",
+      environment: "Flight Services LAB (Elab2)",
+      httpStatus: "200 OK",
+      summary: "Provider webhook received; lifecycle updated; notification generated.",
+      json: { returnStatus: true, event: "lifecycle update", processing: "authenticated and sanitized", notification: "generated" },
     },
   ],
   openItems: [
@@ -232,6 +265,24 @@ const statusStyles: Record<ValidationStatus, string> = {
 
 function StatusBadge({ status }: { status: ValidationStatus }) {
   return <Badge variant="outline" className={cn("whitespace-nowrap", statusStyles[status])}>{status}</Badge>;
+}
+
+function SyntaxHighlightedJson({ value }: { value: Record<string, unknown> }) {
+  const tokens = JSON.stringify(value, null, 2).split(/("(?:\\.|[^"\\])*"(?=\s*:)|"(?:\\.|[^"\\])*"|\b(?:true|false|null)\b|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?)/g);
+  return (
+    <code>
+      {tokens.map((token, index) => {
+        const className = /^".*"$/.test(token)
+          ? (tokens[index + 1]?.trimStart().startsWith(":") ? "text-sky-300" : "text-emerald-300")
+          : /^(true|false|null)$/.test(token)
+            ? "text-amber-300"
+            : /^-?\d/.test(token)
+              ? "text-violet-300"
+              : "text-[#AFC4DC]";
+        return <span key={`${index}-${token}`} className={className}>{token}</span>;
+      })}
+    </code>
+  );
 }
 
 const sectionClass = "scroll-mt-24 space-y-5";
@@ -383,15 +434,31 @@ export default function FlightServiceValidationPage() {
         <h2 id="evidence-heading" className={sectionHeadingClass}>{report.sections.validationEvidence}</h2>
         <Accordion type="single" collapsible className="space-y-3">
           {report.evidence.map((item) => (
-            <AccordionItem key={item.id} value={item.id} className="rounded-xl border border-[#5d6f85]/25 bg-[#111923] px-4">
-              <AccordionTrigger className="text-left text-[#EEF4FB]">{item.title}</AccordionTrigger>
+            <AccordionItem key={item.id} value={item.id} className="overflow-hidden rounded-xl border border-[#5d6f85]/25 bg-[#111923] px-5">
+              <div className="py-5">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <h3 className="text-lg font-semibold text-[#EEF4FB]">{item.title}</h3>
+                  <Badge variant="outline" className="border-emerald-400/45 bg-emerald-500/10 text-emerald-200">{item.result}</Badge>
+                </div>
+                <div className="mt-4 text-xs font-semibold uppercase tracking-[0.14em] text-[#87B9FF]">{report.evidenceLabels.validationSummary}</div>
+                <p className="mt-2 text-sm leading-6 text-[#B8C7D8]">{item.summary}</p>
+                <dl className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                  <div><dt className="text-xs font-semibold text-[#8EA3BC]">{report.evidenceLabels.purpose}</dt><dd className="mt-1 text-sm leading-5 text-[#E7EEF7]">{item.purpose}</dd></div>
+                  <div><dt className="text-xs font-semibold text-[#8EA3BC]">{report.evidenceLabels.result}</dt><dd className="mt-1 text-sm font-semibold text-emerald-300">{item.result}</dd></div>
+                  <div><dt className="text-xs font-semibold text-[#8EA3BC]">{report.evidenceLabels.environment}</dt><dd className="mt-1 text-sm text-[#E7EEF7]">{item.environment}</dd></div>
+                  <div><dt className="text-xs font-semibold text-[#8EA3BC]">{report.evidenceLabels.providerResponse}</dt><dd className="mt-1 text-sm text-[#E7EEF7]">{item.httpStatus}</dd></div>
+                  <div><dt className="text-xs font-semibold text-[#8EA3BC]">{report.evidenceLabels.lifecycle}</dt><dd className="mt-1 text-sm font-semibold text-[#E7EEF7]">{item.expectedLifecycle}</dd></div>
+                </dl>
+              </div>
+              <AccordionTrigger className="border-t border-[#5d6f85]/20 py-4 text-left text-[#9CC7FF] hover:no-underline">{report.evidenceLabels.expand}</AccordionTrigger>
               <AccordionContent>
-                <div className="space-y-5 pb-2">
-                  <div><h3 className="font-semibold text-[#EAF2FC]">{report.evidenceLabels.objective}</h3><p className="mt-2 text-sm leading-6 text-[#B8C7D8]">{item.objective}</p></div>
-                  <div><h3 className="font-semibold text-[#EAF2FC]">{report.evidenceLabels.procedure}</h3><ol className="mt-2 list-decimal space-y-1 pl-5 text-sm leading-6 text-[#B8C7D8]">{item.procedure.map((step) => <li key={step}>{step}</li>)}</ol></div>
-                  <div><h3 className="font-semibold text-[#EAF2FC]">{report.evidenceLabels.expectedResult}</h3><ul className="mt-2 list-disc space-y-1 pl-5 text-sm leading-6 text-[#B8C7D8]">{item.expectedResult.map((result) => <li key={result}>{result}</li>)}</ul></div>
-                  <div><h3 className="font-semibold text-[#EAF2FC]">{report.evidenceLabels.providerEvidence}</h3><pre className="mt-2 overflow-x-auto rounded-lg border border-[#5d6f85]/20 bg-[#090E15] p-4 text-xs leading-6 text-[#AFC4DC]">{JSON.stringify(item.payload, null, 2)}</pre></div>
-                  <Button type="button" variant="secondary" disabled>{report.evidenceLabels.download} · {report.evidenceLabels.comingSoon}</Button>
+                <div className="space-y-4 pb-5 pt-2">
+                  <h4 className="font-semibold text-[#EAF2FC]">{report.evidenceLabels.rawResponse}</h4>
+                  <pre className="overflow-x-auto rounded-lg border border-[#5d6f85]/20 bg-[#090E15] p-4 text-xs leading-6"><SyntaxHighlightedJson value={item.json} /></pre>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Button type="button" variant="secondary" disabled>{report.evidenceLabels.download}</Button>
+                    <Badge variant="outline" className="border-slate-400/35 text-slate-300">{report.evidenceLabels.comingSoon}</Badge>
+                  </div>
                 </div>
               </AccordionContent>
             </AccordionItem>

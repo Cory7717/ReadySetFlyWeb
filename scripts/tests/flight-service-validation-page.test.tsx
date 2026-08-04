@@ -40,21 +40,30 @@ test("validation matrix renders all required tests and status badge variants", (
   }
 });
 
-test("sanitized evidence uses keyboard-accessible collapsible controls", () => {
+test("sanitized evidence presents summaries with keyboard-accessible raw-response controls", () => {
   assert.match(pageSource, /<Accordion type="single" collapsible/);
+  assert.doesNotMatch(pageSource, /<Accordion type="single"[^>]*defaultValue=/);
   assert.match(pageSource, /<AccordionItem/);
-  assert.match(pageSource, /<AccordionTrigger/);
-  assert.match(pageSource, /<AccordionContent>/);
+  assert.match(pageSource, /<AccordionTrigger[^>]*>\{report\.evidenceLabels\.expand\}<\/AccordionTrigger>/);
+  assert.match(pageSource, /<AccordionContent>[\s\S]*?<SyntaxHighlightedJson value=\{item\.json\} \/>[\s\S]*?<\/AccordionContent>/);
   for (const evidence of flightServiceValidationReport.evidence) {
     assert.ok(pageSource.includes(evidence.title));
-    assert.ok(evidence.objective.length > 0);
-    assert.ok(evidence.procedure.length > 0);
-    assert.ok(evidence.expectedResult.length > 0);
+    assert.ok(evidence.purpose.length > 0);
+    assert.ok(evidence.expectedLifecycle.length > 0);
+    assert.equal(evidence.result, "PASS");
+    assert.equal(evidence.environment, "Flight Services LAB (Elab2)");
+    assert.equal(evidence.httpStatus, "200 OK");
+    assert.ok(evidence.summary.length > 0);
+    assert.ok(Object.keys(evidence.json).length > 0);
   }
   for (const label of Object.values(flightServiceValidationReport.evidenceLabels)) {
     assert.ok(pageSource.includes(label), `Missing evidence label: ${label}`);
   }
-  assert.match(pageSource, /<Button type="button" variant="secondary" disabled>/);
+  assert.equal(flightServiceValidationReport.evidenceLabels.validationSummary, "Validation Summary");
+  assert.equal(flightServiceValidationReport.evidenceLabels.expand, "Expand Raw Provider Response");
+  assert.equal(flightServiceValidationReport.evidenceLabels.rawResponse, "Sanitized Postman Response");
+  assert.match(pageSource, /<Button type="button" variant="secondary" disabled>\{report\.evidenceLabels\.download\}<\/Button>/);
+  assert.match(pageSource, /<Badge[^>]*>\{report\.evidenceLabels\.comingSoon\}<\/Badge>/);
 });
 
 test("validation methodology documents the dual-channel verification workflow", () => {

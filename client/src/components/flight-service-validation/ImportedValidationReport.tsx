@@ -101,8 +101,7 @@ export function ImportedValidationReportPage({ reportId }: { reportId?: string }
     <ReportSection title="Executive Summary"><ReportValue value={report.executiveSummary} /></ReportSection>
     <ReportSection title="Test Scenario"><ScenarioGrid value={report.testScenario} /></ReportSection>
     <ReportSection title="Lifecycle Timeline"><LifecycleTimeline value={report.lifecycleTimeline} /></ReportSection>
-    <ReportSection title="Validation Results"><ValidationResults value={report.validationResults} /></ReportSection>
-    <ReportSection title="Validation Evidence"><EvidencePanels evidence={report.evidence} results={report.validationResults} /></ReportSection>
+    <ReportSection title="Test Cases"><TestCaseWorkspace testCases={report.testCases} results={report.validationResults} evidence={report.evidence} /></ReportSection>
     <ReportSection title="Engineering Observations"><ObservationList value={report.engineeringObservations} /></ReportSection>
     <ReportSection title="Open Items"><OpenItemCards value={report.openItems} /></ReportSection>
     <ReportSection title="Validation Conclusion"><Conclusion value={report.conclusion} /></ReportSection>
@@ -122,8 +121,34 @@ function LifecycleTimeline({ value }: { value: Array<string | Record<string, unk
   return <ol className="grid gap-3 md:grid-cols-5">{value.map((item, index) => { const step = typeof item === "string" ? { stage: item } : item; return <li key={index} className="relative rounded-xl border border-sky-400/25 bg-[#102033] p-4"><div className="text-xs text-[#87B9FF]">STEP {text(step.sequence ?? index + 1)}</div><div className="mt-2 font-bold">{text(step.stage)}</div><div className="mt-3 text-sm text-[#B8C7D8]">Provider state: <strong className="text-white">{text(step.providerState)}</strong></div><Badge variant="outline" className="mt-3 border-emerald-400/40 text-emerald-200">{text(step.status ?? "PASS")}</Badge></li>; })}</ol>;
 }
 
-function ValidationResults({ value }: { value: Array<Record<string, unknown>> }) {
-  return <div className="space-y-4">{value.map((item, index) => <article key={index} className="rounded-xl border border-[#5d6f85]/25 bg-[#0C151F] p-5"><div className="flex flex-wrap justify-between gap-3"><div><h3 className="font-semibold text-white">{text(evidenceValue(item, "name", "title", "test"))}</h3><p className="mt-2 text-sm leading-6 text-[#B8C7D8]">{text(item.objective)}</p></div><Badge variant="outline" className="border-emerald-400/40 text-emerald-200">{text(evidenceValue(item, "status", "result"))}</Badge></div><div className="mt-4 grid gap-3 md:grid-cols-2"><Comparison title="Expected" value={item.expected} /><Comparison title="Actual" value={item.actual} /></div></article>)}</div>;
+function TestCaseWorkspace({ testCases, results, evidence }: { testCases: Array<Record<string, unknown>>; results: Array<Record<string, unknown>>; evidence: Array<Record<string, unknown>> }) {
+  const cases: Array<Record<string, unknown>> = testCases.length > 0 ? testCases : results.map((result): Record<string, unknown> => ({
+    ...result,
+    testCaseId: result.testCaseId ?? result.id,
+    title: result.title ?? result.name ?? result.test,
+    purpose: result.purpose ?? result.objective,
+    evidenceRefs: result.evidenceRefs ?? (result.evidenceRef ? [result.evidenceRef] : []),
+  }));
+  const [selectedId, setSelectedId] = useState(() => text(evidenceValue(cases[0] ?? {}, "testCaseId", "id")));
+  const selected = cases.find((item) => text(evidenceValue(item, "testCaseId", "id")) === selectedId) ?? cases[0];
+  if (!selected) return <p className="text-sm text-[#B8C7D8]">No test cases have been published in this report.</p>;
+  const refs = Array.isArray(selected.evidenceRefs) ? selected.evidenceRefs.map(String) : selected.evidenceRef ? [String(selected.evidenceRef)] : [];
+  const linkedEvidence = evidence.filter((item) => refs.includes(String(item.id)));
+  const caseTimeline = Array.isArray(selected.lifecycleTimeline) ? selected.lifecycleTimeline as Array<string | Record<string, unknown>> : [];
+  const category = evidenceValue(selected, "category", "testCategory");
+  return <div className="space-y-5">
+    <div className="flex flex-col justify-between gap-4 rounded-xl border border-[#5d6f85]/25 bg-[#0C151F] p-4 md:flex-row md:items-end">
+      <div><div className="text-xs font-semibold uppercase tracking-[0.14em] text-[#87B9FF]">Test Case Workspace</div><p className="mt-2 text-sm text-[#AEBCCD]">Select one case to review its expected results, actual results, lifecycle, and linked evidence.</p></div>
+      <label className="block min-w-0 md:w-[360px]"><span className="mb-2 block text-xs font-semibold text-[#B8C7D8]">Selected test case</span><select value={selectedId} onChange={(event) => setSelectedId(event.target.value)} className="h-11 w-full rounded-md border border-[#5d6f85]/45 bg-[#111923] px-3 text-sm text-white focus:border-sky-400 focus:outline-none focus:ring-2 focus:ring-sky-400/25">{cases.map((item, index) => { const id = text(evidenceValue(item, "testCaseId", "id") ?? index); return <option key={id} value={id}>{text(evidenceValue(item, "title", "name", "test"))}</option>; })}</select></label>
+    </div>
+    <article className="rounded-xl border border-[#5d6f85]/25 bg-[#0C151F] p-5">
+      <div className="flex flex-wrap justify-between gap-3"><div><div className="flex flex-wrap items-center gap-2">{category ? <Badge variant="outline" className="border-sky-400/35 text-sky-200">{text(category)}</Badge> : null}<span className="text-xs text-[#8EA3BC]">Case {cases.findIndex((item) => item === selected) + 1} of {cases.length}</span></div><h3 className="mt-3 text-xl font-semibold text-white">{text(evidenceValue(selected, "title", "name", "test"))}</h3><p className="mt-2 max-w-4xl text-sm leading-6 text-[#B8C7D8]">{text(evidenceValue(selected, "purpose", "objective", "summary"))}</p></div><Badge variant="outline" className="h-fit border-emerald-400/40 text-emerald-200">{text(evidenceValue(selected, "status", "result"))}</Badge></div>
+      {selected.scenario != null ? <div className="mt-5"><div className="mb-2 text-xs font-semibold uppercase tracking-wide text-[#8EA3BC]">Scenario</div><ScenarioGrid value={selected.scenario} /></div> : null}
+      <div className="mt-5 grid gap-3 md:grid-cols-2"><Comparison title="Expected" value={selected.expected} /><Comparison title="Actual" value={selected.actual} /></div>
+      {caseTimeline.length > 0 ? <div className="mt-5"><div className="mb-3 text-xs font-semibold uppercase tracking-wide text-[#8EA3BC]">Case Lifecycle</div><LifecycleTimeline value={caseTimeline} /></div> : null}
+      <div className="mt-5"><div className="mb-3 text-xs font-semibold uppercase tracking-wide text-[#8EA3BC]">Linked Evidence</div>{linkedEvidence.length > 0 ? <EvidencePanels evidence={linkedEvidence} results={[selected]} /> : <p className="rounded-lg border border-dashed border-[#5d6f85]/30 p-4 text-sm text-[#8FA3BA]">No evidence is linked to this test case.</p>}</div>
+    </article>
+  </div>;
 }
 
 function Comparison({ title, value }: { title: string; value: unknown }) { return <div className="rounded-lg border border-[#5d6f85]/20 p-4"><div className="text-xs font-semibold uppercase tracking-wide text-[#8EA3BC]">{title}</div>{value && typeof value === "object" && !Array.isArray(value) ? <dl className="mt-3 space-y-2">{Object.entries(value as Record<string, unknown>).map(([key, item]) => <div key={key} className="flex justify-between gap-3 text-sm"><dt className="text-[#AEBCCD]">{label(key)}</dt><dd className="text-right font-semibold text-[#EAF2FC]">{text(item)}</dd></div>)}</dl> : <div className="mt-2 text-sm">{text(value)}</div>}</div>; }

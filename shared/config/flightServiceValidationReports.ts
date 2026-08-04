@@ -15,6 +15,7 @@ export const flightServiceValidationReportImportSchema = z.object({
   testScenario: textOrRecord,
   lifecycleTimeline: z.array(z.union([z.string(), record])),
   validationResults: z.array(record),
+  testCases: z.array(record).optional().default([]),
   evidence: z.array(record),
   engineeringObservations: z.union([z.string(), z.array(z.string()), record]),
   openItems: z.array(z.union([z.string(), record])),

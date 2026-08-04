@@ -24,6 +24,14 @@ const validReport = {
 test("valid public report passes import validation", () => {
   const result = validatePublicValidationReport(validReport);
   assert.equal(result.ok, true);
+  if (result.ok) assert.deepEqual(result.report.testCases, []);
+});
+
+test("v1 reports may publish dedicated selectable test cases", () => {
+  const candidate = { ...validReport, testCases: [{ testCaseId: "zzzz-departure", title: "ZZZZ Departure", category: "ZZZZ Operations", status: "PASS", purpose: "Verify DEP generation.", expected: { otherInfo: "DEP/77TS" }, actual: { otherInfo: "DEP/77TS" }, evidenceRefs: ["retrieve-filed"] }] };
+  const result = validatePublicValidationReport(candidate);
+  assert.equal(result.ok, true);
+  if (result.ok) assert.equal(result.report.testCases[0]?.testCaseId, "zzzz-departure");
 });
 
 test("explicit redaction placeholders are accepted while raw identifiers remain blocked", () => {
@@ -92,6 +100,9 @@ test("import UI previews before publishing and keeps evidence collapsed", () => 
   assert.match(source, /evidenceValue\(item, "response", "events"/);
   assert.match(source, /function ScenarioGrid/);
   assert.match(source, /function LifecycleTimeline/);
-  assert.match(source, /function ValidationResults/);
+  assert.match(source, /function TestCaseWorkspace/);
+  assert.match(source, /Selected test case/);
+  assert.match(source, /testCases\.length > 0 \? testCases : results\.map/);
+  assert.match(source, /Linked Evidence/);
   assert.match(source, /Download Sanitized JSON/);
 });

@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Download, Upload } from "lucide-react";
+import { Link } from "wouter";
 import { PageShell } from "@/components/layout/PageShell";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
@@ -58,16 +59,19 @@ export function ValidationReportImportControl() {
     finally { setBusy(false); }
   }
 
-  async function publish(replace = false) {
+  async function publish() {
     if (!report) return;
     setBusy(true); setError("");
     try {
-      const response = await apiRequest("POST", "/api/admin/flight-service-validation/reports/publish", { report, replace });
+      const response = await apiRequest("POST", "/api/admin/flight-service-validation/reports/publish", { report });
       await response.json();
       setPreview(null); setReport(null); if (inputRef.current) inputRef.current.value = "";
       await queryClient.invalidateQueries({ queryKey: ["/api/public/flight-service-validation/reports"] });
     } catch (cause: any) {
-      if (cause?.status === 409 && window.confirm("This report ID already exists. Replace the published report?")) return publish(true);
+      if (cause?.status === 409) {
+        setError("That reportId is already published. Give this test a new reportId so the earlier report remains available.");
+        return;
+      }
       setError(cause instanceof Error ? cause.message : "Unable to publish report.");
     } finally { setBusy(false); }
   }
@@ -96,6 +100,7 @@ export function ImportedValidationReportPage({ reportId }: { reportId?: string }
   const metadata = report.metadata as Record<string, unknown>;
   return <PageShell kicker={selected.isCurrent ? "Current Published Report" : "Published Validation Report"} title={report.title} description={report.subtitle} className="bg-[#090e15] text-[#E8EDF4]" contentClassName="max-w-7xl space-y-12">
     <ValidationReportImportControl />
+    <PublishedReportSelector reports={listQuery.data?.reports ?? []} selectedReportId={selected.reportId} />
     <Card className="border-emerald-400/30 bg-[linear-gradient(135deg,rgba(12,43,38,.96),rgba(15,30,43,.98))] text-[#E8EDF4]"><CardContent className="flex flex-col justify-between gap-4 p-6 sm:flex-row sm:items-center"><div><div className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-300">Validation Outcome</div><div className="mt-2 text-3xl font-bold text-white">{text(metadata.overallStatus)}</div><div className="mt-2 text-sm text-[#B8C7D8]">{text(metadata.environment)} · {text(metadata.validationDate)} · Report {text(metadata.reportVersion)}</div></div><Badge variant="outline" className="border-emerald-400/45 bg-emerald-500/10 px-4 py-2 text-emerald-200">Sanitized Public Evidence</Badge></CardContent></Card>
     <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{Object.entries(metadata).filter(([key]) => !["overallStatus", "environment", "validationDate", "reportVersion"].includes(key)).map(([key, value]) => <div key={key} className="rounded-xl border border-[#5d6f85]/25 bg-[#111923] p-4"><dt className="text-xs uppercase tracking-wide text-[#8EA3BC]">{label(key)}</dt><dd className="mt-2 font-semibold">{text(value)}</dd></div>)}</dl>
     <ReportSection title="Executive Summary"><ReportValue value={report.executiveSummary} /></ReportSection>
@@ -107,6 +112,29 @@ export function ImportedValidationReportPage({ reportId }: { reportId?: string }
     <ReportSection title="Validation Conclusion"><Conclusion value={report.conclusion} /></ReportSection>
     <Button asChild variant="secondary"><a href={apiUrl(`/api/public/flight-service-validation/reports/${encodeURIComponent(report.reportId)}/download`)}><Download className="mr-2 h-4 w-4" />Download Sanitized JSON</a></Button>
   </PageShell>;
+}
+
+function PublishedReportSelector({ reports, selectedReportId }: { reports: Array<{ reportId: string; reportJson: FlightServiceValidationReportImport; isCurrent: boolean; publishedAt: string }>; selectedReportId: string }) {
+  return <Card className="border-sky-400/30 bg-[#102033] text-[#E8EDF4]">
+    <CardHeader>
+      <CardTitle>Published Tests</CardTitle>
+      <p className="text-sm text-[#B8C7D8]">Every published validation report remains available. Select a test to review its complete evidence.</p>
+    </CardHeader>
+    <CardContent className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {reports.map((item) => {
+        const itemMetadata = item.reportJson.metadata as Record<string, unknown>;
+        const active = item.reportId === selectedReportId;
+        return <Link key={item.reportId} href={`/flight-service-validation/reports/${encodeURIComponent(item.reportId)}`} className={`rounded-xl border p-4 transition-colors ${active ? "border-sky-300 bg-sky-400/15" : "border-[#5d6f85]/30 bg-[#0C151F] hover:border-sky-400/60"}`} aria-current={active ? "page" : undefined}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="font-semibold text-white">{item.reportJson.title}</div>
+            {item.isCurrent ? <Badge variant="outline" className="shrink-0 border-emerald-400/40 text-emerald-200">Latest</Badge> : null}
+          </div>
+          <div className="mt-2 text-sm text-[#AFC0D2]">{text(itemMetadata.validationDate)} <span aria-hidden="true">&middot;</span> {text(itemMetadata.environment)}</div>
+          <div className="mt-2 text-xs text-[#7F94AA]">Report ID: {item.reportId}</div>
+        </Link>;
+      })}
+    </CardContent>
+  </Card>;
 }
 
 function ReportSection({ title, children }: { title: string; children: React.ReactNode }) { return <section className="space-y-4"><h2 className="text-2xl font-bold">{title}</h2><Card className="border-[#5d6f85]/25 bg-[#111923] text-[#E8EDF4]"><CardContent className="p-6">{children}</CardContent></Card></section>; }

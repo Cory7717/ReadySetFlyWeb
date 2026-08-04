@@ -108,3 +108,14 @@ test("import UI previews before publishing and keeps evidence collapsed", () => 
   assert.match(source, /Linked Evidence/);
   assert.match(source, /Download Sanitized JSON/);
 });
+
+test("published validation reports remain individually accessible without replacement", () => {
+  const source = readFileSync("client/src/components/flight-service-validation/ImportedValidationReport.tsx", "utf8");
+  assert.match(source, /Published Tests/);
+  assert.match(source, /Every published validation report remains available/);
+  assert.match(source, /\/flight-service-validation\/reports\/\$\{encodeURIComponent\(item\.reportId\)\}/);
+  assert.match(source, /aria-current=\{active \? "page" : undefined\}/);
+  assert.match(source, /Give this test a new reportId so the earlier report remains available/);
+  assert.doesNotMatch(source, /publish\(true\)/);
+  assert.doesNotMatch(source, /window\.confirm\("This report ID already exists/);
+});

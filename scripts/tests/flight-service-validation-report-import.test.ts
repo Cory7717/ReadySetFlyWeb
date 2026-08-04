@@ -4,12 +4,12 @@ import { readFileSync } from "node:fs";
 import { validatePublicValidationReport } from "../../shared/config/flightServiceValidationReports";
 
 const validReport = {
-  schemaVersion: "1.0",
+  schemaVersion: "1.0.0",
   reportType: "rsf-flight-service-validation",
   reportId: "lab-validation-v1",
   title: "Flight Service Validation",
   subtitle: "Sanitized report",
-  visibility: "public",
+  visibility: "public-sanitized",
   metadata: { environment: "LAB / Elab2", validationDate: "August 4, 2026", overallStatus: "Passed" },
   executiveSummary: ["Validation completed."],
   testScenario: { title: "Lifecycle validation" },
@@ -24,6 +24,15 @@ const validReport = {
 test("valid public report passes import validation", () => {
   const result = validatePublicValidationReport(validReport);
   assert.equal(result.ok, true);
+});
+
+test("explicit redaction placeholders are accepted while raw identifiers remain blocked", () => {
+  const sanitized = structuredClone(validReport) as any;
+  sanitized.evidence[0].providerPlanId = "[REDACTED]";
+  sanitized.evidence[0].flightIdentifier = "PII restricted";
+  assert.equal(validatePublicValidationReport(sanitized).ok, true);
+  sanitized.evidence[0].providerPlanId = "raw-provider-123";
+  assert.equal(validatePublicValidationReport(sanitized).ok, false);
 });
 
 test("invalid report type, schema version, and missing fields are rejected", () => {
@@ -66,5 +75,10 @@ test("import UI previews before publishing and keeps evidence collapsed", () => 
   assert.match(source, /<Accordion type="single" collapsible/);
   assert.doesNotMatch(source, /<Accordion type="single"[^>]*defaultValue=/);
   assert.match(source, /Expand Raw Provider Response/);
+  assert.match(source, /Expand Log Evidence/);
+  assert.match(source, /evidenceValue\(item, "response", "events"/);
+  assert.match(source, /function ScenarioGrid/);
+  assert.match(source, /function LifecycleTimeline/);
+  assert.match(source, /function ValidationResults/);
   assert.match(source, /Download Sanitized JSON/);
 });

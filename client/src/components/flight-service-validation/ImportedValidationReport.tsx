@@ -24,6 +24,14 @@ function evidenceValue(item: Record<string, unknown>, ...keys: string[]) {
   return null;
 }
 
+function label(value: string) {
+  return value.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[_-]+/g, " ").replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function isRedacted(value: unknown) {
+  return typeof value === "string" && /^(?:\[REDACTED\]|\[REMOVED\]|PII restricted)$/i.test(value.trim());
+}
+
 export function ValidationReportImportControl() {
   const { user } = useAuth();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -88,18 +96,42 @@ export function ImportedValidationReportPage({ reportId }: { reportId?: string }
   const metadata = report.metadata as Record<string, unknown>;
   return <PageShell kicker={selected.isCurrent ? "Current Published Report" : "Published Validation Report"} title={report.title} description={report.subtitle} className="bg-[#090e15] text-[#E8EDF4]" contentClassName="max-w-7xl space-y-12">
     <ValidationReportImportControl />
-    <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{Object.entries(metadata).map(([label, value]) => <div key={label} className="rounded-xl border border-[#5d6f85]/25 bg-[#111923] p-4"><dt className="text-xs uppercase tracking-wide text-[#8EA3BC]">{label}</dt><dd className="mt-2 font-semibold">{text(value)}</dd></div>)}</dl>
+    <Card className="border-emerald-400/30 bg-[linear-gradient(135deg,rgba(12,43,38,.96),rgba(15,30,43,.98))] text-[#E8EDF4]"><CardContent className="flex flex-col justify-between gap-4 p-6 sm:flex-row sm:items-center"><div><div className="text-xs font-semibold uppercase tracking-[0.16em] text-emerald-300">Validation Outcome</div><div className="mt-2 text-3xl font-bold text-white">{text(metadata.overallStatus)}</div><div className="mt-2 text-sm text-[#B8C7D8]">{text(metadata.environment)} · {text(metadata.validationDate)} · Report {text(metadata.reportVersion)}</div></div><Badge variant="outline" className="border-emerald-400/45 bg-emerald-500/10 px-4 py-2 text-emerald-200">Sanitized Public Evidence</Badge></CardContent></Card>
+    <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{Object.entries(metadata).filter(([key]) => !["overallStatus", "environment", "validationDate", "reportVersion"].includes(key)).map(([key, value]) => <div key={key} className="rounded-xl border border-[#5d6f85]/25 bg-[#111923] p-4"><dt className="text-xs uppercase tracking-wide text-[#8EA3BC]">{label(key)}</dt><dd className="mt-2 font-semibold">{text(value)}</dd></div>)}</dl>
     <ReportSection title="Executive Summary"><ReportValue value={report.executiveSummary} /></ReportSection>
-    <ReportSection title="Test Scenario"><ReportValue value={report.testScenario} /></ReportSection>
-    <ReportSection title="Lifecycle Timeline"><div className="flex flex-wrap gap-2">{report.lifecycleTimeline.map((step, index) => <Badge key={index} variant="outline" className="border-sky-400/35 text-sky-200">{text(step)}</Badge>)}</div></ReportSection>
-    <ReportSection title="Validation Results"><div className="overflow-x-auto"><table className="w-full text-left text-sm"><tbody>{report.validationResults.map((result, index) => <tr key={index} className="border-b border-[#5d6f85]/20"><td className="py-3 font-semibold">{text(evidenceValue(result, "title", "test", "name"))}</td><td className="py-3">{text(evidenceValue(result, "result", "status", "summary"))}</td></tr>)}</tbody></table></div></ReportSection>
-    <ReportSection title="Validation Evidence"><Accordion type="single" collapsible className="space-y-3">{report.evidence.map((item, index) => { const raw = evidenceValue(item, "json", "providerResponse", "log", "evidence") ?? item; const isLog = typeof raw === "string"; return <AccordionItem key={index} value={`evidence-${index}`} className="rounded-xl border border-[#5d6f85]/25 px-4"><div className="py-4"><h3 className="font-semibold">{text(evidenceValue(item, "title", "name"))}</h3><p className="mt-2 text-sm text-[#B8C7D8]">{text(evidenceValue(item, "summary", "result"))}</p><div className="mt-2 flex gap-2 text-xs text-[#9FB5C9]"><span>{text(evidenceValue(item, "evidenceType", "type"))}</span><span>{text(evidenceValue(item, "httpStatus", "status"))}</span></div></div><AccordionTrigger>{isLog ? "Expand Log Evidence" : "Expand Raw Provider Response"}</AccordionTrigger><AccordionContent><pre className="overflow-x-auto rounded-lg bg-[#090E15] p-4 text-xs text-[#AFC4DC]">{isLog ? raw : JSON.stringify(raw, null, 2)}</pre></AccordionContent></AccordionItem>; })}</Accordion></ReportSection>
-    <ReportSection title="Engineering Observations"><ReportValue value={report.engineeringObservations} /></ReportSection>
-    <ReportSection title="Open Items"><ReportValue value={report.openItems} /></ReportSection>
-    <ReportSection title="Validation Conclusion"><ReportValue value={report.conclusion} /></ReportSection>
+    <ReportSection title="Test Scenario"><ScenarioGrid value={report.testScenario} /></ReportSection>
+    <ReportSection title="Lifecycle Timeline"><LifecycleTimeline value={report.lifecycleTimeline} /></ReportSection>
+    <ReportSection title="Validation Results"><ValidationResults value={report.validationResults} /></ReportSection>
+    <ReportSection title="Validation Evidence"><EvidencePanels evidence={report.evidence} results={report.validationResults} /></ReportSection>
+    <ReportSection title="Engineering Observations"><ObservationList value={report.engineeringObservations} /></ReportSection>
+    <ReportSection title="Open Items"><OpenItemCards value={report.openItems} /></ReportSection>
+    <ReportSection title="Validation Conclusion"><Conclusion value={report.conclusion} /></ReportSection>
     <Button asChild variant="secondary"><a href={apiUrl(`/api/public/flight-service-validation/reports/${encodeURIComponent(report.reportId)}/download`)}><Download className="mr-2 h-4 w-4" />Download Sanitized JSON</a></Button>
   </PageShell>;
 }
 
 function ReportSection({ title, children }: { title: string; children: React.ReactNode }) { return <section className="space-y-4"><h2 className="text-2xl font-bold">{title}</h2><Card className="border-[#5d6f85]/25 bg-[#111923] text-[#E8EDF4]"><CardContent className="p-6">{children}</CardContent></Card></section>; }
 function ReportValue({ value }: { value: unknown }) { return Array.isArray(value) ? <div className="space-y-3">{value.map((item, index) => <p key={index} className="leading-7 text-[#BFCBDC]">{text(item)}</p>)}</div> : <p className="whitespace-pre-wrap leading-7 text-[#BFCBDC]">{text(value)}</p>; }
+
+function ScenarioGrid({ value }: { value: unknown }) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return <ReportValue value={value} />;
+  return <dl className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{Object.entries(value as Record<string, unknown>).map(([key, item]) => <div key={key} className="rounded-lg border border-[#5d6f85]/20 bg-[#0C151F] p-3"><dt className="text-xs font-semibold text-[#8EA3BC]">{label(key)}</dt><dd className={isRedacted(item) ? "mt-1 text-sm italic text-[#91A2B5]" : "mt-1 text-sm font-semibold text-[#EEF4FB]"}>{isRedacted(item) ? "Redacted" : text(item)}</dd></div>)}</dl>;
+}
+
+function LifecycleTimeline({ value }: { value: Array<string | Record<string, unknown>> }) {
+  return <ol className="grid gap-3 md:grid-cols-5">{value.map((item, index) => { const step = typeof item === "string" ? { stage: item } : item; return <li key={index} className="relative rounded-xl border border-sky-400/25 bg-[#102033] p-4"><div className="text-xs text-[#87B9FF]">STEP {text(step.sequence ?? index + 1)}</div><div className="mt-2 font-bold">{text(step.stage)}</div><div className="mt-3 text-sm text-[#B8C7D8]">Provider state: <strong className="text-white">{text(step.providerState)}</strong></div><Badge variant="outline" className="mt-3 border-emerald-400/40 text-emerald-200">{text(step.status ?? "PASS")}</Badge></li>; })}</ol>;
+}
+
+function ValidationResults({ value }: { value: Array<Record<string, unknown>> }) {
+  return <div className="space-y-4">{value.map((item, index) => <article key={index} className="rounded-xl border border-[#5d6f85]/25 bg-[#0C151F] p-5"><div className="flex flex-wrap justify-between gap-3"><div><h3 className="font-semibold text-white">{text(evidenceValue(item, "name", "title", "test"))}</h3><p className="mt-2 text-sm leading-6 text-[#B8C7D8]">{text(item.objective)}</p></div><Badge variant="outline" className="border-emerald-400/40 text-emerald-200">{text(evidenceValue(item, "status", "result"))}</Badge></div><div className="mt-4 grid gap-3 md:grid-cols-2"><Comparison title="Expected" value={item.expected} /><Comparison title="Actual" value={item.actual} /></div></article>)}</div>;
+}
+
+function Comparison({ title, value }: { title: string; value: unknown }) { return <div className="rounded-lg border border-[#5d6f85]/20 p-4"><div className="text-xs font-semibold uppercase tracking-wide text-[#8EA3BC]">{title}</div>{value && typeof value === "object" && !Array.isArray(value) ? <dl className="mt-3 space-y-2">{Object.entries(value as Record<string, unknown>).map(([key, item]) => <div key={key} className="flex justify-between gap-3 text-sm"><dt className="text-[#AEBCCD]">{label(key)}</dt><dd className="text-right font-semibold text-[#EAF2FC]">{text(item)}</dd></div>)}</dl> : <div className="mt-2 text-sm">{text(value)}</div>}</div>; }
+
+function EvidencePanels({ evidence, results }: { evidence: Array<Record<string, unknown>>; results: Array<Record<string, unknown>> }) {
+  return <Accordion type="single" collapsible className="space-y-3">{evidence.map((item, index) => { const raw = evidenceValue(item, "response", "events", "json", "providerResponse", "log", "evidence") ?? item; const events = Array.isArray(item.events) ? item.events as Array<Record<string, unknown>> : null; const related = results.find((result) => result.evidenceRef === item.id); return <AccordionItem key={index} value={`evidence-${index}`} className="rounded-xl border border-[#5d6f85]/25 px-4"><div className="py-4"><div className="flex flex-wrap justify-between gap-2"><h3 className="font-semibold">{text(evidenceValue(item, "title", "name"))}</h3><Badge variant="outline" className="border-emerald-400/35 text-emerald-200">PASS</Badge></div><p className="mt-2 text-sm leading-6 text-[#B8C7D8]">{text(related?.objective ?? evidenceValue(item, "summary", "result"))}</p><div className="mt-3 flex flex-wrap gap-3 text-xs text-[#9FB5C9]"><span>{label(text(evidenceValue(item, "evidenceType", "type")))}</span>{item.httpStatus != null ? <span>HTTP {text(item.httpStatus)} OK</span> : null}</div></div><AccordionTrigger>{events ? "Expand Log Evidence" : "Expand Raw Provider Response"}</AccordionTrigger><AccordionContent>{events ? <ol className="space-y-3 rounded-lg bg-[#090E15] p-4">{events.map((event, eventIndex) => <li key={eventIndex} className="border-l-2 border-sky-400/40 pl-4"><div className="font-mono text-xs text-sky-300">{label(text(event.event))}</div><pre className="mt-2 overflow-x-auto text-xs leading-6 text-[#AFC4DC]">{JSON.stringify(event, null, 2)}</pre></li>)}</ol> : <pre className="overflow-x-auto rounded-lg bg-[#090E15] p-4 text-xs leading-6 text-[#AFC4DC]">{JSON.stringify(raw, null, 2)}</pre>}</AccordionContent></AccordionItem>; })}</Accordion>;
+}
+
+function ObservationList({ value }: { value: unknown }) { const values = Array.isArray(value) ? value : [value]; return <ul className="grid gap-3 md:grid-cols-2">{values.map((item, index) => <li key={index} className="flex gap-3 rounded-lg border border-emerald-400/15 bg-emerald-500/[0.04] p-4 text-sm leading-6 text-[#DCE9E4]"><span className="font-bold text-emerald-300">✓</span>{text(item)}</li>)}</ul>; }
+function OpenItemCards({ value }: { value: Array<string | Record<string, unknown>> }) { return <div className="grid gap-3 md:grid-cols-3">{value.map((item, index) => { const row = typeof item === "string" ? { name: item } : item; return <div key={index} className="rounded-xl border border-amber-400/20 bg-amber-500/[0.04] p-4"><div className="font-semibold">{text(row.name ?? row.title)}</div><Badge variant="outline" className="mt-3 border-amber-400/35 text-amber-200">{text(row.status)}</Badge><p className="mt-3 text-sm leading-6 text-[#B8C7D8]">{text(row.detail ?? row.description)}</p></div>; })}</div>; }
+function Conclusion({ value }: { value: Record<string, unknown> }) { return <div className="flex flex-col gap-4 sm:flex-row sm:items-start"><Badge variant="outline" className="border-emerald-400/40 text-emerald-200">{text(value.status)}</Badge><p className="text-lg leading-8 text-[#D8E3EE]">{text(value.statement ?? value.summary)}</p></div>; }

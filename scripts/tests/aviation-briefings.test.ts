@@ -385,6 +385,14 @@ test("photo submissions require a valid image, ownership, and versioned permissi
   assert.match(routes, /permissionAccepted:\s*z\.literal\("true"\)/);
   assert.match(routes, /detectPhoto\(req\.file\.buffer\)/);
   assert.match(routes, /uploadBuffer/);
+  assert.match(
+    routes,
+    /AVIATION_PHOTO_STORAGE_PREFIX\s*=\s*[\r\n\s]*"uploads\/aviation-briefings\/contributor-photos"/,
+  );
+  assert.match(
+    routes,
+    /uploadedKey\s*=\s*`\$\{AVIATION_PHOTO_STORAGE_PREFIX\}\/\$\{id\}\/\$\{storedFilename\}`/,
+  );
   assert.match(routes, /deleteObject\(uploadedKey\)/);
   assert.match(config, /photo_permission_v1/);
   assert.match(routes, /permissionText:\s*AVIATION_PHOTO_PERMISSION_TEXT/);

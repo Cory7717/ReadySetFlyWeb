@@ -19,6 +19,8 @@ import { storage } from "../storage";
 import { getUncachableResendClient } from "../resendClient";
 
 export const PHOTO_MAX_BYTES = 15 * 1024 * 1024;
+export const AVIATION_PHOTO_STORAGE_PREFIX =
+  "uploads/aviation-briefings/contributor-photos";
 const photoUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: PHOTO_MAX_BYTES, files: 1, fields: 30 },
@@ -222,7 +224,7 @@ export function registerAviationBriefingPhotoSubmissionRoutes(app: Express) {
             .json({ error: "Upload a JPG, PNG, or WebP image." });
         const id = crypto.randomUUID(),
           storedFilename = `${crypto.randomUUID()}.${detected.ext}`;
-        uploadedKey = `aviation-briefings/contributor-photos/${id}/${storedFilename}`;
+        uploadedKey = `${AVIATION_PHOTO_STORAGE_PREFIX}/${id}/${storedFilename}`;
         const s3 = new S3StorageService();
         await s3.uploadBuffer({
           key: uploadedKey,

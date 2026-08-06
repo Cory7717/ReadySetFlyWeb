@@ -16,6 +16,7 @@ type SeoMeta = {
   description: string;
   image: string;
   type?: "website" | "article" | "video.other";
+  canonicalPath?: string;
 };
 
 const defaultSeo: SeoMeta = {
@@ -25,8 +26,8 @@ const defaultSeo: SeoMeta = {
 };
 
 const routeSeo: Record<string, SeoMeta> = {
-  "/aviation-briefings": {
-    title: "Aviation Briefings | Ready Set Fly",
+  "/briefings": {
+    title: "Ready Set Fly | Briefings",
     description: "Practical aviation insights, educational articles, expert perspectives, and Ready Set Fly platform walkthroughs.",
     image: "/RSFOpaqueLogo.png",
   },
@@ -74,8 +75,13 @@ function escapeHtml(value: string) {
 
 async function seoForPath(pathname: string): Promise<SeoMeta> {
   const normalized = pathname.replace(/\/+$/, "") || "/";
-  if (normalized.startsWith("/aviation-briefings/") && !normalized.startsWith("/aviation-briefings/preview/")) {
-    const slug = decodeURIComponent(normalized.slice("/aviation-briefings/".length));
+  const briefingPrefix = normalized.startsWith("/briefings/")
+    ? "/briefings/"
+    : normalized.startsWith("/aviation-briefings/")
+      ? "/aviation-briefings/"
+      : "";
+  if (briefingPrefix && !normalized.startsWith(`${briefingPrefix}preview/`)) {
+    const slug = decodeURIComponent(normalized.slice(briefingPrefix.length));
     if (slug && !slug.includes("/")) {
       const now = new Date();
       const [briefing] = await db
@@ -104,15 +110,17 @@ async function seoForPath(pathname: string): Promise<SeoMeta> {
           ? `/api/aviation-briefings/media?key=${encodeURIComponent(briefing.featuredImageStorageKey)}`
           : "";
         return {
-          title: briefing.seoTitle || `${briefing.title} | Ready Set Fly`,
+          title: briefing.seoTitle || `${briefing.title} | Ready Set Fly Briefings`,
           description: briefing.seoDescription || briefing.excerpt,
-          image: storedImage || briefing.featuredImageUrl || briefing.videoThumbnailUrl || routeSeo["/aviation-briefings"].image,
+          image: storedImage || briefing.featuredImageUrl || briefing.videoThumbnailUrl || routeSeo["/briefings"].image,
           type: briefing.contentType === "video" ? "video.other" : "article",
+          canonicalPath: `/briefings/${encodeURIComponent(slug)}`,
         };
       }
     }
-    return routeSeo["/aviation-briefings"];
+    return routeSeo["/briefings"];
   }
+  if (normalized === "/aviation-briefings") return { ...routeSeo["/briefings"], canonicalPath: "/briefings" };
   return routeSeo[normalized] || defaultSeo;
 }
 
@@ -122,7 +130,7 @@ async function injectSeoMeta(html: string, req: { path?: string; protocol?: stri
   const title = escapeHtml(meta.title);
   const description = escapeHtml(meta.description);
   const image = escapeHtml(absoluteUrl(req, meta.image));
-  const url = escapeHtml(absoluteUrl(req, pathname));
+  const url = escapeHtml(absoluteUrl(req, meta.canonicalPath || pathname));
   const tags = [
     `<title>${title}</title>`,
     `<meta name="description" content="${description}" />`,
@@ -132,6 +140,7 @@ async function injectSeoMeta(html: string, req: { path?: string; protocol?: stri
     `<meta property="og:description" content="${description}" />`,
     `<meta property="og:image" content="${image}" />`,
     `<meta property="og:url" content="${url}" />`,
+    `<link rel="canonical" href="${url}" />`,
     `<meta name="twitter:card" content="summary_large_image" />`,
     `<meta name="twitter:title" content="${title}" />`,
     `<meta name="twitter:description" content="${description}" />`,

@@ -328,26 +328,32 @@ function Router() {
       <Route path="/faq" component={FaqPage} />
       <Route path="/flight-service-validation" component={FlightServiceValidationPage} />
       <Route path="/flight-service-validation/reports/:reportId" component={FlightServiceValidationPage} />
-      <Route path="/aviation-briefings" component={AviationBriefingsPage} />
+      <Route path="/briefings" component={AviationBriefingsPage} />
+      <Route path="/briefings/contribute" component={AviationBriefingContributePage} />
+      <Route path="/briefings/preview/:id" component={AviationBriefingDetailPage} />
+      <Route path="/briefings/submit/:token" component={AviationBriefingSubmitPage} />
+      <Route path="/briefings/saved" component={isAuthenticated ? SavedAviationBriefingsPage : RequireAuth} />
+      <Route path="/briefings/:slug" component={AviationBriefingDetailPage} />
+      <Route path="/aviation-briefings" component={() => <RedirectTo to="/briefings" />} />
       <Route
         path="/aviation-briefings/contribute"
-        component={AviationBriefingContributePage}
+        component={() => <RedirectTo to="/briefings/contribute" />}
       />
       <Route
         path="/aviation-briefings/preview/:id"
-        component={AviationBriefingDetailPage}
+        component={({ params }: { params: { id: string } }) => <RedirectTo to={`/briefings/preview/${params.id}`} />}
       />
       <Route
         path="/aviation-briefings/submit/:token"
-        component={AviationBriefingSubmitPage}
+        component={({ params }: { params: { token: string } }) => <RedirectTo to={`/briefings/submit/${params.token}`} />}
       />
       <Route
         path="/aviation-briefings/saved"
-        component={isAuthenticated ? SavedAviationBriefingsPage : RequireAuth}
+        component={() => <RedirectTo to="/briefings/saved" />}
       />
       <Route
         path="/aviation-briefings/:slug"
-        component={AviationBriefingDetailPage}
+        component={({ params }: { params: { slug: string } }) => <RedirectTo to={`/briefings/${params.slug}`} />}
       />
       <Route path="/synthetic-vision" component={SyntheticVisionPage} />
       <Route path="/flight-demo" component={SyntheticVisionPage} />

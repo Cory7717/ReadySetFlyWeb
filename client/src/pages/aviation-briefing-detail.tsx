@@ -225,7 +225,7 @@ function ContributorFooter({ contributors }: { contributors: any[] }) {
 export default function AviationBriefingDetailPage() {
   const params = useParams<{ slug?: string; id?: string }>();
   const [location] = useLocation();
-  const isPreview = location.startsWith("/aviation-briefings/preview/");
+  const isPreview = location.startsWith("/briefings/preview/");
   const slug = params.slug || params.id || "";
   const { data, isLoading } = useQuery<{
     briefing: AviationBriefing;
@@ -293,12 +293,12 @@ export default function AviationBriefingDetailPage() {
           <div className="mx-auto max-w-5xl px-5 py-14 sm:px-8 lg:py-20">
             <Link
               href={
-                isPreview ? "/admin/aviation-briefings" : "/aviation-briefings"
+                isPreview ? "/admin/aviation-briefings" : "/briefings"
               }
               className="inline-flex items-center text-sm font-semibold text-[#8dbbfa] hover:text-white"
             >
               <ArrowLeft className="mr-2 h-4 w-4" />
-              {isPreview ? "Return to editor" : "All Aviation Briefings"}
+              {isPreview ? "Return to editor" : "All Ready Set Fly Briefings"}
             </Link>
             {isPreview && (
               <div className="mt-6 inline-flex rounded-full border border-amber-400/50 bg-amber-950/60 px-3 py-1 text-xs font-bold uppercase tracking-wider text-amber-200">
@@ -485,7 +485,7 @@ export default function AviationBriefingDetailPage() {
           <aside className="mt-12 flex gap-3 rounded-xl border border-[#6f7d90]/35 bg-[#111923] p-5 text-sm leading-6 text-[#aebbc9]">
             <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-[#90a6bf]" />
             <p>
-              Aviation Briefings are provided for general educational and
+              Ready Set Fly | Briefings are provided for general educational and
               informational purposes only. They are not a substitute for
               official FAA publications, approved weather briefings, qualified
               flight instruction, aircraft documentation, regulatory guidance,

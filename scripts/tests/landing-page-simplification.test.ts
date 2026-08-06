@@ -54,13 +54,13 @@ test("landing hero keeps concise headline and no removed section anchor", () => 
   assert.equal(landingSource.includes("#landing-workflow-section"), false);
 });
 
-test("landing hero offers an understated Aviation Briefings link", () => {
+test("landing hero offers an understated Ready Set Fly Briefings link", () => {
   const heroIndex = landingSource.indexOf("RSF keeps the pilot workflow in one place");
   const weatherIndex = landingSource.indexOf("<LandingCurrentConditions");
-  const briefingLinkIndex = landingSource.indexOf('href="/aviation-briefings"', heroIndex);
+  const briefingLinkIndex = landingSource.indexOf('href="/briefings"', heroIndex);
 
   assert.ok(briefingLinkIndex > heroIndex && briefingLinkIndex < weatherIndex);
-  assert.match(landingSource, /Read Aviation Briefings/);
+  assert.match(landingSource, /Read RSF Briefings/);
   assert.match(landingSource, /landing_aviation_briefings_click/);
   assert.match(landingSource, /location: "hero_meta"/);
 });

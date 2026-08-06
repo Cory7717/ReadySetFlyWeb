@@ -12,7 +12,7 @@ import { apiUrl } from "@/lib/api";
 
 async function getJson<T>(path: string): Promise<T> {
   const response = await fetch(apiUrl(path), { credentials: "include" });
-  if (!response.ok) throw new Error("Unable to load Aviation Briefings");
+  if (!response.ok) throw new Error("Unable to load Ready Set Fly Briefings");
   return response.json();
 }
 
@@ -35,7 +35,7 @@ export default function AviationBriefingsPage() {
     queryFn: () => getJson("/api/aviation-briefings/categories"),
   });
   useEffect(() => {
-    document.title = "Aviation Briefings | Ready Set Fly";
+    document.title = "Ready Set Fly | Briefings";
     trackEvent("aviation_briefings_view");
   }, []);
   const briefings = data?.briefings || [];
@@ -56,7 +56,7 @@ export default function AviationBriefingsPage() {
             Ready Set Fly
           </div>
           <h1 className="mt-5 max-w-4xl text-4xl font-black tracking-tight text-white sm:text-6xl">
-            Aviation Briefings
+            Ready Set Fly | Briefings
           </h1>
           <p className="mt-6 max-w-3xl text-lg leading-8 text-[#bdcadb]">
             Practical aviation insights, platform walkthroughs, educational
@@ -78,7 +78,7 @@ export default function AviationBriefingsPage() {
                 onChange={(event) => setSearch(event.target.value)}
                 className="h-12 border-[#5d7697] bg-[#0c1726] pl-12 text-white placeholder:text-[#8191a7]"
                 placeholder="Search briefings"
-                aria-label="Search Aviation Briefings"
+                aria-label="Search Ready Set Fly Briefings"
               />
             </div>
             <Button className="h-12 bg-[#2d73d5] px-6 text-white hover:bg-[#3d84e8]">
@@ -88,13 +88,13 @@ export default function AviationBriefingsPage() {
         </div>
       </section>
       <div className="mx-auto max-w-7xl px-5 py-10 sm:px-8">
-        {new URLSearchParams(window.location.search).get("subscription")&&<div className="mb-6 rounded-lg border border-[#55739b]/40 bg-[#10233a] p-4 text-[#dbeafe]">{new URLSearchParams(window.location.search).get("subscription")==="confirmed"?"Your Aviation Briefings subscription is confirmed.":new URLSearchParams(window.location.search).get("subscription")==="unsubscribed"?"You have been unsubscribed from Aviation Briefings emails.":"That subscription link is invalid or has already been used."}</div>}
+        {new URLSearchParams(window.location.search).get("subscription")&&<div className="mb-6 rounded-lg border border-[#55739b]/40 bg-[#10233a] p-4 text-[#dbeafe]">{new URLSearchParams(window.location.search).get("subscription")==="confirmed"?"Your Ready Set Fly | Briefings subscription is confirmed.":new URLSearchParams(window.location.search).get("subscription")==="unsubscribed"?"You have been unsubscribed from Ready Set Fly | Briefings emails.":"That subscription link is invalid or has already been used."}</div>}
         <div className="mb-10"><BriefingSubscribe source="briefings-index" /></div>
         <section className="mb-10 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[#526d94]/35 bg-[#0c1624] p-5">
           <div>
             <h2 className="flex items-center text-xl font-bold">
               <Camera className="mr-2 h-5 w-5 text-[#87b9ff]" />
-              Contribute to Aviation Briefings
+              Contribute to Ready Set Fly | Briefings
             </h2>
             <p className="mt-1 text-sm text-[#aebdce]">
               Share original aviation photography, a story idea, or firsthand
@@ -102,7 +102,7 @@ export default function AviationBriefingsPage() {
             </p>
           </div>
           <Button asChild variant="outline">
-            <Link href="/aviation-briefings/contribute">
+            <Link href="/briefings/contribute">
               Submit a photograph
             </Link>
           </Button>
@@ -140,7 +140,7 @@ export default function AviationBriefingsPage() {
           <div className="rounded-2xl border border-[#526d94]/35 bg-[#0c1522] px-6 py-20 text-center">
             <BookOpen className="mx-auto h-10 w-10 text-[#76a9ed]" />
             <h2 className="mt-5 text-2xl font-bold">
-              Aviation Briefings are coming soon.
+              Ready Set Fly | Briefings are coming soon.
             </h2>
             <p className="mx-auto mt-3 max-w-2xl leading-7 text-[#afbdce]">
               Practical aviation insights, planning guidance, educational

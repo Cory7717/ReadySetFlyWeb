@@ -572,7 +572,7 @@ export function registerAviationBriefingEngagementRoutes(app: Express) {
           .status(201)
           .json({
             invitation: invite,
-            submissionUrl: `${req.protocol}://${req.get("host")}/aviation-briefings/submit/${token}`,
+            submissionUrl: `${req.protocol}://${req.get("host")}/briefings/submit/${token}`,
           });
       } catch (e) {
         next(e);

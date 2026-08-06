@@ -53,7 +53,7 @@ export function BriefingSubscriberAdmin({
     <section className="mt-8 rounded-xl border border-[#526d94]/40 bg-[#0c1624] p-5">
       <h2 className="flex items-center text-2xl font-bold">
         <MailCheck className="mr-2 h-6 w-6 text-[#87b8f7]" />
-        Aviation Briefings subscribers
+        Ready Set Fly | Briefings subscribers
       </h2>
       <p className="mt-1 text-sm text-[#9fb0c4]">
         Verified article notifications only. Subscriber addresses remain

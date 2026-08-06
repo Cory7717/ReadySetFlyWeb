@@ -4,9 +4,9 @@ import { briefingImage, primaryContributor } from "./types";
 
 export function BriefingSeo({ briefing }: { briefing: AviationBriefing }) {
   useEffect(() => {
-    const title = briefing.seoTitle || `${briefing.title} | Ready Set Fly`;
+    const title = briefing.seoTitle || `${briefing.title} | Ready Set Fly Briefings`;
     const description = briefing.seoDescription || briefing.excerpt;
-    const canonical = `${window.location.origin}/aviation-briefings/${briefing.slug}`;
+    const canonical = `${window.location.origin}/briefings/${briefing.slug}`;
     document.title = title;
     const setMeta = (selector: string, attributes: Record<string, string>) => {
       let node = document.head.querySelector(selector) as HTMLMetaElement | null;

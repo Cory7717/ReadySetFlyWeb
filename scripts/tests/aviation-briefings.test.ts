@@ -281,7 +281,7 @@ test("static engagement analytics route is registered before dynamic briefing id
   );
 });
 
-test("Aviation Briefings suppresses the global free-account promotion bar", () => {
+test("Briefings suppresses the global free-account promotion bar", () => {
   const banner = readFileSync(
     new URL(
       "../../client/src/components/FreeAccountValueBar.tsx",
@@ -290,9 +290,10 @@ test("Aviation Briefings suppresses the global free-account promotion bar", () =
     "utf8",
   );
   assert.match(banner, /"\/aviation-briefings"/);
+  assert.match(banner, /"\/briefings"/);
 });
 
-test("Aviation Briefings suppresses the global weather announcement", () => {
+test("Briefings suppresses the global weather announcement", () => {
   const announcement = readFileSync(
     new URL(
       "../../client/src/components/AiWeatherTranslatorAnnouncement.tsx",
@@ -301,6 +302,7 @@ test("Aviation Briefings suppresses the global weather announcement", () => {
     "utf8",
   );
   assert.match(announcement, /"\/aviation-briefings"/);
+  assert.match(announcement, /"\/briefings"/);
 });
 
 test("public article links receive article-specific server-rendered social metadata", () => {
@@ -311,7 +313,7 @@ test("public article links receive article-specific server-rendered social metad
   assert.match(server, /eq\(aviationBriefings\.slug, slug\)/);
   assert.match(
     server,
-    /briefing\.seoTitle \|\| `\$\{briefing\.title\} \| Ready Set Fly`/,
+    /briefing\.seoTitle \|\| `\$\{briefing\.title\} \| Ready Set Fly Briefings`/,
   );
   assert.match(server, /briefing\.seoDescription \|\| briefing\.excerpt/);
   assert.match(
@@ -394,7 +396,7 @@ test("photo submissions require a valid image, ownership, and versioned permissi
     /uploadedKey\s*=\s*`\$\{AVIATION_PHOTO_STORAGE_PREFIX\}\/\$\{id\}\/\$\{storedFilename\}`/,
   );
   assert.match(routes, /deleteObject\(uploadedKey\)/);
-  assert.match(config, /photo_permission_v1/);
+  assert.match(config, /photo_permission_v2/);
   assert.match(routes, /permissionText:\s*AVIATION_PHOTO_PERMISSION_TEXT/);
 });
 
@@ -417,7 +419,7 @@ test("photo workflow is public for contributors and Super Admin-only for review"
     ),
     "utf8",
   );
-  assert.match(app, /\/aviation-briefings\/contribute/);
+  assert.match(app, /path="\/briefings\/contribute"/);
   assert.match(routes, /photo-submissions",\s*isAuthenticated,\s*isSuperAdmin/);
   assert.match(routes, /image",\s*isAuthenticated,\s*isSuperAdmin/);
   assert.match(page, /disabled={!canSubmit}/);
@@ -466,6 +468,20 @@ test("article pages include a compact top subscription invitation", () => {
   const component = readFileSync(new URL("../../client/src/components/aviation-briefings/BriefingSubscribe.tsx", import.meta.url), "utf8");
   const detail = readFileSync(new URL("../../client/src/pages/aviation-briefing-detail.tsx", import.meta.url), "utf8");
   assert.match(component, /compact = false/);
-  assert.match(component, /Get new Aviation Briefings by email/);
+  assert.match(component, /Get new Ready Set Fly Briefings by email/);
   assert.match(detail, /source="briefing-article-top" compact/);
+});
+
+test("Ready Set Fly Briefings uses new public routes while preserving internal contracts", () => {
+  const app = readFileSync(new URL("../../client/src/App.tsx", import.meta.url), "utf8");
+  const indexPage = readFileSync(new URL("../../client/src/pages/aviation-briefings.tsx", import.meta.url), "utf8");
+  const seo = readFileSync(new URL("../../server/vite.ts", import.meta.url), "utf8");
+  const subscriptions = readFileSync(new URL("../../server/routes/aviationBriefingSubscriptions.ts", import.meta.url), "utf8");
+
+  assert.match(app, /path="\/briefings"/);
+  assert.match(app, /RedirectTo to="\/briefings"/);
+  assert.match(indexPage, /Ready Set Fly \| Briefings/);
+  assert.match(seo, /canonicalPath: `\/briefings\/\$\{encodeURIComponent\(slug\)\}`/);
+  assert.match(subscriptions, /`\$\{web\}\/briefings\/\$\{briefing\.slug\}`/);
+  assert.match(subscriptions, /\/api\/aviation-briefings\/subscriptions/);
 });

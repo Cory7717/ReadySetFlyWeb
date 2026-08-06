@@ -3336,7 +3336,7 @@ export default function AdminDashboard() {
         </div>
         {isSuperAdmin && (
           <Button asChild className="rsf-metal-button-primary">
-            <Link href="/admin/aviation-briefings"><FileText className="mr-2 h-4 w-4" />Manage Aviation Briefings</Link>
+            <Link href="/admin/aviation-briefings"><FileText className="mr-2 h-4 w-4" />Manage RSF Briefings</Link>
           </Button>
         )}
       </div>

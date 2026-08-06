@@ -131,7 +131,7 @@ export function BriefingPerformancePanel() {
                   <tr key={row.id} className="border-b border-[#526d94]/25">
                     <td className="p-2">
                       <a
-                        href={`/aviation-briefings/${row.slug}`}
+                        href={`/briefings/${row.slug}`}
                         target="_blank"
                         rel="noreferrer"
                         className="inline-flex max-w-sm items-center font-semibold text-[#8dbbfa] hover:text-white"

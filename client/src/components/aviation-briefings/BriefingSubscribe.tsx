@@ -45,7 +45,7 @@ export function BriefingSubscribe({ source = "article", compact = false }: { sou
           <div className="flex items-center gap-3">
             <Mail className="h-5 w-5 shrink-0 text-[#8dbbfa]" />
             <div>
-              <h2 className="font-bold text-white">Get new Aviation Briefings by email</h2>
+              <h2 className="font-bold text-white">Get new Ready Set Fly Briefings by email</h2>
               <p className="text-sm text-[#9fb0c4]">A short preview and direct link whenever a new article is published.</p>
             </div>
           </div>
@@ -71,7 +71,7 @@ export function BriefingSubscribe({ source = "article", compact = false }: { sou
         </div>
         <div className="flex-1">
           <h2 className="text-2xl font-bold text-white">
-            Get the next Aviation Briefing
+            Get the next Ready Set Fly Briefing
           </h2>
           <p className="mt-2 leading-7 text-[#aebdce]">
             Receive an email when a new briefing is published, including its
@@ -80,7 +80,7 @@ export function BriefingSubscribe({ source = "article", compact = false }: { sou
           {sent ? (
             <div className="mt-5 rounded-lg border border-emerald-500/30 bg-emerald-950/30 p-4 text-emerald-100">
               <b>Check your inbox.</b> Confirm your email address to begin
-              receiving Aviation Briefings.
+              receiving Ready Set Fly | Briefings.
             </div>
           ) : (
             <form
@@ -123,7 +123,7 @@ export function BriefingSubscribe({ source = "article", compact = false }: { sou
             </form>
           )}
           <p className="mt-3 text-xs text-[#8396ad]">
-            Aviation Briefings updates only. Confirmed opt-in required.
+            Ready Set Fly | Briefings updates only. Confirmed opt-in required.
             Unsubscribe anytime.
           </p>
         </div>

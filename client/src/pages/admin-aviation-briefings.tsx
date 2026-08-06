@@ -107,7 +107,7 @@ async function fetchAdminJson(path: string) {
     const payload = await response.json().catch(() => null);
     throw new Error(
       payload?.error ||
-        "Unable to load Aviation Briefings administration data.",
+        "Unable to load Ready Set Fly Briefings administration data.",
     );
   }
   return response.json();
@@ -421,7 +421,7 @@ export default function AdminAviationBriefingsPage() {
             <div className="text-sm font-bold uppercase tracking-[.2em] text-[#87b8f7]">
               Publishing
             </div>
-            <h1 className="mt-2 text-4xl font-black">Aviation Briefings</h1>
+            <h1 className="mt-2 text-4xl font-black">Ready Set Fly | Briefings</h1>
             <p className="mt-2 text-[#aebdce]">
               Prepare, review, schedule, and publish RSF aviation content.
             </p>
@@ -461,7 +461,7 @@ export default function AdminAviationBriefingsPage() {
                 {editingId !== "new" && (
                   <Button asChild variant="outline">
                     <a
-                      href={`/aviation-briefings/preview/${editingId}`}
+                      href={`/briefings/preview/${editingId}`}
                       target="_blank"
                       rel="noreferrer"
                     >
@@ -1035,7 +1035,7 @@ export default function AdminAviationBriefingsPage() {
                       </Button>
                       <Button asChild variant="outline" size="sm">
                         <a
-                          href={`/aviation-briefings/preview/${item.id}`}
+                          href={`/briefings/preview/${item.id}`}
                           target="_blank"
                           rel="noreferrer"
                         >

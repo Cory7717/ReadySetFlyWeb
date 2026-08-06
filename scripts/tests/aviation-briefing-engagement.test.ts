@@ -25,7 +25,7 @@ test("engagement is restricted to publicly visible briefings", () => {
 test("save workflow requires authentication and has a non-shadowed route", () => {
   assert.match(routes, /\/save",isAuthenticated/);
   assert.match(routes, /saved\/me",isAuthenticated/);
-  assert.ok(app.indexOf('path="/aviation-briefings/saved"') < app.indexOf('path="/aviation-briefings/:slug"'));
+  assert.ok(app.indexOf('path="/briefings/saved"') < app.indexOf('path="/briefings/:slug"'));
 });
 
 test("suggestions include anti-abuse controls and admin-only review", () => {
@@ -37,9 +37,9 @@ test("suggestions include anti-abuse controls and admin-only review", () => {
 });
 
 test("reader tools include learn-more discovery, sharing, printing, and suggestions", () => {
-  assert.match(component, /Was this Aviation Briefing helpful\?/);
+  assert.match(component, /Was this briefing helpful\?/);
   assert.match(component, /Show me more like this/);
   assert.match(component, /window\.print/);
   assert.match(component, /linkedin\.com|facebook\.com|twitter\.com/);
-  assert.match(component, /Suggest a future aviation briefing/i);
+  assert.match(component, /Suggest a Future Briefing/i);
 });

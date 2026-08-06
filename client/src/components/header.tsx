@@ -312,7 +312,7 @@ export function Header() {
                   <DropdownMenuItem asChild><Link href="/logbook">Pilot Logbook</Link></DropdownMenuItem>
                   <DropdownMenuItem asChild><Link href="/my-aircraft">My Aircraft</Link></DropdownMenuItem>
                   <DropdownMenuItem asChild><Link href="/tool-hub">Tool Hub</Link></DropdownMenuItem>
-                  <DropdownMenuItem asChild><Link href="/aviation-briefings/saved">Saved Briefings</Link></DropdownMenuItem>
+                  <DropdownMenuItem asChild><Link href="/briefings/saved">Saved Briefings</Link></DropdownMenuItem>
                   {user?.isAdmin && (
                     <>
                       <DropdownMenuSeparator />
@@ -325,7 +325,7 @@ export function Header() {
                         <DropdownMenuItem asChild><Link href="/super-admin/membership-promotions">Membership Promotions</Link></DropdownMenuItem>
                       )}
                       {user?.isSuperAdmin && (
-                        <DropdownMenuItem asChild><Link href="/admin/aviation-briefings">Aviation Briefings</Link></DropdownMenuItem>
+                        <DropdownMenuItem asChild><Link href="/admin/aviation-briefings">RSF Briefings</Link></DropdownMenuItem>
                       )}
                     </>
                   )}

@@ -24,7 +24,7 @@ export function BriefingCard({ briefing, featured = false }: { briefing: Aviatio
           {contributor && <div><span className="text-[#dbe8f7]">{contributor.name}</span>{contributor.professionalTitle ? ` · ${contributor.professionalTitle}` : ""}</div>}
           {briefing.publishedAt && <time dateTime={briefing.publishedAt}>{new Date(briefing.publishedAt).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })}</time>}
         </div>
-        <Link href={`/aviation-briefings/${briefing.slug}`} className="mt-6 inline-flex items-center font-semibold text-[#88b8ff] hover:text-white">
+        <Link href={`/briefings/${briefing.slug}`} className="mt-6 inline-flex items-center font-semibold text-[#88b8ff] hover:text-white">
           {briefing.contentType === "video" ? "Watch Briefing" : "Read Briefing"}<ArrowRight className="ml-2 h-4 w-4" />
         </Link>
       </div>

@@ -148,8 +148,8 @@ async function confirmationEmail(row: any) {
     await client.emails.send({
       from: fromEmail,
       to: row.contributorEmail,
-      subject: `RSF Aviation Briefings photo received — ${row.id}`,
-      text: `Thank you for contributing to RSF Aviation Briefings. We received ${row.originalFilename}.\n\nPreferred credit: ${row.preferredCredit}\nReference: ${row.id}\n\nSubmission does not guarantee publication. You retain copyright and granted Ready Set Fly the non-exclusive permission described in the Photo Usage Permission agreement. For corrections or withdrawal requests, reply to this email and include your reference number. No image is attached.`,
+      subject: `Ready Set Fly | Briefings photo received — ${row.id}`,
+      text: `Thank you for contributing to Ready Set Fly | Briefings. We received ${row.originalFilename}.\n\nPreferred credit: ${row.preferredCredit}\nReference: ${row.id}\n\nSubmission does not guarantee publication. You retain copyright and granted Ready Set Fly the non-exclusive permission described in the Photo Usage Permission agreement. For corrections or withdrawal requests, reply to this email and include your reference number. No image is attached.`,
     });
   } catch (error) {
     console.warn(
@@ -281,8 +281,8 @@ export function registerAviationBriefingPhotoSubmissionRoutes(app: Express) {
         void storage
           .createAdminNotification({
             type: "aviation_briefings_photo_submission",
-            title: "New Aviation Briefings photo submission",
-            message: `New Aviation Briefings photo submitted by ${d.contributorName}. Reference ${id}.`,
+            title: "New Ready Set Fly Briefings photo submission",
+            message: `New Ready Set Fly Briefings photo submitted by ${d.contributorName}. Reference ${id}.`,
             isRead: false,
             isActionable: true,
           })

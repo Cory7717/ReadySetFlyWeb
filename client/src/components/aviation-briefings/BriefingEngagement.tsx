@@ -109,7 +109,7 @@ export function BriefingEngagement({
     onSuccess: () => {
       toast({
         title: "Suggestion received",
-        description: "Thank you for helping shape future Aviation Briefings.",
+        description: "Thank you for helping shape future Ready Set Fly Briefings.",
       });
       trackEvent("aviation_briefing_suggestion_submitted", {
         briefingId: briefing.id,
@@ -162,7 +162,7 @@ export function BriefingEngagement({
     <section className="rsf-engagement mt-14 space-y-8">
       <div className="rounded-2xl border border-[#55739b]/40 bg-[#0d1929] p-6 text-center sm:p-8">
         <h2 className="text-2xl font-bold">
-          Was this Aviation Briefing helpful?
+          Was this briefing helpful?
         </h2>
         {data?.feedback ? (
           <div className="mt-5 inline-flex items-center gap-2 text-[#a9d5b7]">
@@ -199,7 +199,7 @@ export function BriefingEngagement({
             </div>
           ) : (
             <p className="mt-3 text-[#aebdce]">
-              More Aviation Briefings coming soon.
+              More Ready Set Fly Briefings coming soon.
             </p>
           )}
         </div>
@@ -309,13 +309,13 @@ export function BriefingEngagement({
           className="mt-4 bg-[#2d73d5] text-white"
           onClick={() => setSuggestOpen(true)}
         >
-          Suggest a Future Aviation Briefing
+          Suggest a Future Briefing
         </Button>
       </div>
       <Dialog open={suggestOpen} onOpenChange={setSuggestOpen}>
         <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Suggest a Future Aviation Briefing</DialogTitle>
+            <DialogTitle>Suggest a Future Briefing</DialogTitle>
             <DialogDescription>
               This is an editorial suggestion, not a contributor application.
             </DialogDescription>

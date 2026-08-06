@@ -27,6 +27,7 @@ const HIDE_PREFIXES = [
   "/rental-payment",
   "/banner-ad-payment",
   "/aviation-briefings",
+  "/briefings",
   "/404",
 ];
 

@@ -1,9 +1,9 @@
 import { z } from "zod";
 
-export const AVIATION_PHOTO_PERMISSION_VERSION = "photo_permission_v1";
+export const AVIATION_PHOTO_PERMISSION_VERSION = "photo_permission_v2";
 export const AVIATION_PHOTO_PERMISSION_TEXT = `Photo Usage Permission
 
-I certify that I am the owner of the submitted photograph or that I have the legal authority to grant permission for its use. I grant Ready Set Fly, LLC a non-exclusive, royalty-free, worldwide license to reproduce, edit, crop, resize, publish, display, and distribute the photograph in connection with RSF Aviation Briefings, the Ready Set Fly website, email communications, and Ready Set Fly social media posts used to promote related editorial content.
+I certify that I am the owner of the submitted photograph or that I have the legal authority to grant permission for its use. I grant Ready Set Fly, LLC a non-exclusive, royalty-free, worldwide license to reproduce, edit, crop, resize, publish, display, and distribute the photograph in connection with Ready Set Fly | Briefings, the Ready Set Fly website, email communications, and Ready Set Fly social media posts used to promote related editorial content.
 
 I understand that I retain ownership and copyright of the photograph and may continue to use, publish, sell, or license it elsewhere. Submission does not guarantee publication. Ready Set Fly may choose whether, when, and how the photograph is used and may remove it from publication at its discretion.
 

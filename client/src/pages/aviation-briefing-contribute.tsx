@@ -31,7 +31,7 @@ export default function AviationBriefingContributePage() {
     [reference, setReference] = useState("");
   const [token] = useState(() => crypto.randomUUID());
   useEffect(() => {
-    document.title = "Contribute Photography | Aviation Briefings";
+    document.title = "Contribute Photography | Ready Set Fly Briefings";
     trackEvent("aviation_briefings_contribute_view");
   }, []);
   useEffect(() => {
@@ -99,7 +99,7 @@ export default function AviationBriefingContributePage() {
             Photo submitted for editorial review
           </h1>
           <p className="mt-4 leading-7 text-[#c3d0df]">
-            Thank you for contributing to RSF Aviation Briefings. Your photo has
+            Thank you for contributing to Ready Set Fly | Briefings. Your photo has
             been submitted for editorial review. Submission does not guarantee
             publication. If selected, we may contact you for additional
             information and will use the preferred photo credit you provided
@@ -116,7 +116,7 @@ export default function AviationBriefingContributePage() {
             include this reference number.
           </p>
           <Button asChild className="mt-6">
-            <Link href="/aviation-briefings">Return to Aviation Briefings</Link>
+            <Link href="/briefings">Return to Ready Set Fly | Briefings</Link>
           </Button>
         </div>
       </main>
@@ -125,11 +125,11 @@ export default function AviationBriefingContributePage() {
     <main className="min-h-screen bg-[#07101c] px-5 py-12 text-[#edf5ff]">
       <div className="mx-auto max-w-4xl">
         <Link
-          href="/aviation-briefings"
+          href="/briefings"
           className="inline-flex items-center text-[#8dbbfa]"
         >
           <ArrowLeft className="mr-2 h-4 w-4" />
-          Aviation Briefings
+          Ready Set Fly | Briefings
         </Link>
         <header className="mt-7">
           <div className="flex items-center text-sm font-bold uppercase tracking-[.18em] text-[#87b8f7]">
@@ -140,7 +140,7 @@ export default function AviationBriefingContributePage() {
             Share your aviation photography
           </h1>
           <p className="mt-4 max-w-3xl text-lg leading-8 text-[#c3d0df]">
-            RSF Aviation Briefings welcomes original aviation photography, story
+            Ready Set Fly | Briefings welcomes original aviation photography, story
             ideas, guest article proposals, interview participation, and
             firsthand aviation experiences. This form is for submitting one
             original photograph for possible editorial use.

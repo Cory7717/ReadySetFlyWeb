@@ -52,15 +52,15 @@ function articleEmail(
   req?: Request,
 ) {
   const web = getFrontendBaseUrl(req),
-    url = `${web}/aviation-briefings/${briefing.slug}`,
+    url = `${web}/briefings/${briefing.slug}`,
     unsubscribe = `${getApiBaseUrl(req)}/api/aviation-briefings/subscriptions/unsubscribe/${subscriber.unsubscribeToken}`,
     title = escapeHtml(briefing.title),
     excerpt = escapeHtml(briefing.excerpt),
     image = escapeHtml(articleImage(briefing, req));
   return {
-    subject: `New Aviation Briefing: ${briefing.title}`,
-    html: `<!doctype html><html><body style="margin:0;background:#07101c;font-family:Arial,sans-serif;color:#172033"><div style="max-width:680px;margin:auto;padding:24px"><div style="background:#fff;border-radius:14px;overflow:hidden"><img src="${image}" alt="" style="display:block;width:100%;max-height:330px;object-fit:cover"><div style="padding:30px"><div style="color:#2868b2;font-size:12px;font-weight:bold;letter-spacing:2px">READY SET FLY · AVIATION BRIEFINGS</div><h1 style="font-size:30px;line-height:1.15;margin:14px 0">${title}</h1><p style="font-size:17px;line-height:1.65;color:#445268">${excerpt}</p><a href="${url}" style="display:inline-block;margin-top:12px;padding:13px 20px;background:#2d73d5;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold">Read the full briefing</a></div></div><p style="color:#9fb0c4;font-size:12px;text-align:center;line-height:1.5">You subscribed to Aviation Briefings updates from Ready Set Fly.<br><a href="${unsubscribe}" style="color:#9fc5f8">Unsubscribe</a></p></div></body></html>`,
-    text: `New Aviation Briefing: ${briefing.title}\n\n${briefing.excerpt}\n\nRead: ${url}\n\nUnsubscribe: ${unsubscribe}`,
+    subject: `New Ready Set Fly Briefing: ${briefing.title}`,
+    html: `<!doctype html><html><body style="margin:0;background:#07101c;font-family:Arial,sans-serif;color:#172033"><div style="max-width:680px;margin:auto;padding:24px"><div style="background:#fff;border-radius:14px;overflow:hidden"><img src="${image}" alt="" style="display:block;width:100%;max-height:330px;object-fit:cover"><div style="padding:30px"><div style="color:#2868b2;font-size:12px;font-weight:bold;letter-spacing:2px">READY SET FLY | BRIEFINGS</div><h1 style="font-size:30px;line-height:1.15;margin:14px 0">${title}</h1><p style="font-size:17px;line-height:1.65;color:#445268">${excerpt}</p><a href="${url}" style="display:inline-block;margin-top:12px;padding:13px 20px;background:#2d73d5;color:#fff;text-decoration:none;border-radius:8px;font-weight:bold">Read the full briefing</a></div></div><p style="color:#9fb0c4;font-size:12px;text-align:center;line-height:1.5">You subscribed to Ready Set Fly | Briefings updates.<br><a href="${unsubscribe}" style="color:#9fc5f8">Unsubscribe</a></p></div></body></html>`,
+    text: `New Ready Set Fly Briefing: ${briefing.title}\n\n${briefing.excerpt}\n\nRead: ${url}\n\nUnsubscribe: ${unsubscribe}`,
   };
 }
 
@@ -237,9 +237,9 @@ export function registerAviationBriefingSubscriptionRoutes(app: Express) {
         await client.emails.send({
           from: fromEmail,
           to: subscriber.email,
-          subject: "Confirm your Aviation Briefings subscription",
-          html: `<div style="max-width:620px;margin:auto;font-family:Arial,sans-serif"><h1>Confirm Aviation Briefings updates</h1><p>Confirm that you would like an email when Ready Set Fly publishes a new Aviation Briefing.</p><p><a href="${confirmUrl}" style="display:inline-block;background:#2d73d5;color:white;padding:12px 18px;border-radius:8px;text-decoration:none;font-weight:bold">Confirm subscription</a></p><p>If you did not request this, no action is needed.</p></div>`,
-          text: `Confirm your Aviation Briefings subscription: ${confirmUrl}`,
+          subject: "Confirm your Ready Set Fly | Briefings subscription",
+          html: `<div style="max-width:620px;margin:auto;font-family:Arial,sans-serif"><h1>Confirm Ready Set Fly | Briefings updates</h1><p>Confirm that you would like an email when Ready Set Fly publishes a new briefing.</p><p><a href="${confirmUrl}" style="display:inline-block;background:#2d73d5;color:white;padding:12px 18px;border-radius:8px;text-decoration:none;font-weight:bold">Confirm subscription</a></p><p>If you did not request this, no action is needed.</p></div>`,
+          text: `Confirm your Ready Set Fly | Briefings subscription: ${confirmUrl}`,
         });
         res.status(202).json({ received: true });
       } catch (e) {
@@ -266,7 +266,7 @@ export function registerAviationBriefingSubscriptionRoutes(app: Express) {
             ),
           )
           .returning();
-        const target = `${getFrontendBaseUrl(req)}/aviation-briefings?subscription=${row ? "confirmed" : "invalid"}`;
+        const target = `${getFrontendBaseUrl(req)}/briefings?subscription=${row ? "confirmed" : "invalid"}`;
         res.redirect(302, target);
       } catch (e) {
         next(e);
@@ -291,7 +291,7 @@ export function registerAviationBriefingSubscriptionRoutes(app: Express) {
           .returning();
         res.redirect(
           302,
-          `${getFrontendBaseUrl(req)}/aviation-briefings?subscription=${row ? "unsubscribed" : "invalid"}`,
+          `${getFrontendBaseUrl(req)}/briefings?subscription=${row ? "unsubscribed" : "invalid"}`,
         );
       } catch (e) {
         next(e);

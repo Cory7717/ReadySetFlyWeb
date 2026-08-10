@@ -22,10 +22,10 @@ const INVESTOR_DECK_CONFIDENTIALITY_KEY = "rsf_investor_deck_confidentiality_acc
 const INVESTOR_DECK_CONFIDENTIALITY_TERMS_VERSION = "2026-03-24-v1";
 
 const stats = [
-  { value: "800K+", label: "Active GA Pilots", detail: "Per FAA" },
-  { value: "$6.4B", label: "US GA Market Size", detail: "Annual market estimate" },
-  { value: "$500K", label: "Pre-Seed Round", detail: "Current target amount" },
-  { value: "LIVE", label: "Operating Platform", detail: "Founder-funded to date" },
+  { value: "2.6K", label: "Active Users YTD", detail: "Jan. 1 – Aug. 10, 2026" },
+  { value: "~79K", label: "User Events YTD", detail: "Jan. 1 – Aug. 10, 2026" },
+  { value: "3m 15s", label: "Avg. Engagement / Active User", detail: "Jan. 1 – Aug. 10, 2026" },
+  { value: "24K", label: "Core Pilot Hub Views", detail: "Jan. 1 – Aug. 10, 2026" },
 ];
 
 const platformBadges = ["React", "TypeScript", "Express", "PostgreSQL"];
@@ -488,9 +488,13 @@ export default function InvestorDeck() {
                   </a>
                 </div>
                 <div className="text-sm text-slate-600">
-                  Operating web and mobile platform—currently focused on validation, commercialization, pilot growth,
-                  and reliable scale. Current registered, active, and paying-user metrics require founder verification
-                  before publication.
+                  Ready Set Fly has reached approximately 2,600 active users YTD and generated nearly 79,000 user
+                  events, with average engagement exceeding three minutes per active user. From Jan. 1–Aug. 10, 2026,
+                  the core pilot-tool experience generated approximately 24,000 views, while the aviation marketplace
+                  generated approximately 4,800 views from 317 active users. Early growth has been driven primarily by
+                  direct traffic, aviation communities and organic outreach rather than significant paid customer
+                  acquisition. These analytics describe active users, views, and events—not registered accounts, paying
+                  customers, or completed marketplace transactions.
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">

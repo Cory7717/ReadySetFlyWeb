@@ -21,42 +21,68 @@ export const INVESTOR_DECK_SHARE_PATH = "/investor-deck/share/rsf-2026-deck";
 const INVESTOR_DECK_CONFIDENTIALITY_KEY = "rsf_investor_deck_confidentiality_accepted_v1";
 const INVESTOR_DECK_CONFIDENTIALITY_TERMS_VERSION = "2026-03-24-v1";
 
-const deckTopics = [
-  "The Problem",
-  "The Solution",
-  "Market Opportunity",
-  "Traction & GA4 Data",
-  "Product Deep-Dive",
-  "Business Model",
-  "Competitive Landscape",
-  "Go-To-Market Strategy",
-  "The Ask",
-  "12-Month Milestones",
-  "Closing",
-];
-
 const stats = [
   { value: "800K+", label: "Active GA Pilots", detail: "Per FAA" },
   { value: "$6.4B", label: "US GA Market Size", detail: "Annual market estimate" },
-  { value: "1,294", label: "QTD Active Users", detail: "Jan-Mar 2026" },
-  { value: "~7%", label: "Avg Bounce Rate", detail: "Tool Hub & Marketplace" },
+  { value: "$500K", label: "Pre-Seed Round", detail: "Current target amount" },
+  { value: "LIVE", label: "Operating Platform", detail: "Founder-funded to date" },
 ];
 
 const platformBadges = ["React", "TypeScript", "Express", "PostgreSQL"];
 
 const valuationDrivers = [
   {
-    title: "Indicative Current Range",
-    body: "$12M-$16M pre-money based on current product maturity, early traction, and strategic positioning.",
+    title: "Substantial Platform Built",
+    body: "RSF is raising to validate, commercialize, grow, and scale an operating platform—not to build an initial MVP.",
   },
   {
-    title: "Marketplace Comp Set",
-    body: "Directionally informed by peer-to-peer rental marketplaces like Turo, Boatsetter, and RVshare, adjusted down for RSF's earlier stage and adjusted up for platform depth.",
+    title: "Connected Pilot Workflow",
+    body: "Planning, aviation intelligence, training, records, rentals, marketplace discovery, subscriptions, and pilot utilities operate within one ecosystem.",
   },
   {
-    title: "Near-Term Re-Rate Triggers",
-    body: "Live Leidos integration, CPA member distribution, listing growth, and first monetization proof can support a higher valuation band.",
+    title: "Defined Capital Milestone",
+    body: "The round supports independent FAA Flight Service V&V, production progression, commercialization, pilot acquisition, and reliable scale.",
   },
+];
+
+const investmentPriorities = [
+  {
+    title: "FAA Flight Service V&V and production progression",
+    body: "Independent requirements-based verification and validation, traceability, testing documentation, remediation, and progression toward production deployment.",
+  },
+  {
+    title: "Platform engineering, reliability, and infrastructure",
+    body: "Reliability hardening, aviation infrastructure, scalability, production monitoring, mobile and web development, and specialized aviation engineering.",
+  },
+  {
+    title: "Pilot acquisition and commercial growth",
+    body: "Targeted pilot acquisition, aviation-community outreach, marketplace growth, subscription conversion, and broader platform adoption.",
+  },
+  {
+    title: "Strategic aviation integrations and relationships",
+    body: "Expansion of aviation-data, service-provider, CFI, flight-school, FBO, association, and other strategic relationships.",
+  },
+  {
+    title: "Operations, compliance, and runway",
+    body: "Legal, insurance, compliance, infrastructure costs, specialized professional services, and reasonable operating runway.",
+  },
+];
+
+const nearTermMilestones = [
+  "Complete independent, requirements-based FAA Flight Service V&V and traceability.",
+  "Address findings and progress the integration through the remaining production-readiness process.",
+  "Increase registered and active pilot adoption through community, CFI, aviation-relationship, organic, and targeted channels.",
+  "Expand subscription conversion, marketplace transactions, advertising, and other validated revenue channels.",
+  "Grow relationships with instructors, schools, operators, aviation organizations, and service and technology providers.",
+  "Continue hardening the platform for increased usage, aviation-data volume, and operational reliability.",
+];
+
+const businessModel = [
+  "Aircraft rentals: free to list, with RSF earning a commission on completed rental transactions.",
+  "Marketplace: paid listings and promotional placement where applicable.",
+  "RSF Pro / Pro+: recurring subscription revenue for connected pilot workflow, planning, logbook, analytics, and advanced functionality.",
+  "Advertising: aviation-focused advertising and partner placements.",
+  "CFI and flight-school opportunities supported by professional and institutional workflows.",
 ];
 
 const investorContactSchema = z.object({
@@ -84,6 +110,58 @@ export default function InvestorDeck() {
     const accepted = window.localStorage.getItem(INVESTOR_DECK_CONFIDENTIALITY_KEY) === "true";
     setHasAcceptedConfidentiality(accepted);
     setAcknowledgedTerms(accepted);
+  }, []);
+
+  useEffect(() => {
+    if (typeof document === "undefined" || typeof window === "undefined") return;
+    const title = "Ready Set Fly | $500K Pre-Seed Investor Materials";
+    const description =
+      "Ready Set Fly is raising a $500,000 pre-seed round to advance independent FAA Flight Service validation, commercialization, pilot growth, and reliable platform scale.";
+    const canonical = `${window.location.origin}${INVESTOR_DECK_SHARE_PATH}`;
+    const previousTitle = document.title;
+    const touched: Array<{ element: HTMLMetaElement | HTMLLinkElement; previous: string | null; created: boolean }> = [];
+
+    const setMeta = (selector: string, attribute: "name" | "property", key: string, content: string) => {
+      let element = document.head.querySelector(selector) as HTMLMetaElement | null;
+      const created = !element;
+      if (!element) {
+        element = document.createElement("meta");
+        element.setAttribute(attribute, key);
+        document.head.appendChild(element);
+      }
+      touched.push({ element, previous: element.getAttribute("content"), created });
+      element.setAttribute("content", content);
+    };
+
+    document.title = title;
+    setMeta('meta[name="description"]', "name", "description", description);
+    setMeta('meta[property="og:title"]', "property", "og:title", title);
+    setMeta('meta[property="og:description"]', "property", "og:description", description);
+    setMeta('meta[property="og:url"]', "property", "og:url", canonical);
+    setMeta('meta[name="twitter:title"]', "name", "twitter:title", title);
+    setMeta('meta[name="twitter:description"]', "name", "twitter:description", description);
+
+    let canonicalLink = document.head.querySelector('link[rel="canonical"]') as HTMLLinkElement | null;
+    const canonicalCreated = !canonicalLink;
+    if (!canonicalLink) {
+      canonicalLink = document.createElement("link");
+      canonicalLink.rel = "canonical";
+      document.head.appendChild(canonicalLink);
+    }
+    touched.push({ element: canonicalLink, previous: canonicalLink.getAttribute("href"), created: canonicalCreated });
+    canonicalLink.href = canonical;
+
+    return () => {
+      document.title = previousTitle;
+      touched.forEach(({ element, previous, created }) => {
+        if (created) element.remove();
+        else if (element instanceof HTMLLinkElement) {
+          if (previous === null) element.removeAttribute("href");
+          else element.setAttribute("href", previous);
+        } else if (previous === null) element.removeAttribute("content");
+        else element.setAttribute("content", previous);
+      });
+    };
   }, []);
 
   const form = useForm<InvestorContactValues>({
@@ -238,14 +316,15 @@ export default function InvestorDeck() {
         <div className="container mx-auto px-4 py-12 sm:px-6 sm:py-16">
           <div className="max-w-4xl space-y-6">
             <Badge className="border border-[#F0B429]/35 bg-[#F0B429]/12 px-3 py-1 text-[#F0B429]">
-              Pre-Seed Round Open
+              $500,000 Pre-Seed Round Open
             </Badge>
             <div className="space-y-3">
               <h1 className="max-w-3xl text-4xl font-bold tracking-tight sm:text-5xl">
-                The Aviation Marketplace with the Planning Tools Built In.
+                The Connected General Aviation Workflow.
               </h1>
               <p className="text-base text-[#EEF3F9]/78 sm:text-lg">
-                Pre-Seed Round Open - 2026 - readysetfly.us
+                Founder-funded through the majority of platform development. Capital now advances validation,
+                commercialization, growth, and scale.
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row">
@@ -302,22 +381,25 @@ export default function InvestorDeck() {
           <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
             <div className="text-xs font-semibold uppercase tracking-[0.28em] text-[#F0B429]">Why RSF</div>
             <p className="mt-4 max-w-4xl text-lg leading-relaxed text-slate-800">
-              Ready Set Fly is the only platform where pilots can rent or list aircraft AND complete their full
-              pre-flight workflow - flight planning, weather briefing, NOTAM translation, E6B calculations, and more -
-              in a single destination. We&apos;re building the aviation marketplace that ForeFlight forgot to build.
+              Ready Set Fly connects the fragmented general aviation workflow in one platform—helping pilots find
+              aviation services, plan flights, access aviation weather and NOTAM intelligence, manage training and
+              records, use a digital logbook, and remain within a connected aviation ecosystem. RSF has also developed
+              an FAA Flight Service integration that is operating in the applicable test environment and undergoing
+              validation, with independent requirements-based V&amp;V being pursued as part of the path toward production.
             </p>
           </div>
         </section>
 
         <section className="container mx-auto px-4 py-4 sm:px-6 sm:py-6">
           <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-            <div className="text-xs font-semibold uppercase tracking-[0.28em] text-[#F0B429]">Valuation Perspective</div>
+            <div className="text-xs font-semibold uppercase tracking-[0.28em] text-[#F0B429]">Why Capital Now</div>
             <div className="mt-4 flex flex-col gap-3">
-              <h2 className="text-3xl font-bold tracking-tight text-[#0B1F3A]">Indicative Pre-Seed Valuation: $12M-$16M Pre-Money</h2>
+              <h2 className="text-3xl font-bold tracking-tight text-[#0B1F3A]">$500,000 Pre-Seed Round</h2>
               <p className="max-w-4xl text-base leading-relaxed text-slate-700">
-                This range reflects RSF as a live, multi-sided aviation platform with early traction, strong engagement,
-                a differentiated tools-plus-marketplace product, and strategic Leidos approval that places the company in
-                a small approved-provider set alongside leading aviation software platforms.
+                RSF has already built a substantial operating platform spanning flight planning, aviation intelligence,
+                pilot utilities, training workflows, digital records, aircraft rentals, marketplace functionality,
+                subscriptions, and mobile and web experiences. This target round is intended to move the company through
+                validation, production progression, commercialization, growth, and scale—not to build an initial MVP.
               </p>
             </div>
             <div className="mt-6 grid gap-4 lg:grid-cols-3">
@@ -329,11 +411,12 @@ export default function InvestorDeck() {
               ))}
             </div>
             <div className="mt-6 rounded-2xl border border-[#0B1F3A]/10 bg-[#0B1F3A]/[0.03] p-5">
-              <div className="text-sm font-semibold text-[#0B1F3A]">Professional framing</div>
+              <div className="text-sm font-semibold text-[#0B1F3A]">Differentiation</div>
               <p className="mt-2 text-sm leading-6 text-slate-700">
-                The range is intended as a founder management estimate for investor discussions. It is informed by 2025
-                Carta early-stage fundraising benchmarks, marketplace comparables, and RSF-specific strategic milestones.
-                It is not presented as a third-party fairness opinion or formal 409A valuation.
+                RSF differentiates itself by combining marketplace discovery with an integrated pilot-tool and workflow
+                ecosystem rather than competing as a single-purpose flight-planning or listing product. FAA Flight
+                Service adds workflow depth and retention; it is not presented as a standalone revenue stream or as an
+                approved production capability.
               </p>
             </div>
           </div>
@@ -341,16 +424,47 @@ export default function InvestorDeck() {
 
         <section className="container mx-auto px-4 py-8 sm:px-6 sm:py-10">
           <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm sm:p-8">
-            <div className="text-xs font-semibold uppercase tracking-[0.28em] text-[#F0B429]">
-              11 Slides Covering
-            </div>
+            <div className="text-xs font-semibold uppercase tracking-[0.28em] text-[#F0B429]">Use of Funds</div>
             <div className="mt-6 grid gap-x-8 gap-y-3 md:grid-cols-2">
-              {deckTopics.map((topic) => (
-                <div key={topic} className="flex items-center gap-3 rounded-xl border border-slate-100 bg-slate-50/70 px-4 py-3">
-                  <CheckCircle2 className="h-4 w-4 shrink-0 text-[#F0B429]" />
-                  <span className="text-sm font-medium text-slate-800">{topic}</span>
+              {investmentPriorities.map((priority) => (
+                <div key={priority.title} className="rounded-xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+                  <div className="flex items-start gap-3">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#F0B429]" />
+                    <div>
+                      <div className="text-sm font-semibold text-slate-900">{priority.title}</div>
+                      <p className="mt-1 text-sm leading-6 text-slate-700">{priority.body}</p>
+                    </div>
+                  </div>
                 </div>
               ))}
+            </div>
+
+            <div className="mt-8 border-t border-slate-200 pt-6">
+              <div className="text-xs font-semibold uppercase tracking-[0.28em] text-[#F0B429]">Near-Term Milestones</div>
+              <div className="mt-4 grid gap-x-8 gap-y-3 md:grid-cols-2">
+                {nearTermMilestones.map((milestone) => (
+                  <div key={milestone} className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#F0B429]" />
+                    <span className="text-sm leading-6 text-slate-800">{milestone}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-8 border-t border-slate-200 pt-6">
+              <div className="text-xs font-semibold uppercase tracking-[0.28em] text-[#F0B429]">Business Model</div>
+              <p className="mt-3 max-w-4xl text-sm leading-6 text-slate-700">
+                Tool-led acquisition and aviation-community channels introduce pilots to RSF. Once inside, the connected
+                platform expands their workflow across rentals, training, planning, records, subscriptions, and services.
+              </p>
+              <div className="mt-4 grid gap-x-8 gap-y-3 md:grid-cols-2">
+                {businessModel.map((item) => (
+                  <div key={item} className="flex items-start gap-3 rounded-xl border border-slate-100 bg-slate-50/70 px-4 py-3">
+                    <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#F0B429]" />
+                    <span className="text-sm leading-6 text-slate-800">{item}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </section>
@@ -374,7 +488,9 @@ export default function InvestorDeck() {
                   </a>
                 </div>
                 <div className="text-sm text-slate-600">
-                  Full-stack platform in soft launch - actively acquiring users.
+                  Operating web and mobile platform—currently focused on validation, commercialization, pilot growth,
+                  and reliable scale. Current registered, active, and paying-user metrics require founder verification
+                  before publication.
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">

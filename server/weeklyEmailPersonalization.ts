@@ -215,7 +215,7 @@ function buildModules(segment: WeeklyDigestSegment): Omit<WeeklyDigestProfile, "
             title: "Logbook Pro",
             description: "Review Pro features for deeper tracking, currency support, and added workflow tools.",
             ctaLabel: "View Logbook Pro",
-            ctaUrl: "/logbook/pro",
+            ctaUrl: "/membership",
           },
           {
             id: "planner",

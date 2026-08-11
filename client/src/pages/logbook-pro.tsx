@@ -44,7 +44,7 @@ type LogbookProPageProps = {
   offerBasePath?: string;
 };
 
-export default function LogbookProPage({ offerSlugOverride, offerBasePath = "/logbook/pro" }: LogbookProPageProps = {}) {
+export default function LogbookProPage({ offerSlugOverride, offerBasePath = "/membership" }: LogbookProPageProps = {}) {
   const { user, isAuthenticated } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -66,7 +66,7 @@ export default function LogbookProPage({ offerSlugOverride, offerBasePath = "/lo
   const buildPartnerOfferPath = (claim?: string) => {
     const base = offerSlugOverride
       ? offerBasePath
-      : `/logbook/pro?offer=${encodeURIComponent(offerSlug)}`;
+      : `/membership?offer=${encodeURIComponent(offerSlug)}`;
     if (!claim) return base;
     return `${base}${base.includes("?") ? "&" : "?"}claim=${encodeURIComponent(claim)}`;
   };
@@ -144,8 +144,8 @@ export default function LogbookProPage({ offerSlugOverride, offerBasePath = "/lo
   });
 
   useEffect(() => {
-    trackEvent("upgrade_page_viewed", { page: "/logbook/pro", source_page: sourcePage });
-    trackEvent("subscription_offer_viewed", { page: "/logbook/pro", source_page: sourcePage });
+    trackEvent("upgrade_page_viewed", { page: "/membership", source_page: sourcePage });
+    trackEvent("subscription_offer_viewed", { page: "/membership", source_page: sourcePage });
   }, [sourcePage]);
 
   useEffect(() => {
@@ -155,7 +155,7 @@ export default function LogbookProPage({ offerSlugOverride, offerBasePath = "/lo
   }, [claimToken, isAuthenticated, offerSlug]);
 
   if (!isAuthenticated && !offerSlug) {
-    const returnTarget = offerSlug ? buildPartnerOfferPath() : "/logbook/pro";
+    const returnTarget = offerSlug ? buildPartnerOfferPath() : "/membership";
     return (
       <div className="container mx-auto px-4 py-10">
         <Card>
@@ -209,7 +209,7 @@ export default function LogbookProPage({ offerSlugOverride, offerBasePath = "/lo
     setLoading(true);
     try {
       trackEvent("subscription_checkout_started", {
-        page: "/logbook/pro",
+        page: "/membership",
         source_page: sourcePage,
         tier: selectedTier,
         interval: selectedPlan.interval,
@@ -240,7 +240,7 @@ export default function LogbookProPage({ offerSlugOverride, offerBasePath = "/lo
     if (!confirm("Cancel RSF Premium? You can continue using the free tools.")) return;
     setLoading(true);
     try {
-      trackEvent("subscription_cancel_requested", { page: "/logbook/pro" });
+      trackEvent("subscription_cancel_requested", { page: "/membership" });
       const res = await apiRequest("POST", "/api/paypal/membership/cancel", { reason: "User cancellation" });
       const data = await res.json();
       if (!res.ok) {
@@ -257,7 +257,7 @@ export default function LogbookProPage({ offerSlugOverride, offerBasePath = "/lo
 
   const handleLockedPreviewInteraction = (tool: string) => {
     trackEvent("premium_locked_preview_interaction", {
-      page: "/logbook/pro",
+      page: "/membership",
       source_page: sourcePage,
       tool,
     });
@@ -824,7 +824,7 @@ export default function LogbookProPage({ offerSlugOverride, offerBasePath = "/lo
               </Button>
             ) : (
               <Button asChild className={logbookPrimaryButtonClass}>
-                <a href={withReturnTo("/register", "/logbook/pro")}>Subscribe to Premium</a>
+                <a href={withReturnTo("/register", "/membership")}>Subscribe to Premium</a>
               </Button>
             )}
           </DialogFooter>

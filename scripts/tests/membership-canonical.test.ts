@@ -114,9 +114,15 @@ test("monthly and annual PayPal plan IDs map to the same Premium entitlement", (
 
 test("membership UI and AI limits prefer canonical Premium vocabulary", () => {
   const membershipPage = readFileSync("client/src/pages/logbook-pro.tsx", "utf8");
+  const appRoutes = readFileSync("client/src/App.tsx", "utf8");
   const aiTools = readFileSync("server/routes/aiTools.ts", "utf8");
 
   assert.match(membershipPage, /entitlements\?\.tier \|\| \(user as any\)\?\.membershipTier/);
+  assert.match(membershipPage, /offerBasePath = "\/membership"/);
+  assert.match(appRoutes, /path="\/membership" component=\{\(\) => <LogbookPro \/>\}/);
+  assert.match(appRoutes, /path="\/logbook\/pro" component=\{\(\) => <LogbookPro \/>\}/);
+  assert.match(appRoutes, /path="\/membership\/success" component=\{LogbookProSuccess\}/);
+  assert.match(appRoutes, /path="\/logbook\/pro\/success" component=\{LogbookProSuccess\}/);
   assert.match(aiTools, /isPremium: entitlements\.tier === "premium"/);
   assert.match(aiTools, /requiresPremium: true/);
   assert.match(aiTools, /requiresPro: true, \/\/ Deprecated response alias/);

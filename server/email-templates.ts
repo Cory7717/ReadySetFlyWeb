@@ -1000,7 +1000,7 @@ export async function sendMembershipGrantEmail(data: {
       </div>
       <p style="margin-top: 20px;">During this access window, you can explore the full RSF Premium experience including saved workflow, planning continuity, training history, and the broader premium toolset tied to your account.</p>
       ${reasonLine}
-      <a class="cta" href="${frontendBase}/logbook/pro">Open RSF Premium</a>
+      <a class="cta" href="${frontendBase}/membership">Open RSF Premium</a>
       <p style="margin-top: 22px;">If you have questions, reply to this email and the RSF team will help.</p>
     </div>
     <div class="footer">Ready Set Fly account update</div>
@@ -1021,7 +1021,7 @@ Access ends: ${endsAtLabel}
 
 During this access window, you can explore the full RSF Premium experience including saved workflow, planning continuity, training history, and the broader premium toolset tied to your account.${reasonText}
 
-Open RSF Premium: ${frontendBase}/logbook/pro
+Open RSF Premium: ${frontendBase}/membership
 
 If you have questions, reply to this email and the RSF team will help.
   `.trim();

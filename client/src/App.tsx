@@ -203,7 +203,7 @@ function LockedPremiumToolPreview({
   const [location] = useLocation();
   const [open, setOpen] = useState(false);
   const signupHref = isAuthenticated
-    ? "/logbook/pro"
+    ? "/membership"
     : `/register?returnTo=${encodeURIComponent(location || "/")}`;
 
   return (
@@ -358,6 +358,7 @@ function Router() {
       <Route path="/synthetic-vision" component={SyntheticVisionPage} />
       <Route path="/flight-demo" component={SyntheticVisionPage} />
       <Route path="/logbook/pro" component={() => <LogbookPro />} />
+      <Route path="/membership" component={() => <LogbookPro />} />
       <Route path="/flight-planner" component={FlightPlanner} />
       <Route
         path="/pilot-tools"
@@ -519,6 +520,8 @@ function Router() {
           <Route path="/logbook" component={Logbook} />
           <Route path="/logbook/pro/success" component={LogbookProSuccess} />
           <Route path="/logbook/pro/cancel" component={LogbookProCancel} />
+          <Route path="/membership/success" component={LogbookProSuccess} />
+          <Route path="/membership/cancel" component={LogbookProCancel} />
 
           <Route path="/my-aircraft" component={MyAircraft} />
           <Route path="/notifications" component={NotificationsPage} />
@@ -645,6 +648,8 @@ function Router() {
           <Route path="/logbook" component={RequireAuth} />
           <Route path="/logbook/pro/success" component={RequireAuth} />
           <Route path="/logbook/pro/cancel" component={RequireAuth} />
+          <Route path="/membership/success" component={RequireAuth} />
+          <Route path="/membership/cancel" component={RequireAuth} />
 
           <Route path="/my-aircraft" component={RequireAuth} />
           <Route path="/notifications" component={RequireAuth} />

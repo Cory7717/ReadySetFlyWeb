@@ -7684,8 +7684,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const buildSubscriptionReturnUrls = () => {
     const baseUrl = getPublicBaseUrl();
     return {
-      return_url: `${baseUrl}/logbook/pro/success`,
-      cancel_url: `${baseUrl}/logbook/pro/cancel`,
+      return_url: `${baseUrl}/membership/success`,
+      cancel_url: `${baseUrl}/membership/cancel`,
     };
   };
 
@@ -13154,7 +13154,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const sharePath =
       offer.slug === "abs-2mo-pro-plus"
         ? "/abs/redeem"
-        : `/logbook/pro?offer=${encodeURIComponent(offer.slug)}`;
+        : `/membership?offer=${encodeURIComponent(getMembershipPartnerOfferPublicSlug(offer.slug))}`;
     const signupPath = `/register?redirect=${encodeURIComponent(sharePath)}`;
     return {
       ...offer,

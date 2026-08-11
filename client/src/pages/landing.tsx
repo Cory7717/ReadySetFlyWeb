@@ -380,7 +380,7 @@ export default function Landing() {
     [weather?.metar, weather?.taf, notams?.notams]
   );
   const isPaidUser = (user as any)?.entitlements?.tier === "premium";
-  const membershipPageHref = "/logbook/pro";
+  const membershipPageHref = "/membership";
   const membershipCtaLabel = isPaidUser ? "Manage Membership" : "Subscribe Now";
   const membershipCtaDescription = isPaidUser
       ? "Open your RSF Premium page to manage plan details, trials, and membership settings."
@@ -1894,7 +1894,7 @@ export default function Landing() {
                     {partnerOffers.map((offer) => {
                       const offerHref = offer.slug === "abs-premium"
                         ? "/abs/redeem"
-                        : `/logbook/pro?offer=${encodeURIComponent(offer.slug)}`;
+                        : `/membership?offer=${encodeURIComponent(offer.slug)}`;
                       const partnerShortLabel =
                         offer.slug.startsWith("cpa-")
                           ? "CPA Exclusive"

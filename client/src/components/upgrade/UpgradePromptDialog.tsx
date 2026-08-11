@@ -81,9 +81,9 @@ export function UpgradePromptDialog({
               <Button
                 className="mt-4 w-full"
                 asChild
-                onClick={() => trackEvent("subscription_cta_click", { source_page: path || "/", target: "/logbook/pro", context: toolName, tier: "premium" })}
+                onClick={() => trackEvent("subscription_cta_click", { source_page: path || "/", target: "/membership", context: toolName, tier: "premium" })}
               >
-                <Link href={withSourceParam("/logbook/pro", path || "/")}>Upgrade to Premium</Link>
+                <Link href={withSourceParam("/membership", path || "/")}>Upgrade to Premium</Link>
               </Button>
             </CardContent>
           </Card>

@@ -134,7 +134,7 @@ export function NotamTranslator({
 
       {(remainingUses === 0 || error?.includes("RSF Premium")) && (
         <Button asChild size="sm" className="w-full sm:w-auto">
-          <Link href="/logbook/pro">Upgrade to RSF Premium</Link>
+          <Link href="/membership">Upgrade to RSF Premium</Link>
         </Button>
       )}
     </div>

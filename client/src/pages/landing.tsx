@@ -107,8 +107,6 @@ const EMPTY_QUICK_LOG_DRAFT: QuickLogDraft = {
   remarks: "",
 };
 
-const LANDING_PARTNER_OFFER_SLUGS = ["cpa-3mo-pro-plus", "abs-2mo-pro-plus"] as const;
-
 type LandingModuleId = "conditions" | "cfi" | "partner" | "events";
 type MobileTab = LandingMobileTab;
 
@@ -151,16 +149,11 @@ export default function Landing() {
     },
   });
   const { data: partnerOffers = [] } = useQuery<MembershipPartnerOfferPublic[]>({
-    queryKey: ["/api/membership-partner-offers", "landing", ...LANDING_PARTNER_OFFER_SLUGS],
+    queryKey: ["/api/membership-partner-offers/featured"],
     queryFn: async () => {
-      const responses = await Promise.all(
-        LANDING_PARTNER_OFFER_SLUGS.map(async (slug) => {
-          const response = await fetch(apiUrl(`/api/membership-partner-offers/${slug}`));
-          if (!response.ok) return null;
-          return (await response.json()) as MembershipPartnerOfferPublic;
-        })
-      );
-      return responses.filter((offer): offer is MembershipPartnerOfferPublic => Boolean(offer));
+      const response = await fetch(apiUrl("/api/membership-partner-offers/featured"));
+      if (!response.ok) return [];
+      return (await response.json()) as MembershipPartnerOfferPublic[];
     },
     staleTime: 1000 * 60 * 10,
   });
@@ -1899,7 +1892,7 @@ export default function Landing() {
                 {partnerOffers.length > 0 ? (
                   <div className="grid gap-4 xl:grid-cols-2">
                     {partnerOffers.map((offer) => {
-                      const offerHref = offer.slug === "abs-2mo-pro-plus"
+                      const offerHref = offer.slug === "abs-premium"
                         ? "/abs/redeem"
                         : `/logbook/pro?offer=${encodeURIComponent(offer.slug)}`;
                       const partnerShortLabel =

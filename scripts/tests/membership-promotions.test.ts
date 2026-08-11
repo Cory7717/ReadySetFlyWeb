@@ -17,8 +17,8 @@ const landingSource = readFileSync("client/src/pages/landing.tsx", "utf8");
 
 test("membership promotion schema is separate from listing promo codes", () => {
   assert.match(schemaSource, /export const promoCodes = pgTable\("promo_codes"/);
-  assert.match(schemaSource, /export const membershipPromotions = pgTable\("membership_promotions"/);
-  assert.match(schemaSource, /export const membershipPromotionRedemptions = pgTable\("membership_promotion_redemptions"/);
+  assert.match(schemaSource, /export const membershipPromotions = pgTable\(\s*"membership_promotions"/);
+  assert.match(schemaSource, /export const membershipPromotionRedemptions = pgTable\(\s*"membership_promotion_redemptions"/);
   assert.match(migrationSource, /CREATE TABLE IF NOT EXISTS membership_promotions/);
   assert.match(migrationSource, /CREATE TABLE IF NOT EXISTS membership_promotion_redemptions/);
   assert.doesNotMatch(routesSource, /validatePromoCodeForContext\(code,\s*"membership"/);
@@ -53,7 +53,7 @@ test("registration and redeem page support optional membership promo codes", () 
   assert.match(registerSource, /promoCode: z\.string\(\)\.max\(120\)\.optional\(\)/);
   assert.match(registerSource, /Have a partner, event, or giveaway code\? Enter it here\./);
   assert.match(routesSource, /\/api\/membership-promotions\/redeem/);
-  assert.match(routesSource, /app\.post\("\/api\/membership-promotions\/redeem", isAuthenticated/);
+  assert.match(routesSource, /app\.post\(\s*"\/api\/membership-promotions\/redeem",\s*isAuthenticated/);
   assert.match(redeemSource, /PENDING_PROMO_KEY/);
   assert.match(redeemSource, /Continue with Google/);
   assert.match(redeemSource, /setLocation\(`\/register\?code=\$\{encodeURIComponent\(code\.trim\(\)\)\}&returnTo=/);
@@ -65,7 +65,7 @@ test("registration and redeem page support optional membership promo codes", () 
 });
 
 test("super admin membership promotions are distinct from listing promo admin", () => {
-  assert.match(routesSource, /\/api\/admin\/membership-promotions", isAuthenticated, isSuperAdmin/);
+  assert.match(routesSource, /"\/api\/admin\/membership-promotions",\s*isAuthenticated,\s*isSuperAdmin/);
   assert.match(appSource, /super-admin\/membership-promotions/);
   assert.match(readFileSync("client/src/pages/membership-promotions-admin.tsx", "utf8"), /Membership Promotions/);
 });
@@ -77,14 +77,24 @@ test("ABS 2 month partner offer is seeded and surfaced through the partner flow"
   assert.match(absPartnerMigrationSource, /'premium'/);
   assert.match(absPartnerMigrationSource, /duration_days[\s\S]*60/);
   assert.match(absPartnerMigrationSource, /is_active[\s\S]*true/);
-  assert.match(landingSource, /"abs-2mo-pro-plus"/);
+  assert.match(landingSource, /\/api\/membership-partner-offers\/featured/);
   assert.match(landingSource, /\/abs\/redeem/);
   assert.match(logbookProSource, /\/api\/membership-partner-offers\/\$\{offerSlug\}/);
   assert.match(logbookProSource, /\/api\/membership-partner-offers\/validate-member/);
   assert.match(logbookProSource, /\/api\/membership-partner-offers\/redeem/);
-  assert.match(absRedeemSource, /offerSlugOverride="abs-2mo-pro-plus"/);
+  assert.match(absRedeemSource, /offerSlugOverride="abs-premium"/);
   assert.match(appSource, /path="\/abs\/redeem" component=\{AbsRedeem\}/);
   assert.match(appSource, /path="\/logbook\/pro" component=\{\(\) => <LogbookPro \/>\}/);
+});
+
+test("partner offer public aliases preserve legacy storage slugs and direct links", () => {
+  assert.match(routesSource, /"cpa-premium": "cpa-3mo-pro-plus"/);
+  assert.match(routesSource, /"abs-premium": "abs-2mo-pro-plus"/);
+  assert.match(routesSource, /resolveMembershipPartnerOfferStorageSlug/);
+  assert.match(routesSource, /getMembershipPartnerOfferPublicSlug/);
+  assert.match(routesSource, /app\.get\("\/api\/membership-partner-offers\/featured"/);
+  assert.match(routesSource, /app\.get\("\/api\/membership-partner-offers\/:slug"/);
+  assert.doesNotMatch(landingSource, /LANDING_PARTNER_OFFER_SLUGS/);
 });
 
 test("membership plan selector uses explicit dark-panel contrast colors", () => {
@@ -103,12 +113,12 @@ test("membership plan selector uses explicit dark-panel contrast colors", () => 
 
 test("ABS flexible member identifiers are persisted before redemption to prevent reuse", () => {
   assert.match(routesSource, /FLEXIBLE_PARTNER_IDENTIFIER_SLUGS = new Set\(\["abs-2mo-pro-plus"\]\)/);
-  assert.match(routesSource, /buildFlexiblePartnerIdentifier\(selfAttestedValue \|\| normalizedMemberNumber\)/);
-  assert.match(routesSource, /storage\.addMembershipPartnerOfferMembers\(offer\.id, \[\{/);
+  assert.match(routesSource, /buildFlexiblePartnerIdentifier\(\s*selfAttestedValue \|\| normalizedMemberNumber,?\s*\)/);
+  assert.match(routesSource, /storage\.addMembershipPartnerOfferMembers\(offer\.id, \[\s*\{/);
   assert.match(routesSource, /normalizedMemberNumber = flexibleIdentifier/);
-  assert.match(routesSource, /member = await storage\.getMembershipPartnerOfferMemberByNumber\(offer\.id, normalizedMemberNumber\)/);
+  assert.match(routesSource, /member = await storage\.getMembershipPartnerOfferMemberByNumber\(\s*offer\.id,\s*normalizedMemberNumber,?\s*\)/);
   assert.match(routesSource, /if \(member\?\.redeemedAt \|\| member\?\.redeemedByUserId\)/);
-  assert.match(routesSource, /storage\.redeemMembershipPartnerOfferMember\(member\.id, userId\)/);
+  assert.match(routesSource, /storage\.redeemMembershipPartnerOfferMember\(\s*member\.id,\s*userId,?\s*\)/);
 });
 
 test("membership grants do not mutate recurring billing state", () => {

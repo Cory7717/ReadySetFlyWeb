@@ -706,6 +706,31 @@ const normalizeMembershipOfferSlug = (value: string) =>
     .replace(/-+/g, "-")
     .replace(/^-|-$/g, "");
 
+const MEMBERSHIP_PARTNER_OFFER_ALIASES = {
+  "cpa-premium": "cpa-3mo-pro-plus",
+  "abs-premium": "abs-2mo-pro-plus",
+} as const;
+
+const FEATURED_MEMBERSHIP_PARTNER_OFFER_SLUGS = [
+  "cpa-premium",
+  "abs-premium",
+] as const;
+
+const resolveMembershipPartnerOfferStorageSlug = (value: string) => {
+  const normalized = normalizeMembershipOfferSlug(value);
+  return MEMBERSHIP_PARTNER_OFFER_ALIASES[
+    normalized as keyof typeof MEMBERSHIP_PARTNER_OFFER_ALIASES
+  ] || normalized;
+};
+
+const getMembershipPartnerOfferPublicSlug = (value: string) => {
+  const normalized = normalizeMembershipOfferSlug(value);
+  const alias = Object.entries(MEMBERSHIP_PARTNER_OFFER_ALIASES).find(
+    ([, storageSlug]) => storageSlug === normalized,
+  );
+  return alias?.[0] || normalized;
+};
+
 const normalizePartnerMemberNumber = (value: string) =>
   value
     .trim()
@@ -13142,9 +13167,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     };
   };
 
+  const getPublicMembershipPartnerOffer = (offer: MembershipPartnerOffer) => ({
+    id: offer.id,
+    name: offer.name,
+    partnerName: offer.partnerName,
+    slug: getMembershipPartnerOfferPublicSlug(offer.slug),
+    description: offer.description,
+    tier: normalizeMembershipTier(offer.tier),
+    durationDays: offer.durationDays,
+    acceptsFlexibleIdentifier: allowsFlexiblePartnerIdentifier(offer),
+    memberInputLabel: allowsFlexiblePartnerIdentifier(offer)
+      ? "Member number or email"
+      : "Member number",
+    memberInputHint: allowsFlexiblePartnerIdentifier(offer)
+      ? "ABS rollout mode: member number, email address, and entries with spaces or dashes are accepted."
+      : "Spaces and dashes are ignored during verification.",
+  });
+
+  app.get("/api/membership-partner-offers/featured", async (_req, res) => {
+    try {
+      const offers = await Promise.all(
+        FEATURED_MEMBERSHIP_PARTNER_OFFER_SLUGS.map((slug) =>
+          storage.getMembershipPartnerOfferBySlug(
+            resolveMembershipPartnerOfferStorageSlug(slug),
+          ),
+        ),
+      );
+      res.json(
+        offers
+          .filter(
+            (offer): offer is MembershipPartnerOffer =>
+              Boolean(offer?.isActive),
+          )
+          .map(getPublicMembershipPartnerOffer),
+      );
+    } catch (error) {
+      console.error("Failed to load featured membership partner offers:", error);
+      res.status(500).json({ error: "Failed to load featured offers" });
+    }
+  });
+
   app.get("/api/membership-partner-offers/:slug", async (req, res) => {
     try {
-      const slug = normalizeMembershipOfferSlug(String(req.params.slug || ""));
+      const slug = resolveMembershipPartnerOfferStorageSlug(String(req.params.slug || ""));
       if (!slug) {
         return res.status(400).json({ error: "Offer slug is required" });
       }
@@ -13152,22 +13217,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!offer || !offer.isActive) {
         return res.status(404).json({ error: "Offer not found" });
       }
-      res.json({
-        id: offer.id,
-        name: offer.name,
-        partnerName: offer.partnerName,
-        slug: offer.slug,
-        description: offer.description,
-        tier: normalizeMembershipTier(offer.tier),
-        durationDays: offer.durationDays,
-        acceptsFlexibleIdentifier: allowsFlexiblePartnerIdentifier(offer),
-        memberInputLabel: allowsFlexiblePartnerIdentifier(offer)
-          ? "Member number or email"
-          : "Member number",
-        memberInputHint: allowsFlexiblePartnerIdentifier(offer)
-          ? "ABS rollout mode: member number, email address, and entries with spaces or dashes are accepted."
-          : "Spaces and dashes are ignored during verification.",
-      });
+      res.json(getPublicMembershipPartnerOffer(offer));
     } catch (error) {
       console.error("Failed to load membership partner offer:", error);
       res.status(500).json({ error: "Failed to load offer" });
@@ -13183,7 +13233,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           return res.status(400).json({ error: parsed.error.format() });
         }
 
-        const slug = normalizeMembershipOfferSlug(parsed.data.slug);
+        const slug = resolveMembershipPartnerOfferStorageSlug(parsed.data.slug);
         const rawMemberInput = parsed.data.memberNumber.trim();
         const normalizedMemberNumber =
           normalizePartnerMemberNumber(rawMemberInput);
@@ -13215,7 +13265,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
           claimToken = signMembershipPartnerClaimToken({
             offerId: offer.id,
-            slug: offer.slug,
+            slug: getMembershipPartnerOfferPublicSlug(offer.slug),
             memberId: member.id,
             normalizedMemberNumber,
             inputMode: "roster",
@@ -13223,7 +13273,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         } else if (allowsFlexiblePartnerIdentifier(offer)) {
           claimToken = signMembershipPartnerClaimToken({
             offerId: offer.id,
-            slug: offer.slug,
+            slug: getMembershipPartnerOfferPublicSlug(offer.slug),
             normalizedMemberNumber:
               buildFlexiblePartnerIdentifier(rawMemberInput),
             inputMode: "self_attest",
@@ -13289,14 +13339,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 error: "This partner offer claim is invalid or expired",
               });
           }
-          slug = normalizeMembershipOfferSlug(claim.slug);
+          slug = resolveMembershipPartnerOfferStorageSlug(claim.slug);
           normalizedMemberNumber = claim.normalizedMemberNumber;
           tokenMemberId = claim.memberId || "";
           claimInputMode =
             claim.inputMode === "self_attest" ? "self_attest" : "roster";
           selfAttestedValue = claim.selfAttestedValue?.trim() || "";
         } else {
-          slug = normalizeMembershipOfferSlug(parsed.data.slug || "");
+          slug = resolveMembershipPartnerOfferStorageSlug(parsed.data.slug || "");
           selfAttestedValue = parsed.data.memberNumber?.trim() || "";
           normalizedMemberNumber = normalizePartnerMemberNumber(
             parsed.data.memberNumber || "",
@@ -13437,7 +13487,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             tier: resolvedTier,
             durationDays: offer.durationDays,
             grantEndsAt: resolvedEndsAt.toISOString(),
-            offerSlug: offer.slug,
+            offerSlug: getMembershipPartnerOfferPublicSlug(offer.slug),
             partnerName: offer.partnerName,
             partnerIdentifier: identifierForReason,
             partnerIdentifierMode: member ? "roster" : "self_attest",
@@ -13466,7 +13516,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             id: offer.id,
             name: offer.name,
             partnerName: offer.partnerName,
-            slug: offer.slug,
+            slug: getMembershipPartnerOfferPublicSlug(offer.slug),
             tier: resolvedTier,
             durationDays: offer.durationDays,
           },

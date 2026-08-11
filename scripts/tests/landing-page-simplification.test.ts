@@ -71,6 +71,11 @@ test("landing premium flat-rate banner is hidden from signed-in users", () => {
   assert.match(landingSource, /landing_premium_banner/);
 });
 
+test("landing recognizes paid membership from the canonical Premium entitlement", () => {
+  assert.match(landingSource, /entitlements\?\.tier\s*===\s*["']premium["']/);
+  assert.doesNotMatch(landingSource, /entitlements\?\.isPro(?:Plus)?/);
+});
+
 test("landing app download badges render near the top of the page", () => {
   assert.match(landingSource, /source="landing_top_bar"/);
   assert.match(landingSource, /Ready Set Fly is available on Android/);

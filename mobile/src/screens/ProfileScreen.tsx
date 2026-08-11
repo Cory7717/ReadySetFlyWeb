@@ -260,12 +260,9 @@ export default function ProfileScreen({ navigation }: any) {
     reviews.length > 0
       ? (reviews.reduce((sum, review) => sum + Number(review.rating || 0), 0) / reviews.length).toFixed(1)
       : '—';
-  const membershipLabel =
-    user?.membershipTier === 'pro_plus'
-      ? 'RSF Pro+'
-      : user?.membershipTier === 'pro'
-        ? 'RSF Pro'
-        : 'Free';
+  const membershipLabel = (user as any)?.entitlements?.tier === 'premium'
+    ? 'RSF Premium'
+    : 'Free';
 
   if (isLoading) {
     return (
@@ -429,7 +426,7 @@ export default function ProfileScreen({ navigation }: any) {
           <CommandCard
             icon="card-outline"
             title="Membership"
-            subtitle="View RSF Pro status, billing, and upgrades."
+            subtitle="View RSF Premium status, billing, and upgrades."
             onPress={() => navigation.navigate('LogbookPro')}
           />
         </View>

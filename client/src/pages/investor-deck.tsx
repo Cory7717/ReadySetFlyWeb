@@ -80,7 +80,7 @@ const nearTermMilestones = [
 const businessModel = [
   "Aircraft rentals: free to list, with RSF earning a commission on completed rental transactions.",
   "Marketplace: paid listings and promotional placement where applicable.",
-  "RSF Pro / Pro+: recurring subscription revenue for connected pilot workflow, planning, logbook, analytics, and advanced functionality.",
+  "RSF Premium: recurring subscription revenue for connected pilot workflow, planning, logbook, analytics, and advanced functionality.",
   "Advertising: aviation-focused advertising and partner placements.",
   "CFI and flight-school opportunities supported by professional and institutional workflows.",
 ];

@@ -386,14 +386,10 @@ export default function Landing() {
     () => parseWeatherHazards(weather?.metar, weather?.taf, notams?.notams ?? []),
     [weather?.metar, weather?.taf, notams?.notams]
   );
-  const hasProCore = !!(user as any)?.entitlements?.isPro;
-  const hasProPlus = !!(user as any)?.entitlements?.isProPlus;
-  const isPaidUser = hasProCore || hasProPlus;
+  const isPaidUser = (user as any)?.entitlements?.tier === "premium";
   const membershipPageHref = "/logbook/pro";
   const membershipCtaLabel = isPaidUser ? "Manage Membership" : "Subscribe Now";
-  const membershipCtaDescription = hasProCore && !hasProPlus
-    ? "Move into the training stack, advanced sims, and higher-end pilot workflow tools."
-    : isPaidUser
+  const membershipCtaDescription = isPaidUser
       ? "Open your RSF Premium page to manage plan details, trials, and membership settings."
       : "Open the dedicated RSF Premium page for plan details, feature breakdowns, and subscription links.";
   const metallicPrimaryButtonClass = "rsf-metal-button-primary";
@@ -1273,7 +1269,7 @@ export default function Landing() {
                   Open digital logbook
                 </Link>
               </Button>
-              {hasProPlus ? (
+              {isPaidUser ? (
                 <Button asChild variant="outline" className={`w-full ${metallicSecondaryButtonClass}`}>
                   <Link href="/cfi/training-center">CFI Training Center</Link>
                 </Button>

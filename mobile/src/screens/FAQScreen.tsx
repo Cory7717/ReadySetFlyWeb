@@ -4,8 +4,8 @@ import { colors, radius, shadow, spacing, typography } from '../styles/theme';
 
 const FAQS = [
   {
-    q: 'Why subscribe to RSF Pro?',
-    a: 'RSF Pro unlocks advanced flight planning, radio comms training, saved routes, and premium logbook analytics.',
+    q: 'Why subscribe to RSF Premium?',
+    a: 'RSF Premium unlocks advanced flight planning, radio comms training, saved routes, and premium logbook analytics.',
   },
   {
     q: 'Are the training tools FAA-approved?',

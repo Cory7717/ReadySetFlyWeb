@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { useAuth } from "@/hooks/useAuth";
 import { trackEvent } from "@/lib/analytics";
+import { isPremiumTier } from "@shared/membership-plans";
 import { useLocation } from "wouter";
 
 const HIDE_PREFIXES = [
@@ -59,7 +60,7 @@ export function MembershipGrantAnnouncement() {
   const [open, setOpen] = useState(false);
   const [ready, setReady] = useState(false);
 
-  const grantTier = ["premium", "pro", "pro_plus"].includes(String(user?.membershipGrantTier || ""))
+  const grantTier = isPremiumTier(user?.membershipGrantTier)
     ? "premium"
     : null;
   const grantEndsAt = user?.membershipGrantEndsAt || null;

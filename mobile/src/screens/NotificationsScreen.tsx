@@ -142,13 +142,13 @@ export default function NotificationsScreen() {
         <View style={styles.summaryRow}>
           <SummaryTile label="Unread" value={String(unreadCount)} />
           <SummaryTile label="History" value={String(notifications.length)} />
-          <SummaryTile label="Alerts" value={isPro ? 'Pro active' : 'Upgrade'} />
+          <SummaryTile label="Alerts" value={isPro ? 'Premium active' : 'Upgrade'} />
         </View>
       </View>
 
       {isAuthenticated && isPro ? (
         <SectionCard
-          title="RSF Pro alert preferences"
+          title="RSF Premium alert preferences"
           subtitle={`Alerts are currently set to go out ${prefs.alertDaysBefore} days before due dates.`}
         >
           <View style={styles.toggleRow}>
@@ -195,11 +195,11 @@ export default function NotificationsScreen() {
         </SectionCard>
       ) : (
         <SectionCard
-          title="RSF Pro alerts"
-          subtitle="Currency and expiration reminders are part of the RSF Pro and Pro+ workflow."
+          title="RSF Premium alerts"
+          subtitle="Currency and expiration reminders are part of the RSF Premium workflow."
         >
           <Text style={styles.upgradeCopy}>
-            Upgrade to RSF Pro or Pro+ to unlock currency reminders, due-date alerts, and a more complete member notification loop.
+            Upgrade to RSF Premium to unlock currency reminders, due-date alerts, and a more complete member notification loop.
           </Text>
         </SectionCard>
       )}

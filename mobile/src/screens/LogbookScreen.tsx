@@ -69,7 +69,7 @@ export default function LogbookScreen({ navigation }: any) {
           <Ionicons name="lock-closed-outline" size={34} color={colors.textSoft} />
           <Text style={styles.lockedTitle}>Sign in to access your logbook.</Text>
           <Text style={styles.lockedText}>
-            Keep flight time, routes, aircraft usage, and RSF Pro history in one place.
+            Keep flight time, routes, aircraft usage, and RSF Premium history in one place.
           </Text>
           <TouchableOpacity
             style={styles.primaryButton}
@@ -95,7 +95,7 @@ export default function LogbookScreen({ navigation }: any) {
             </Text>
           </View>
           <View style={styles.heroBadge}>
-            <Text style={styles.heroBadgeText}>{isPro ? 'Pro active' : 'Free'}</Text>
+            <Text style={styles.heroBadgeText}>{isPro ? 'Premium active' : 'Free'}</Text>
           </View>
         </View>
 
@@ -163,7 +163,7 @@ export default function LogbookScreen({ navigation }: any) {
             </View>
           </View>
           <Text style={styles.memberText}>
-            RSF Pro adds a more complete pilot workspace around the logbook, including member dashboards and deeper recurrent workflows.
+            RSF Premium adds a more complete pilot workspace around the logbook, including member dashboards and deeper recurrent workflows.
           </Text>
           <TouchableOpacity
             style={styles.memberButton}

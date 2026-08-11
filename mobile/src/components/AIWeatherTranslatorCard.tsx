@@ -84,7 +84,7 @@ export default function AIWeatherTranslatorCard({
         <Text style={styles.meta}>
           {remainingUses > 0
             ? `${remainingUses} free AI use${remainingUses === 1 ? '' : 's'} remaining.`
-            : 'Free AI usage limit reached. Pro Core is required for additional AI use.'}
+            : 'Free AI usage limit reached. RSF Premium is required for additional AI use.'}
         </Text>
       ) : null}
 

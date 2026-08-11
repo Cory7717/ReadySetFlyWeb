@@ -199,7 +199,7 @@ export default function ProfileStack() {
       <Stack.Screen 
         name="LogbookPro" 
         component={LogbookProScreen}
-        options={{ title: 'RSF Pro' }}
+        options={{ title: 'RSF Premium' }}
       />
       <Stack.Screen
         name="Endorsements"

@@ -82,8 +82,7 @@ export default function HomeScreen({ navigation }: any) {
   const { isAuthenticated, user, isLoading } = useIsAuthenticated();
   const entitlements = (user as any)?.entitlements;
   const membershipTier = entitlements?.tier || 'free';
-  const membershipLabel =
-    membershipTier === 'pro_plus' ? 'Pro+' : membershipTier === 'pro' ? 'Pro' : 'Free';
+  const membershipLabel = membershipTier === 'premium' ? 'Premium' : 'Free';
 
   const [activeFlight, setActiveFlight] = useState<ActiveFlight | null>(null);
 

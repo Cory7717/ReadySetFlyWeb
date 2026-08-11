@@ -91,7 +91,7 @@ export default function LogbookProScreen({ navigation }: any) {
         });
       }
     } catch (error: any) {
-      Alert.alert('RSF Pro', extractApiErrorMessage(error, 'Unable to load RSF Pro data.'));
+      Alert.alert('RSF Premium', extractApiErrorMessage(error, 'Unable to load RSF Premium data.'));
     }
   };
 
@@ -173,9 +173,9 @@ export default function LogbookProScreen({ navigation }: any) {
         ipcDate: proForm.ipcDate || null,
       });
       await loadProData();
-      Alert.alert('Saved', 'RSF Pro settings updated.');
+      Alert.alert('Saved', 'RSF Premium settings updated.');
     } catch (error: any) {
-      Alert.alert('Update failed', extractApiErrorMessage(error, 'Unable to save RSF Pro settings.'));
+      Alert.alert('Update failed', extractApiErrorMessage(error, 'Unable to save RSF Premium settings.'));
     } finally {
       setSavingSettings(false);
     }
@@ -227,7 +227,7 @@ export default function LogbookProScreen({ navigation }: any) {
     return (
       <ScrollView style={styles.container} contentContainerStyle={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.title}>RSF Pro Dashboard</Text>
+          <Text style={styles.title}>RSF Premium Dashboard</Text>
           <Text style={styles.subtitle}>Currency tracking, expirations, and alerts.</Text>
         </View>
 
@@ -322,7 +322,7 @@ export default function LogbookProScreen({ navigation }: any) {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Alert preferences</Text>
-          <Text style={styles.helperText}>Choose how RSF Pro notifies you.</Text>
+          <Text style={styles.helperText}>Choose how RSF Premium notifies you.</Text>
 
           <View style={styles.toggleRow}>
             <View>
@@ -370,7 +370,7 @@ export default function LogbookProScreen({ navigation }: any) {
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.content}>
       <View style={styles.header}>
-        <Text style={styles.title}>RSF Pro</Text>
+        <Text style={styles.title}>RSF Premium</Text>
         <Text style={styles.subtitle}>
           Use this screen to review Pro tiers and confirm whether your existing membership is active in the app.
         </Text>
@@ -450,7 +450,7 @@ export default function LogbookProScreen({ navigation }: any) {
         <Text style={styles.membershipStatusTitle}>App membership status</Text>
         <Text style={styles.membershipStatusText}>
           {!isAuthenticated
-            ? 'Sign in to see whether this account already has RSF Pro access.'
+            ? 'Sign in to see whether this account already has RSF Premium access.'
             : hasAccess
               ? 'Your signed-in account currently has RSF membership access in the app.'
               : 'No active RSF membership is currently attached to this signed-in account.'}

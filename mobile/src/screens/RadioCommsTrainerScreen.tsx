@@ -283,7 +283,7 @@ export default function RadioCommsTrainerScreen() {
         <View style={styles.alertCard}>
           <Ionicons name="lock-closed-outline" size={18} color={colors.primaryStrong} />
           <Text style={styles.alertText}>
-            Demo mode on mobile. RSF Pro unlocks full scenarios, audio practice, and scoring history.
+            Demo mode on mobile. RSF Premium unlocks full scenarios, audio practice, and scoring history.
           </Text>
         </View>
       )}

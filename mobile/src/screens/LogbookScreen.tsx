@@ -153,7 +153,7 @@ export default function LogbookScreen({ navigation }: any) {
         <View style={styles.memberPanel}>
           <View style={styles.memberHeader}>
             <View>
-              <Text style={styles.memberEyebrow}>RSF PRO</Text>
+              <Text style={styles.memberEyebrow}>RSF PREMIUM</Text>
               <Text style={styles.memberTitle}>
                 {isPro ? 'Your member logbook tools are active.' : 'Unlock currency alerts, endorsements, and advanced tracking.'}
               </Text>

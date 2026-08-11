@@ -27242,7 +27242,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         res.json(settings || null);
       } catch (error) {
         console.error("Failed to fetch logbook pro settings:", error);
-        res.status(500).json({ error: "Failed to fetch logbook pro settings" });
+        res.status(500).json({ error: "Failed to fetch RSF Premium settings" });
       }
     },
   );
@@ -27284,7 +27284,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         console.error("Failed to update logbook pro settings:", error);
         res
           .status(500)
-          .json({ error: "Failed to update logbook pro settings" });
+          .json({ error: "Failed to update RSF Premium settings" });
       }
     },
   );
@@ -27410,7 +27410,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         });
       } catch (error) {
         console.error("Failed to fetch logbook pro summary:", error);
-        res.status(500).json({ error: "Failed to fetch logbook pro summary" });
+        res.status(500).json({ error: "Failed to fetch RSF Premium summary" });
       }
     },
   );
@@ -35914,7 +35914,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         });
       } catch (error: any) {
         console.error("Logbook pro alerts cron error:", error);
-        res.status(500).json({ error: "Failed to send logbook pro alerts" });
+        res.status(500).json({ error: "Failed to send RSF Premium alerts" });
       }
     });
 

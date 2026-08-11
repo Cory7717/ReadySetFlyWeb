@@ -142,7 +142,7 @@ export default function PilotToolsScreen({ navigation }: any) {
 
       <View style={styles.section}>
         <View style={styles.memberPanel}>
-          <Text style={styles.memberEyebrow}>RSF PRO TOOLS</Text>
+          <Text style={styles.memberEyebrow}>RSF PREMIUM TOOLS</Text>
           <Text style={styles.memberTitle}>Advanced calculators, history, and deeper pilot workflows.</Text>
           <Text style={styles.memberText}>
             The free layer stays useful, but membership turns RSF into a full pilot workspace.

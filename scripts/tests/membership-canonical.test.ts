@@ -128,3 +128,13 @@ test("membership UI and AI limits prefer canonical Premium vocabulary", () => {
   assert.match(aiTools, /requiresPro: true, \/\/ Deprecated response alias/);
   assert.doesNotMatch(aiTools, /identity\.isPro/);
 });
+
+test("customer-facing mobile membership labels use RSF Premium", () => {
+  const mobilePilotTools = readFileSync("mobile/src/screens/PilotToolsScreen.tsx", "utf8");
+  const mobileLogbook = readFileSync("mobile/src/screens/LogbookScreen.tsx", "utf8");
+
+  assert.match(mobilePilotTools, /RSF PREMIUM TOOLS/);
+  assert.match(mobileLogbook, /RSF PREMIUM/);
+  assert.doesNotMatch(mobilePilotTools, />RSF PRO TOOLS</);
+  assert.doesNotMatch(mobileLogbook, />RSF PRO</);
+});

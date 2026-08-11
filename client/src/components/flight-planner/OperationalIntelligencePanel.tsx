@@ -123,7 +123,7 @@ export function OperationalIntelligencePanelView({
               </ul>
             </div>
             <Button asChild className="rsf-metal-button-primary">
-              <a href="/logbook/pro">Upgrade to Premium</a>
+              <a href="/membership">Upgrade to Premium</a>
             </Button>
           </div>
         )}

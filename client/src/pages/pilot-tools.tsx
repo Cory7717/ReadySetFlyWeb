@@ -508,9 +508,9 @@ export default function PilotTools() {
                   asChild
                   variant="outline"
                   className="rsf-metal-button-secondary"
-                  onClick={() => trackEvent("subscription_cta_click", { source_page: "/pilot-tools", target: "/logbook/pro", context: "pilot_tools_value_panel" })}
+                  onClick={() => trackEvent("subscription_cta_click", { source_page: "/pilot-tools", target: "/membership", context: "pilot_tools_value_panel" })}
                 >
-                  <Link href={withSourceParam("/logbook/pro", "/pilot-tools")}>See Premium plans</Link>
+                  <Link href={withSourceParam("/membership", "/pilot-tools")}>See Premium plans</Link>
                 </Button>
               </div>
             </div>

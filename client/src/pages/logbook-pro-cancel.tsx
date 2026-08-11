@@ -7,7 +7,7 @@ import { PageShell } from "@/components/layout/PageShell";
 
 export default function LogbookProCancel() {
   useEffect(() => {
-    trackEvent("subscription_checkout_cancelled", { page: "/logbook/pro/cancel" });
+    trackEvent("subscription_checkout_cancelled", { page: "/membership/cancel" });
   }, []);
 
   return (

@@ -905,13 +905,13 @@ export default function Landing() {
                 onClick={() => {
                   trackEvent("subscription_cta_click", {
                     source_page: "/",
-                    target: "/logbook/pro",
+                    target: "/membership",
                     context: "landing_premium_banner",
                     tier: "premium",
                   });
                 }}
               >
-                <Link href="/logbook/pro">Upgrade to Premium</Link>
+                <Link href="/membership">Upgrade to Premium</Link>
               </Button>
             </div>
           </div>
@@ -1273,7 +1273,7 @@ export default function Landing() {
                     Unlock GPS simulators and the CFI training center.
                   </p>
                   <Button asChild size="sm" className={`w-full ${metallicPrimaryButtonClass}`}>
-                    <Link href="/logbook/pro">Upgrade to Premium</Link>
+                    <Link href="/membership">Upgrade to Premium</Link>
                   </Button>
                 </div>
               )}
@@ -1313,8 +1313,8 @@ export default function Landing() {
               </Button>
               <Button asChild variant="outline" className={`w-full ${metallicSecondaryButtonClass}`}>
                 <Link
-                  href="/logbook/pro"
-                  onClick={() => trackEvent("cta_click", { label: "mobile_log_tab_start_trial", target: "/logbook/pro" })}
+                  href="/membership"
+                  onClick={() => trackEvent("cta_click", { label: "mobile_log_tab_start_trial", target: "/membership" })}
                 >
                   Start 14-day Premium trial
                 </Link>

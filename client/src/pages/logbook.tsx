@@ -1011,10 +1011,10 @@ export default function Logbook() {
                 <div className="mt-3">
                   <Button asChild size="sm" variant="outline" className={logbookSecondaryButtonClass}>
                     <Link
-                      href={withSourceParam("/logbook/pro", "/logbook")}
+                      href={withSourceParam("/membership", "/logbook")}
                       onClick={() => {
-                        trackEvent("cta_click", { label: "logbook_start_trial_banner", target: "/logbook/pro" });
-                        trackEvent("subscription_cta_click", { source_page: "/logbook", target: "/logbook/pro", context: "logbook_trial_banner" });
+                        trackEvent("cta_click", { label: "logbook_start_trial_banner", target: "/membership" });
+                        trackEvent("subscription_cta_click", { source_page: "/logbook", target: "/membership", context: "logbook_trial_banner" });
                       }}
                     >
                       Start 14-day Premium trial
@@ -1472,7 +1472,7 @@ export default function Logbook() {
           </CardHeader>
           <CardContent>
             <Button className={logbookPrimaryButtonClass} asChild>
-              <Link href="/logbook/pro">Upgrade to RSF Premium</Link>
+              <Link href="/membership">Upgrade to RSF Premium</Link>
             </Button>
           </CardContent>
         </Card>
@@ -1824,8 +1824,8 @@ export default function Logbook() {
             </p>
             <Button className={logbookPrimaryButtonClass} asChild>
               <Link
-                href={withSourceParam("/logbook/pro", "/logbook")}
-                onClick={() => trackEvent("subscription_cta_click", { source_page: "/logbook", target: "/logbook/pro", context: "logbook_footer_cta" })}
+                href={withSourceParam("/membership", "/logbook")}
+                onClick={() => trackEvent("subscription_cta_click", { source_page: "/logbook", target: "/membership", context: "logbook_footer_cta" })}
               >
                 {isPro ? "Manage Membership" : "Upgrade to RSF Premium"}
               </Link>

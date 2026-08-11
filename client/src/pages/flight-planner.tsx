@@ -8203,7 +8203,7 @@ export default function FlightPlanner() {
         description: "RSF Premium is required to sync to logbook.",
       });
       trackEvent("planner_upgrade_prompt", { action: "send_to_logbook" });
-      window.location.href = "/logbook/pro";
+      window.location.href = "/membership";
       return;
     }
     trackEvent("planner_send_to_logbook", { action: "create_entry" });
@@ -12235,10 +12235,10 @@ export default function FlightPlanner() {
                 <div className="mt-3">
                   <Button asChild size="sm" variant="outline">
                     <Link
-                      href={withSourceParam("/logbook/pro", "/flight-planner")}
+                      href={withSourceParam("/membership", "/flight-planner")}
                       onClick={() => {
-                        trackEvent("cta_click", { label: "planner_saved_plans_start_trial", target: "/logbook/pro" });
-                        trackEvent("subscription_cta_click", { source_page: "/flight-planner", target: "/logbook/pro", context: "planner_saved_plans" });
+                        trackEvent("cta_click", { label: "planner_saved_plans_start_trial", target: "/membership" });
+                        trackEvent("subscription_cta_click", { source_page: "/flight-planner", target: "/membership", context: "planner_saved_plans" });
                       }}
                     >
                       Upgrade to Premium
@@ -12655,7 +12655,7 @@ export default function FlightPlanner() {
                 showAccountRequirementPrompt("sync_logbook_entry", "file");
                 return;
               } else if (isFree) {
-                trackEvent("cta_click", { label: "planner_logbook_upgrade_interest", target: "/logbook/pro" });
+                trackEvent("cta_click", { label: "planner_logbook_upgrade_interest", target: "/membership" });
               }
               runWithAuth("sync_logbook_entry", async () => {
                 await sendToLogbookActionRef.current();

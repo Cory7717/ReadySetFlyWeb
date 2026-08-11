@@ -636,7 +636,7 @@ export default function RadioCommsTrainer() {
           ))}
           {!isPro && (
             <Button asChild variant="outline">
-              <Link href={isAuthenticated ? "/logbook/pro" : withReturnTo("/register", getCurrentReturnTo())}>
+              <Link href={isAuthenticated ? "/membership" : withReturnTo("/register", getCurrentReturnTo())}>
                 {isAuthenticated ? "Unlock full trainer" : "Create free account"}
               </Link>
             </Button>

@@ -589,7 +589,7 @@ export default function GpsSimsUnit() {
     ? "GPS sims unlock with RSF Premium for full workflows, checkrides, and saved training progress."
     : "Create a free RSF account to unlock RSF Premium GPS simulator training.";
   const gateCtaLabel = isAuthenticated ? "Upgrade to RSF Premium" : "Create free account";
-  const gateCtaHref = isAuthenticated ? "/logbook/pro" : "/register";
+  const gateCtaHref = isAuthenticated ? "/membership" : "/register";
 
   const completedCount = progress.filter(Boolean).length;
   const actionHints = selectedTask?.actionHints ?? [];

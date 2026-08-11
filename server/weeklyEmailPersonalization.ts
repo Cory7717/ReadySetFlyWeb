@@ -212,9 +212,9 @@ function buildModules(segment: WeeklyDigestSegment): Omit<WeeklyDigestProfile, "
           },
           {
             id: "pro",
-            title: "Logbook Pro",
+            title: "RSF Premium",
             description: "Review Pro features for deeper tracking, currency support, and added workflow tools.",
-            ctaLabel: "View Logbook Pro",
+            ctaLabel: "View RSF Premium",
             ctaUrl: "/membership",
           },
           {

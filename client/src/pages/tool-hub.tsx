@@ -286,9 +286,9 @@ export default function ToolHub() {
                   asChild
                   variant="outline"
                   className="rsf-metal-button-secondary"
-                  onClick={() => trackEvent("subscription_cta_click", { source_page: "/tool-hub", target: "/logbook/pro", context: "tool_hub_value_panel" })}
+                  onClick={() => trackEvent("subscription_cta_click", { source_page: "/tool-hub", target: "/membership", context: "tool_hub_value_panel" })}
                 >
-                  <Link href={withSourceParam("/logbook/pro", "/tool-hub")}>See Premium plans</Link>
+                  <Link href={withSourceParam("/membership", "/tool-hub")}>See Premium plans</Link>
                 </Button>
               </div>
             </div>

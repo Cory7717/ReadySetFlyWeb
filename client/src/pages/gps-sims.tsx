@@ -78,7 +78,7 @@ export default function GpsSimsHub() {
                 </div>
                 <Badge variant="secondary">Coming with RSF Premium</Badge>
                 <Button asChild size="sm">
-                  <Link href={isAuthenticated ? "/logbook/pro" : "/register"}>
+                  <Link href={isAuthenticated ? "/membership" : "/register"}>
                     {isAuthenticated ? "Upgrade to Premium" : "Create Free Account"}
                   </Link>
                 </Button>

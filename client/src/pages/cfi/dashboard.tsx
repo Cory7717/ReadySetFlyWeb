@@ -222,7 +222,7 @@ export default function CfiDashboard() {
                 </Button>
               )}
               <Button asChild variant="outline">
-                <Link href="/logbook/pro">View RSF Premium plans</Link>
+                <Link href="/membership">View RSF Premium plans</Link>
               </Button>
             </CardContent>
           </Card>

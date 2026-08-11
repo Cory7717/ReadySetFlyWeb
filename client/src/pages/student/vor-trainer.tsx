@@ -448,7 +448,7 @@ export default function StudentVorTrainer() {
           ? "Guided VOR scenarios and checkrides unlock with RSF Premium."
           : "Create a free RSF account to unlock guided VOR scenarios.",
         ctaLabel: isAuthenticated ? "Upgrade to RSF Premium" : "Create free account",
-        ctaHref: isAuthenticated ? "/logbook/pro" : "/register",
+        ctaHref: isAuthenticated ? "/membership" : "/register",
       };
 
   const score = useMemo(
@@ -568,7 +568,7 @@ export default function StudentVorTrainer() {
               Quiz mode unlocks with RSF Premium to help you master TO/FROM logic and intercepts.
             </p>
             <Button asChild>
-              <Link href={isAuthenticated ? "/logbook/pro" : "/register"}>
+              <Link href={isAuthenticated ? "/membership" : "/register"}>
                 {isAuthenticated ? "Upgrade to RSF Premium" : "Create free account"}
               </Link>
             </Button>

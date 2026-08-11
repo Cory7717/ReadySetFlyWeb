@@ -20,7 +20,7 @@
     "test:smoke": "node scripts/smoke-test.mjs",
     "test:load:aircraft": "tsx scripts/load-test-aircraft-listings.ts",
     "test:load:launch": "tsx scripts/load-test-launch-readiness.ts",
-    "test:unit": "tsx --test scripts/tests/marketplace-fees.test.ts scripts/tests/marketplace-fees.test.js scripts/tests/membership-canonical.test.ts",
+    "test:unit": "tsx --test scripts/tests/marketplace-fees.test.ts scripts/tests/marketplace-fees.test.js scripts/tests/membership-canonical.test.ts scripts/tests/membership-provider-mapping.test.ts",
     "audit:membership": "tsx scripts/audit-membership-tiers.ts",
     "normalize:membership": "tsx scripts/normalize-membership-tiers.ts",
     "test": "npm run test:unit && npm run test:membership-promotions && npm run test:flight-service",

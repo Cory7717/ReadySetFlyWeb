@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import {
   PREMIUM_ANNUAL_PRICE,
   PREMIUM_ANNUAL_SAVINGS,
@@ -109,4 +110,15 @@ test("monthly and annual PayPal plan IDs map to the same Premium entitlement", (
     tier: "premium",
     interval: "monthly",
   });
+});
+
+test("membership UI and AI limits prefer canonical Premium vocabulary", () => {
+  const membershipPage = readFileSync("client/src/pages/logbook-pro.tsx", "utf8");
+  const aiTools = readFileSync("server/routes/aiTools.ts", "utf8");
+
+  assert.match(membershipPage, /entitlements\?\.tier \|\| \(user as any\)\?\.membershipTier/);
+  assert.match(aiTools, /isPremium: entitlements\.tier === "premium"/);
+  assert.match(aiTools, /requiresPremium: true/);
+  assert.match(aiTools, /requiresPro: true, \/\/ Deprecated response alias/);
+  assert.doesNotMatch(aiTools, /identity\.isPro/);
 });

@@ -181,7 +181,7 @@ export default function LogbookProPage({ offerSlugOverride, offerBasePath = "/lo
   }
 
   const entitlements = (user as any)?.entitlements;
-  const membershipTier = (user as any)?.membershipTier || entitlements?.tier || "free";
+  const membershipTier = entitlements?.tier || (user as any)?.membershipTier || "free";
   const membershipStatus = (user as any)?.membershipStatus || "inactive";
   const membershipEndsAt = (user as any)?.membershipEndsAt || entitlements?.membershipEndsAt;
   const membershipTrialEndsAt =

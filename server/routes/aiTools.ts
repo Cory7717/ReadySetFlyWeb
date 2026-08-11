@@ -71,7 +71,7 @@ async function resolveAiAccess(req: Request, res: Response) {
     return {
       userId,
       anonId: null,
-      isPro: entitlements.tier === "premium",
+      isPremium: entitlements.tier === "premium",
       ipHash: hashIp((req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ?? req.socket.remoteAddress ?? ""),
     };
   }
@@ -89,7 +89,7 @@ async function resolveAiAccess(req: Request, res: Response) {
   return {
     userId: null,
     anonId,
-    isPro: false,
+    isPremium: false,
     ipHash: hashIp((req.headers["x-forwarded-for"] as string)?.split(",")[0]?.trim() ?? req.socket.remoteAddress ?? ""),
   };
 }
@@ -172,13 +172,14 @@ aiToolsRouter.post("/weather-summary", async (req, res) => {
 
   try {
     const identity = await resolveAiAccess(req, res);
-    const usageCount = identity.isPro ? 0 : await getUsageCount(identity);
-    if (!identity.isPro && usageCount >= AI_FREE_USE_LIMIT) {
+    const usageCount = identity.isPremium ? 0 : await getUsageCount(identity);
+    if (!identity.isPremium && usageCount >= AI_FREE_USE_LIMIT) {
       return res.status(403).json({
         error: buildLimitErrorMessage(Boolean(identity.userId)),
         code: "AI_USAGE_LIMIT",
         remainingUses: 0,
-        requiresPro: true,
+        requiresPremium: true,
+        requiresPro: true, // Deprecated response alias for older clients.
       });
     }
 
@@ -217,7 +218,7 @@ ${metar ? `METAR:\n${metar}\n` : ""}${taf ? `TAF:\n${taf}\n` : ""}${pireps ? `PI
       summary: completion.choices[0]?.message?.content?.trim() ?? "",
       model: "gpt-4o-mini",
       generatedAt: new Date().toISOString(),
-      remainingUses: identity.isPro ? null : Math.max(0, AI_FREE_USE_LIMIT - usageCount - 1),
+      remainingUses: identity.isPremium ? null : Math.max(0, AI_FREE_USE_LIMIT - usageCount - 1),
     });
   } catch (error) {
     console.error("[weather-summary]", error);
@@ -241,13 +242,14 @@ aiToolsRouter.post("/notam-translate", async (req, res) => {
 
   try {
     const identity = await resolveAiAccess(req, res);
-    const usageCount = identity.isPro ? 0 : await getUsageCount(identity);
-    if (!identity.isPro && usageCount >= AI_FREE_USE_LIMIT) {
+    const usageCount = identity.isPremium ? 0 : await getUsageCount(identity);
+    if (!identity.isPremium && usageCount >= AI_FREE_USE_LIMIT) {
       return res.status(403).json({
         error: buildLimitErrorMessage(Boolean(identity.userId)),
         code: "AI_USAGE_LIMIT",
         remainingUses: 0,
-        requiresPro: true,
+        requiresPremium: true,
+        requiresPro: true, // Deprecated response alias for older clients.
       });
     }
 
@@ -281,7 +283,7 @@ ${notams}`.trim();
       translation: completion.choices[0]?.message?.content?.trim() ?? "",
       model: "gpt-4o-mini",
       generatedAt: new Date().toISOString(),
-      remainingUses: identity.isPro ? null : Math.max(0, AI_FREE_USE_LIMIT - usageCount - 1),
+      remainingUses: identity.isPremium ? null : Math.max(0, AI_FREE_USE_LIMIT - usageCount - 1),
     });
   } catch (error) {
     console.error("[notam-translate]", error);

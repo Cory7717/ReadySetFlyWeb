@@ -79,8 +79,7 @@ export function calculateTotalWithTax(baseAmount) {
 }
 
 const resolveMembershipDiscountPct = (membershipTier) => {
-  if (membershipTier === "pro_plus") return 20;
-  if (membershipTier === "pro") return 10;
+  if (["premium", "pro", "pro_plus", "pro_core", "core"].includes(String(membershipTier || ""))) return 20;
   return 0;
 };
 
@@ -94,7 +93,7 @@ export function calculateMarketplaceListingFee({
   const discountPct = isTraditionalMarketplace ? resolveMembershipDiscountPct(membershipTier) : 0;
   const discountAmount = roundToCents(baseListingFee * (discountPct / 100));
   const finalListingFee = roundToCents(baseListingFee - discountAmount);
-  const membershipTierApplied = discountPct > 0 ? membershipTier : "free";
+  const membershipTierApplied = discountPct > 0 ? "premium" : "free";
 
   return {
     baseListingFee,

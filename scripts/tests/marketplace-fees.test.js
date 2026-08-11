@@ -5,7 +5,7 @@ import {
   getBasePrice,
 } from "../../shared/config/listingPricing.js";
 
-test("marketplace listing fee discounts apply to Pro tiers", () => {
+test("marketplace listing fee discounts apply equally to Premium and legacy paid tiers", () => {
   const base = getBasePrice("aircraft-sale", "basic");
 
   const freeBreakdown = calculateMarketplaceListingFee({
@@ -27,9 +27,10 @@ test("marketplace listing fee discounts apply to Pro tiers", () => {
     isTraditionalMarketplace: true,
   });
 
-  assert.equal(proBreakdown.membershipDiscountPct, 10);
-  assert.equal(proBreakdown.membershipDiscountAmount, 2.5);
-  assert.equal(proBreakdown.finalListingFee, 22.5);
+  assert.equal(proBreakdown.membershipDiscountPct, 20);
+  assert.equal(proBreakdown.membershipDiscountAmount, 5);
+  assert.equal(proBreakdown.finalListingFee, 20);
+  assert.equal(proBreakdown.membershipTierApplied, "premium");
 
   const proPlusBreakdown = calculateMarketplaceListingFee({
     category: "aircraft-sale",
@@ -41,6 +42,7 @@ test("marketplace listing fee discounts apply to Pro tiers", () => {
   assert.equal(proPlusBreakdown.membershipDiscountPct, 20);
   assert.equal(proPlusBreakdown.membershipDiscountAmount, 5);
   assert.equal(proPlusBreakdown.finalListingFee, 20);
+  assert.equal(proPlusBreakdown.membershipTierApplied, "premium");
 });
 
 test("membership discounts are disabled for non-traditional listings", () => {

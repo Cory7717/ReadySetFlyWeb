@@ -232,13 +232,14 @@ export const executiveManualPages: ExecutiveManualPage[] = [
     title: "Business Model",
     paragraphs: [
       "A substantial portion of RSF remains free to reduce adoption barriers and bring pilots into the ecosystem. RSF Premium is the paid tier, currently priced at $4.99/month, and provides access to enhanced functionality appropriate to that tier.",
-      "Aircraft rentals can generate transaction revenue through a 7.5% owner commission and 7.5% renter booking fee. The traditional marketplace can generate revenue through paid listings, featured placement and commercial packages as participation matures.",
+      "Aircraft rentals can generate transaction revenue through a 7.5% owner commission and 7.5% renter booking fee. Traditional marketplace listings range from $25 to $250 per month based on the selected category and, for aircraft-for-sale listings, the selected visibility tier.",
+      "Current base marketplace pricing is $25, $40 or $100 per month for aircraft-for-sale tiers; $30 per month for CFI listings; $40 per month for mechanic and aviation-job listings; and $250 per month for flight-school and charter listings. Applicable taxes, promotions and Premium discounts are calculated separately.",
       "Advertising and partnerships can include relevant display placements, featured partners and sponsorships. Multiple revenue streams reduce dependence on any single user action and allow free utility to support commercial opportunities elsewhere in the ecosystem.",
     ],
     metrics: [
       { value: "$4.99", label: "Premium per month" },
       { value: "15%", label: "Completed rental take rate" },
-      { value: "Multiple", label: "Complementary revenue streams" },
+      { value: "$25–$250", label: "Marketplace base price per month" },
     ],
   },
   {
@@ -344,8 +345,53 @@ export const executiveManualPages: ExecutiveManualPage[] = [
     ],
   },
   {
-    id: "executive-cheat-sheet",
+    id: "architecture-overview",
     part: "Part VII",
+    section: "Platform Architecture",
+    title: "How RSF Is Built",
+    paragraphs: [
+      "RSF is a TypeScript-based web platform organized as a responsive React client, an Express application and worker layer, shared schemas and business rules, and a PostgreSQL persistence layer. The architecture supports public content, authenticated pilot workflows, marketplace activity, administration, background aviation-data ingestion and mobile-facing services from one coordinated codebase.",
+      "The client uses React, Vite, Tailwind CSS, Radix UI, TanStack Query and Wouter. The server runs on Node.js and Express, with Zod validation, Drizzle ORM and Neon-hosted PostgreSQL. AWS S3 supports durable media and document storage, while Render hosts application services and workers.",
+      "Specialized mapping and flight interfaces use Leaflet and Cesium. Shared TypeScript models help keep client forms, server validation and persistence contracts aligned while isolated services contain external-provider logic.",
+    ],
+    metrics: [
+      { value: "4", label: "Primary architecture layers" },
+      { value: "21", label: "Server modules registering routes" },
+      { value: "TypeScript", label: "Shared application language" },
+    ],
+    bullets: [
+      "Experience layer: responsive React web application and mobile-facing workflows.",
+      "Application layer: Express APIs, authentication, administration and business services.",
+      "Data layer: PostgreSQL through Drizzle ORM, plus durable S3 object storage.",
+      "Integration layer: isolated connectors, webhooks and background workers for outside services and aviation data.",
+    ],
+    callout: "Architecture snapshot verified from the repository on Aug. 17, 2026; implementation counts will evolve as RSF grows.",
+  },
+  {
+    id: "architecture-integrations",
+    part: "Part VII",
+    section: "Platform Architecture",
+    title: "APIs, Integrations and Data Flow",
+    paragraphs: [
+      "A static inventory of the current server implementation found 717 literal HTTP route registrations: 307 GET, 280 POST, 72 PATCH, 42 DELETE and 16 PUT registrations. After duplicate method/path combinations are consolidated, the codebase contains 699 unique method-and-path pairs covering public, authenticated, administrative, webhook and internal operational workflows.",
+      "RSF currently implements 19 external service or data-integration families. These include Flight Services validation, FAA SWIM and NMS data, FAA chart and airspace sources, Aviation Weather Center data, ADS-B Exchange, RainViewer, NASA imagery, USGS elevation, PayPal, AWS S3, Brevo email, Google authentication, Google Places, Google Analytics, OpenAI-assisted tools, Neon PostgreSQL, Expo notifications and partner referral connectivity.",
+      "An implemented connector is not a claim that every integration is enabled in every environment. Availability depends on configuration, authorization and operational readiness. Flight Services functionality, in particular, must continue to be described as operating in a non-operational validation environment unless and until operational authorization is received.",
+    ],
+    metrics: [
+      { value: "19", label: "Implemented integration families" },
+      { value: "717", label: "Literal HTTP route registrations" },
+      { value: "699", label: "Unique method/path pairs" },
+    ],
+    keyTakeaways: [
+      "External services are reached through dedicated server-side connectors rather than exposing credentials to the browser.",
+      "Webhooks and workers support event-driven updates and scheduled ingestion where appropriate.",
+      "Shared validation and typed contracts reduce differences between user input, stored data and outbound requests.",
+      "The endpoint inventory is an engineering snapshot, not a count of separate customer-facing products.",
+    ],
+  },
+  {
+    id: "executive-cheat-sheet",
+    part: "Part VIII",
     section: "Executive Cheat Sheet",
     title: "Know These Answers",
     bullets: [

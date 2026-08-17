@@ -20,6 +20,9 @@ test("executive manual contains the approved business facts and scope", () => {
     "3m 15s",
     "24K",
     "Jan. 1–Aug. 10, 2026",
+    "$25–$250",
+    "699 unique method-and-path pairs",
+    "19 external service or data-integration families",
   ]) {
     assert.ok(content.includes(expected), `missing approved fact: ${expected}`);
   }
@@ -27,6 +30,14 @@ test("executive manual contains the approved business facts and scope", () => {
   assert.doesNotMatch(content, /Leidos/i);
   assert.doesNotMatch(content, /FAA[- ](?:certified|endorsed)/i);
   assert.doesNotMatch(content, /\bPro\+\b/);
+});
+
+test("architecture appendix documents the repository-derived platform snapshot", () => {
+  assert.match(content, /id: "architecture-overview"/);
+  assert.match(content, /id: "architecture-integrations"/);
+  assert.match(content, /React, Vite, Tailwind CSS, Radix UI, TanStack Query and Wouter/);
+  assert.match(content, /307 GET, 280 POST, 72 PATCH, 42 DELETE and 16 PUT/);
+  assert.match(content, /non-operational validation environment/);
 });
 
 test("manual reader provides book navigation, contents, touch swipe, and progress persistence", () => {

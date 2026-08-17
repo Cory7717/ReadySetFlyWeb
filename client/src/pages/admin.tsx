@@ -3,7 +3,7 @@ import { Link, useLocation } from "wouter";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Users, Plane, List, Shield, CheckCircle, XCircle, Eye, TrendingUp, DollarSign, Activity, Calendar, UserPlus, Briefcase, Phone, Mail, Plus, Edit, Trash2, AlertTriangle, FileText, Gift, RefreshCw, Clock, Bell, Image, Upload, Download, X, Rocket, Tag, ChevronDown, ChevronRight, Wallet } from "lucide-react";
+import { Users, Plane, List, Shield, CheckCircle, XCircle, Eye, TrendingUp, DollarSign, Activity, Calendar, UserPlus, Briefcase, Phone, Mail, Plus, Edit, Trash2, AlertTriangle, FileText, Gift, RefreshCw, Clock, Bell, Image, Upload, Download, X, Rocket, Tag, ChevronDown, ChevronRight, Wallet, BookOpen } from "lucide-react";
 import { endOfMonth, format, parse, parseISO, startOfMonth, eachDayOfInterval, isSameMonth, startOfISOWeek, endOfISOWeek, getISOWeek, getISOWeekYear } from "date-fns";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -3334,11 +3334,20 @@ export default function AdminDashboard() {
             Manage users, aircraft listings, marketplace content, and publishing
           </p>
         </div>
-        {isSuperAdmin && (
-          <Button asChild className="rsf-metal-button-primary">
-            <Link href="/admin/aviation-briefings"><FileText className="mr-2 h-4 w-4" />Manage RSF Briefings</Link>
-          </Button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          {(user?.isAdmin || user?.isSuperAdmin) && (
+            <Button asChild variant="outline">
+              <Link href="/admin/executive-manual">
+                <BookOpen className="mr-2 h-4 w-4" />Executive Manual
+              </Link>
+            </Button>
+          )}
+          {isSuperAdmin && (
+            <Button asChild className="rsf-metal-button-primary">
+              <Link href="/admin/aviation-briefings"><FileText className="mr-2 h-4 w-4" />Manage RSF Briefings</Link>
+            </Button>
+          )}
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">

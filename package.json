@@ -30,6 +30,7 @@
     "test:aviation-briefings": "tsx --test scripts/tests/aviation-briefings.test.ts",
     "test:aviation-contributors": "tsx --test scripts/tests/aviation-briefing-submissions.test.ts",
     "test:aviation-engagement": "tsx --test scripts/tests/aviation-briefing-engagement.test.ts",
+    "test:executive-manual": "tsx --test scripts/tests/executive-manual.test.ts",
     "test:airport-communications": "tsx --test scripts/tests/airport-communications.test.ts",
     "test:route-builder": "tsx --test scripts/tests/route-builder-navaids.test.ts",
     "test:flight-filing-readiness": "tsx --test scripts/tests/flight-filing-readiness-messages.test.ts",

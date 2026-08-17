@@ -124,6 +124,7 @@ import AviationBriefingsPage from "@/pages/aviation-briefings";
 import FlightServiceValidationPage from "@/pages/flight-service-validation";
 import AviationBriefingDetailPage from "@/pages/aviation-briefing-detail";
 import AdminAviationBriefingsPage from "@/pages/admin-aviation-briefings";
+import AdminExecutiveManualPage from "@/pages/admin-executive-manual";
 import AviationBriefingSubmitPage from "@/pages/aviation-briefing-submit";
 import AviationBriefingContributePage from "@/pages/aviation-briefing-contribute";
 import SavedAviationBriefingsPage from "@/pages/saved-aviation-briefings";
@@ -502,6 +503,10 @@ function Router() {
           <Route path="/owner-withdrawals" component={OwnerWithdrawals} />
           <Route path="/admin" component={AdminDashboard} />
           <Route
+            path="/admin/executive-manual"
+            component={AdminExecutiveManualPage}
+          />
+          <Route
             path="/admin/aviation-briefings"
             component={AdminAviationBriefingsPage}
           />
@@ -632,6 +637,7 @@ function Router() {
           <Route path="/owner-payout-setup" component={RequireAuth} />
           <Route path="/owner-withdrawals" component={RequireAuth} />
           <Route path="/admin" component={RequireAuth} />
+          <Route path="/admin/executive-manual" component={RequireAuth} />
           <Route path="/admin/aviation-briefings" component={RequireAuth} />
           <Route path="/admin/certification" component={RequireAuth} />
           <Route

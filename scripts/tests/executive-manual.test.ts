@@ -14,7 +14,6 @@ test("executive manual contains the approved business facts and scope", () => {
     "$4.99/month",
     "7.5% owner-side commission",
     "7.5% renter booking fee",
-    "$500,000",
     "2.6K",
     "~79K",
     "3m 15s",
@@ -30,6 +29,8 @@ test("executive manual contains the approved business facts and scope", () => {
   assert.doesNotMatch(content, /Leidos/i);
   assert.doesNotMatch(content, /FAA[- ](?:certified|endorsed)/i);
   assert.doesNotMatch(content, /\bPro\+\b/);
+  assert.doesNotMatch(content, /id: "founder-story"|Founder Story/);
+  assert.doesNotMatch(content, /id: "capital-raise"|Current Capital Raise|\$500,000/);
 });
 
 test("architecture appendix documents the repository-derived platform snapshot", () => {

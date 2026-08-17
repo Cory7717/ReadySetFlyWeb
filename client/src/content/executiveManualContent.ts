@@ -263,17 +263,6 @@ export const executiveManualPages: ExecutiveManualPage[] = [
     variant: "flywheel",
   },
   {
-    id: "founder-story",
-    part: "Part IV",
-    section: "The Company",
-    title: "Founder Story",
-    paragraphs: [
-      "Ready Set Fly was founded by Cory Armer and has been developed through a founder-led, bootstrapped approach. Cory brings more than 15 years of hotel-management and operations experience, including team leadership, revenue, sales and operational responsibility.",
-      "That background contributes a process-improvement mindset: understand where a customer workflow breaks down, create practical systems and make complex operations easier to manage.",
-      "Cory has personally led RSF development and architecture while also working as a writer and screenwriter. The combination reflects a founder comfortable with operations, product construction and communicating a larger strategic narrative.",
-    ],
-  },
-  {
     id: "status-today",
     part: "Part IV",
     section: "The Company",
@@ -289,22 +278,6 @@ export const executiveManualPages: ExecutiveManualPage[] = [
       { value: "24K", label: "Core Pilot Hub views" },
     ],
     callout: "Analytics period: Jan. 1–Aug. 10, 2026. BarLink and BarPulse metrics are not included as RSF traction.",
-  },
-  {
-    id: "capital-raise",
-    part: "Part IV",
-    section: "The Company",
-    title: "Current Capital Raise",
-    paragraphs: [
-      "RSF is currently raising $500,000 through a planned post-money SAFE structure. Application terms currently being presented include a $6M valuation cap and 20% discount.",
-      "The intended use of capital includes independent validation, commercialization, infrastructure, customer acquisition, specialized engineering and the operating capacity required to move from a founder-led build toward a more durable company structure.",
-      "Terms remain subject to final documentation and appropriate legal review. Executive communication should distinguish current planning terms from a completed financing commitment.",
-    ],
-    metrics: [
-      { value: "$500K", label: "Current raise" },
-      { value: "$6M", label: "Planning valuation cap" },
-      { value: "20%", label: "Planning discount" },
-    ],
   },
   {
     id: "competition",
@@ -404,7 +377,6 @@ export const executiveManualPages: ExecutiveManualPage[] = [
       "Why does V&V matter? It independently evaluates whether applicable Flight Planner functions behave accurately and consistently.",
       "Who competes with RSF? Established flight-planning, marketplace, scheduling and training products compete with portions of the ecosystem.",
       "What makes RSF different? RSF focuses on connecting multiple portions of the GA workflow in one ecosystem.",
-      "How much is RSF raising? $500,000 for validation, commercialization, infrastructure, customer acquisition, engineering and growth.",
     ],
   },
   {

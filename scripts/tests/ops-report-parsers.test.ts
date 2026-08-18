@@ -105,6 +105,24 @@ test("OTB reports are classified by selected and next report month", async () =>
   assert.equal((july.mapping.total as any).roomRevenue, 1773.06);
 });
 
+test("OTB uploaded from Weekly Performance maps to previous-week totals instead of Current Month", async () => {
+  const header = "Date,Rms Active,Rms Available,Rms Sold,Group PU,Group UnPU,Occ %,Guests (A/C),Arr,Dept,OOO,OTM,Hold,ADR Occupied ($),ADR Sold ($),RevPAR ($),Rm Rev ($)";
+  const report = await parseOpsReportFile(csvFile("OTB-export.csv", [
+    header,
+    '"Jun 01, 2026",118,118,40,0,0,33.9,40/0,8,8,0,0,0,100,100,33.9,4000',
+    '"Jun 02, 2026",118,118,50,0,0,42.4,50/0,10,10,0,0,0,110,110,46.6,5500',
+    "TOTAL,236,236,90,0,0,Avg: 38.1,90/0,18,18,0,0,0,105.56,105.56,40.25,9500",
+  ].join("\n")), { ...context, importTarget: "weekly_performance" });
+
+  assert.equal(report.reportType, "previous_week_otb");
+  assert.equal((report.mapping.total as any).roomsSold, 90);
+  assert.equal((report.mapping.total as any).roomRevenue, 9500);
+
+  const pageSource = readFileSync("client/src/pages/ops-report.tsx", "utf8");
+  assert.match(pageSource, /report\.reportType === "previous_week_otb"[\s\S]*?\? "previous_week_otb"[\s\S]*?mapping\.total && mappingMonth === reportMonth/);
+  assert.match(pageSource, /form\.append\("importTarget", opsImportTarget\(sourceLabel\)\)/);
+});
+
 test("Remaining Month OTB is kept separate from the full current-month report", async () => {
   const header = "Date,Rms Active,Rms Available,Rms Sold,Group PU,Group UnPU,Occ %,Guests (A/C),Arr,Dept,OOO,OTM,Hold,ADR Occupied ($),ADR Sold ($),RevPAR ($),Rm Rev ($)";
   const report = await parseOpsReportFile(csvFile("06092026_Remaining Month OTB.csv", `${header}\n" Jun 09, 2026",118,63,53,10,0,45.7,77/3,20,5,2,0,0,102.14,102.14,45.88,5413.45\n" Jun 30, 2026",118,112,5,0,0,4.27,8/0,1,11,1,0,0,107.93,107.93,4.57,539.64\nTOTAL,236,236,58,10,0,Avg: 24.58,85/3,21,16,3,0,0,102.64,102.64,25.22,5953.09`), context);

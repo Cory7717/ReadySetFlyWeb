@@ -183,6 +183,13 @@ const REPORT_TYPE_LABELS: Record<OpsImportResponse["reportType"], string> = {
   unknown: "Unrecognized / Failed",
 };
 
+function opsImportTarget(sourceLabel: string) {
+  if (sourceLabel === "Weekly performance") return "weekly_performance";
+  if (sourceLabel === "Current Month") return "current_month";
+  if (sourceLabel === "Next Month") return "next_month";
+  return "other";
+}
+
 const emptyRows = (count: number, keys: string[]) =>
   Array.from({ length: count }, (_, index) => keys.reduce<Row>((row, key) => ({ ...row, [key]: key === "no" ? String(index + 1) : "" }), {}));
 
@@ -426,6 +433,8 @@ function applyOpsReportToPayload(payload: Record<string, any>, report: OpsImport
     ? "current_month_sdly_otb"
     : report.reportType === "next_month_sdly_otb"
     ? "next_month_sdly_otb"
+    : report.reportType === "previous_week_otb"
+    ? "previous_week_otb"
     : report.reportType === "remaining_month_otb" || isRemainingMonthFile
     ? "remaining_month_otb"
     : mapping.total && mappingMonth === nextMonthKey(reportMonth)
@@ -1278,7 +1287,7 @@ export default function OpsReportPage() {
     onError: (error: Error) => toast({ title: "Unable to parse labor summary", description: error.message, variant: "destructive" }),
   });
   const opsReportUpload = useMutation({
-    mutationFn: async ({ files }: { files: File[]; sourceLabel: string }) => {
+    mutationFn: async ({ files, sourceLabel }: { files: File[]; sourceLabel: string }) => {
       const form = new FormData();
       files.forEach((file) => form.append("opsReport", file));
       form.append("weekStart", topMetrics.weekStart);
@@ -1286,6 +1295,7 @@ export default function OpsReportPage() {
       form.append("reportMonth", monthKeyFromDate(weekEnd || topMetrics.weekStart));
       form.append("businessDate", localDateIso());
       form.append("totalRooms", setup.totalRooms);
+      form.append("importTarget", opsImportTarget(sourceLabel));
       const response = await fetch(apiUrl("/api/opsreport/import"), { method: "POST", credentials: "include", body: form });
       if (!response.ok) throw new Error(await response.text());
       return response.json() as Promise<OpsImportBatchResponse>;

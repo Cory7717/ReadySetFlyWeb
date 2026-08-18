@@ -29,6 +29,7 @@ export type OpsParserContext = {
   reportMonth?: string;
   businessDate?: string;
   totalRooms?: number;
+  importTarget?: "weekly_performance" | "current_month" | "next_month" | "other";
 };
 
 type ParsedReport = {
@@ -283,6 +284,7 @@ export function detectOpsReportType(fileName: string, rows: string[][], context:
   if (/gss\s*scores?/.test(name) || (flattenedHeaders.includes("intent to recommend property") && flattenedHeaders.includes("benchmark"))) return "gss_scores";
   if (/ar\s*aging|aged\s*receivables?|accounts?\s*receivable/.test(name) || flattenedHeaders.some((value) => value.includes("120+")) && flattenedHeaders.some((value) => value.includes("current"))) return "ar_aging";
   const otbHeader = findHeader(rows, ["Date", "Rms Sold", "Occ %", "Rm Rev ($)"]);
+  if (context.importTarget === "weekly_performance" && otbHeader >= 0) return "previous_week_otb";
   if (/previous\s*week\s*otb/.test(name)) return "previous_week_otb";
   if (/remaining\s*month\s*otb/.test(name)) return "remaining_month_otb";
   if (otbHeader >= 0 || /month\s*otb/.test(name)) {

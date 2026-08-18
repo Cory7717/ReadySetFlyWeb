@@ -818,6 +818,9 @@ export function registerOpsReportRoutes(app: Express) {
           reportMonth: typeof req.body?.reportMonth === "string" ? req.body.reportMonth : undefined,
           businessDate: typeof req.body?.businessDate === "string" ? req.body.businessDate : undefined,
           totalRooms: Number(req.body?.totalRooms || 0) || undefined,
+          importTarget: ["weekly_performance", "current_month", "next_month", "other"].includes(String(req.body?.importTarget || ""))
+            ? req.body.importTarget as "weekly_performance" | "current_month" | "next_month" | "other"
+            : undefined,
         };
         const reports = await Promise.all(files.map(async (file) => {
           try {

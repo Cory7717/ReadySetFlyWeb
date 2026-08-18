@@ -187,6 +187,7 @@ function opsImportTarget(sourceLabel: string) {
   if (sourceLabel === "Weekly performance") return "weekly_performance";
   if (sourceLabel === "Current Month") return "current_month";
   if (sourceLabel === "Next Month") return "next_month";
+  if (sourceLabel === "Guest Satisfaction") return "guest_satisfaction";
   return "other";
 }
 
@@ -2289,6 +2290,9 @@ export default function OpsReportPage() {
                                 <div className="min-w-0">
                                   <div className="truncate font-medium text-[#201814]">{String(report.originalFileName || "Report")}</div>
                                   <div className={report.status === "failed" ? "text-rose-700" : report.status === "warning" ? "text-amber-700" : "text-[#2f5f46]"}>{String(report.status || "parsed")}</div>
+                                  {Array.isArray(report.warnings) && report.warnings.length > 0 && (
+                                    <div className="mt-0.5 text-[11px] leading-4 text-rose-700">{String(report.warnings[0])}</div>
+                                  )}
                                 </div>
                                 <Button size="sm" variant="outline" className={`${C.outline} h-7 shrink-0 px-2`} disabled={removeOpsReportUpload.isPending} onClick={() => {
                                   if (window.confirm(`Remove ${String(report.originalFileName || "this report")} and recalculate its mapped data?`)) removeOpsReportUpload.mutate(String(report.uploadId));

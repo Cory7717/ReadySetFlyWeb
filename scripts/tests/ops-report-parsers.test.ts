@@ -123,6 +123,18 @@ test("OTB uploaded from Weekly Performance maps to previous-week totals instead 
   assert.match(pageSource, /form\.append\("importTarget", opsImportTarget\(sourceLabel\)\)/);
 });
 
+test("Guest Satisfaction upload target sends a generically named score export to the GSS parser", async () => {
+  const report = await parseOpsReportFile(csvFile("export.xlsx.csv", [
+    "Metric,Jun,Total,Benchmark,Difference",
+    "Intent to Recommend Property,75,72,70,2",
+    "Cleanliness,80,78,74,4",
+  ].join("\n")), { ...context, importTarget: "guest_satisfaction" });
+
+  assert.equal(report.reportType, "gss_scores");
+  assert.equal((report.mapping.gssRows as any[]).find((row) => row.label === "ITR")?.hotel, "75");
+  assert.equal((report.mapping.gssRows as any[]).find((row) => row.label === "Cleanliness")?.brand, "74");
+});
+
 test("Remaining Month OTB is kept separate from the full current-month report", async () => {
   const header = "Date,Rms Active,Rms Available,Rms Sold,Group PU,Group UnPU,Occ %,Guests (A/C),Arr,Dept,OOO,OTM,Hold,ADR Occupied ($),ADR Sold ($),RevPAR ($),Rm Rev ($)";
   const report = await parseOpsReportFile(csvFile("06092026_Remaining Month OTB.csv", `${header}\n" Jun 09, 2026",118,63,53,10,0,45.7,77/3,20,5,2,0,0,102.14,102.14,45.88,5413.45\n" Jun 30, 2026",118,112,5,0,0,4.27,8/0,1,11,1,0,0,107.93,107.93,4.57,539.64\nTOTAL,236,236,58,10,0,Avg: 24.58,85/3,21,16,3,0,0,102.64,102.64,25.22,5953.09`), context);

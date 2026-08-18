@@ -29,7 +29,7 @@ export type OpsParserContext = {
   reportMonth?: string;
   businessDate?: string;
   totalRooms?: number;
-  importTarget?: "weekly_performance" | "current_month" | "next_month" | "other";
+  importTarget?: "weekly_performance" | "current_month" | "next_month" | "guest_satisfaction" | "other";
 };
 
 type ParsedReport = {
@@ -273,6 +273,7 @@ function baseReport(file: Express.Multer.File, reportType: OpsReportType, contex
 export function detectOpsReportType(fileName: string, rows: string[][], context: OpsParserContext): OpsReportType | null {
   const name = fileName.toLowerCase();
   const flattenedHeaders = rows.slice(0, 12).flat().map(normalizedHeader);
+  if (context.importTarget === "guest_satisfaction") return "gss_scores";
   if (/analytical\s*account\s*tracking/.test(name) || (
     flattenedHeaders.includes("global ultimate account name")
     && flattenedHeaders.includes("current room revenue")

@@ -53,6 +53,7 @@ import {
   targetRoles,
 } from "../courtyardSalesDemand";
 import { researchDemandEvents } from "../courtyardSalesDemandResearch";
+import { mergeDatScreenshotImports, parseDatScreenshot, parseDatWorkbook } from "../courtyardSalesDatImport";
 
 const DEFAULT_HOTEL_ID = "courtyard-austin-lakeline";
 const RECOVERY_MONTHS = 3;
@@ -62,6 +63,8 @@ const ALL_MARKET_REPORT_TYPE = "marriott_mint_all_market_segments";
 const STAY_MARKET_REPORT_TYPE = "stay_revenue_by_market_segment_with_groups";
 const STAY_GROUP_SUMMARY_REPORT_TYPE = "stay_group_summary";
 const STAY_RESERVATIONS_REPORT_TYPE = "stay_reservations_company_names";
+const DAT_SCREENSHOT_REPORT_TYPE = "marriott_dat_analytical_demand_screenshot";
+const DAT_EXCEL_REPORT_TYPE = "marriott_dat_analytical_demand_excel";
 const REPORT_METADATA: Record<
   string,
   { system: string; label: string; purpose: string }
@@ -80,6 +83,16 @@ const REPORT_METADATA: Record<
     system: "STAY",
     label: "Reservations by Company",
     purpose: "Special Corp/Govt Names",
+  },
+  [DAT_SCREENSHOT_REPORT_TYPE]: {
+    system: "DAT",
+    label: "Analytical Demand Screenshot",
+    purpose: "Hotel Production",
+  },
+  [DAT_EXCEL_REPORT_TYPE]: {
+    system: "DAT",
+    label: "Analytical Demand Excel Export",
+    purpose: "Hotel Production",
   },
   [ALL_MARKET_REPORT_TYPE]: {
     system: "MINT",
@@ -572,7 +585,7 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
       recoveryThresholdMonths: RECOVERY_MONTHS,
     }),
   );
-  router.post("/preview", upload.single("file"), (req: any, res, next) => {
+  router.post("/preview", upload.single("file"), async (req: any, res, next) => {
     try {
       if (!req.file)
         return res.status(400).json({ error: "Choose a report file." });
@@ -580,8 +593,11 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
       const reportMonth = Number(req.body.reportMonth);
       const isStayFormat = Number.isInteger(reportYear) && reportYear >= 2026;
       const requestedReportType = String(req.body.reportType || "");
+      const isDatScreenshot = requestedReportType === DAT_SCREENSHOT_REPORT_TYPE;
+      const isDatExcel = requestedReportType === DAT_EXCEL_REPORT_TYPE;
+      const isDatReport = isDatScreenshot || isDatExcel;
       const detectedStayReportType = isStayFormat
-        ? detectStaySalesReportType(req.file.buffer)
+        ? (isDatReport ? null : detectStaySalesReportType(req.file.buffer))
         : null;
       const isGroupSummary =
         isStayFormat &&
@@ -590,7 +606,11 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
       const isReservationsReport =
         isStayFormat &&
         detectedStayReportType === STAY_RESERVATIONS_REPORT_TYPE;
-      const p = isReservationsReport
+      const p = isDatExcel
+        ? parseDatWorkbook(req.file.buffer)
+        : isDatScreenshot
+        ? await parseDatScreenshot(req.file)
+        : isReservationsReport
         ? parseStayReservationsCompanyImport(
             req.file.buffer,
             reportYear,
@@ -615,8 +635,23 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
         isStayFormat,
         isGroupSummary,
         isReservationsReport,
+        isDatScreenshot,
+        isDatExcel,
+        showsTableStart: (p as any).showsTableStart ?? null,
+        showsTableEnd: (p as any).showsTableEnd ?? null,
         reportDateRange: (p as any).reportDateRange || null,
-        suggestedReportType: isReservationsReport
+        calculatedTotals: {
+          roomNights: p.accepted.reduce((sum: number, row: any) => sum + Number(row.roomNights || 0), 0),
+          roomRevenue: p.accepted.reduce((sum: number, row: any) => sum + Number(row.roomRevenue || 0), 0),
+        },
+        extractedRows: isDatReport ? p.accepted.map((row: any) => ({
+          key: row.normalizedAccountKey,
+          roomNights: row.roomNights,
+          roomRevenue: row.roomRevenue,
+        })) : [],
+        suggestedReportType: isDatReport
+          ? requestedReportType
+          : isReservationsReport
           ? STAY_RESERVATIONS_REPORT_TYPE
           : isGroupSummary
             ? STAY_GROUP_SUMMARY_REPORT_TYPE
@@ -636,6 +671,8 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
           bookingOffice: r.bookingOffice,
           sourceDetail: isReservationsReport
             ? r.marketSegment
+            : isDatReport
+              ? r.marketCategory
             : isGroupSummary
               ? r.groupBookingCode
               : isStayFormat
@@ -664,7 +701,9 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
           .json({ error: "You do not have access to that property." });
       const sourceReportType =
         reportYear >= 2026
-          ? detectStaySalesReportType(req.file.buffer) || requestedReportType
+          ? [DAT_EXCEL_REPORT_TYPE, DAT_SCREENSHOT_REPORT_TYPE].includes(requestedReportType)
+            ? requestedReportType
+            : detectStaySalesReportType(req.file.buffer) || requestedReportType
           : requestedReportType;
       if (
         reportYear >= 2026 &&
@@ -672,6 +711,8 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
           STAY_MARKET_REPORT_TYPE,
           STAY_GROUP_SUMMARY_REPORT_TYPE,
           STAY_RESERVATIONS_REPORT_TYPE,
+          DAT_EXCEL_REPORT_TYPE,
+          DAT_SCREENSHOT_REPORT_TYPE,
         ].includes(sourceReportType)
       )
         return res.status(400).json({
@@ -702,7 +743,11 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
           .status(400)
           .json({ error: "Choose a valid report month and year." });
       const p =
-        reportYear >= 2026 && sourceReportType === STAY_RESERVATIONS_REPORT_TYPE
+        sourceReportType === DAT_EXCEL_REPORT_TYPE
+          ? parseDatWorkbook(req.file.buffer)
+        : sourceReportType === DAT_SCREENSHOT_REPORT_TYPE
+          ? await parseDatScreenshot(req.file)
+        : reportYear >= 2026 && sourceReportType === STAY_RESERVATIONS_REPORT_TYPE
           ? parseStayReservationsCompanyImport(
               req.file.buffer,
               reportYear,
@@ -714,6 +759,13 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
             : reportYear >= 2026
               ? parseStayMarketSegmentImport(req.file.buffer)
               : parseSalesImport(req.file.buffer);
+      if ([DAT_EXCEL_REPORT_TYPE, DAT_SCREENSHOT_REPORT_TYPE].includes(sourceReportType)) {
+        const [imageYear, imageMonth] = p.reportDateRange.start.split("-").map(Number);
+        if (imageYear !== reportYear || imageMonth !== reportMonth)
+          return res.status(400).json({
+            error: `The DAT report TimeFrame is ${p.reportDateRange.start} to ${p.reportDateRange.end}. Import it as ${imageYear}-${String(imageMonth).padStart(2, "0")}.`,
+          });
+      }
       if (reportYear >= 2026 && sourceReportType === STAY_MARKET_REPORT_TYPE) {
         const mismatched = p.accepted.filter((row: any) => {
           const [year, month] = String(row.stayDate || "")
@@ -764,6 +816,9 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
           error: "This exact file has already been imported.",
           code: "duplicate_file",
         });
+      const existingSourceTypes = reportYear >= 2026 && isAuthoritativeHotelProductionReport(sourceReportType)
+        ? [STAY_MARKET_REPORT_TYPE, DAT_EXCEL_REPORT_TYPE, DAT_SCREENSHOT_REPORT_TYPE]
+        : [sourceReportType];
       const existing = await db
         .select()
         .from(courtyardSalesImportBatches)
@@ -772,7 +827,7 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
             eq(courtyardSalesImportBatches.hotelId, hotelId),
             eq(courtyardSalesImportBatches.reportYear, reportYear),
             eq(courtyardSalesImportBatches.reportMonth, reportMonth),
-            eq(courtyardSalesImportBatches.sourceReportType, sourceReportType),
+            inArray(courtyardSalesImportBatches.sourceReportType, existingSourceTypes),
             eq(courtyardSalesImportBatches.status, "completed"),
           ),
         );
@@ -873,6 +928,7 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
         const reportYear = Number(req.body.reportYear);
         const reportMonth = Number(req.body.reportMonth);
         const replace = String(req.body.replace) === "true";
+        const requestedReportType = String(req.body.reportType || "");
         if (!files.length)
           return res.status(400).json({ error: "Choose one or more reports." });
         if (!hasHotel(req, hotelId))
@@ -889,7 +945,22 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
             error:
               "Coordinated multi-file imports require a valid STAY month in 2026 or later.",
           });
-        const prepared = files.map((file) => {
+        const prepared = requestedReportType === DAT_SCREENSHOT_REPORT_TYPE
+          ? await (async () => {
+              const parsedParts = await Promise.all(files.map((file) => parseDatScreenshot(file)));
+              const parsed = mergeDatScreenshotImports(parsedParts);
+              const [imageYear, imageMonth] = parsed.reportDateRange.start.split("-").map(Number);
+              if (imageYear !== reportYear || imageMonth !== reportMonth)
+                throw new Error(`The DAT screenshot TimeFrame is ${parsed.reportDateRange.start} to ${parsed.reportDateRange.end}. Import it as ${imageYear}-${String(imageMonth).padStart(2, "0")}.`);
+              const combinedBuffer = Buffer.concat(files.map((file) => file.buffer));
+              return [{
+                file: { ...files[0], originalname: files.map((file) => file.originalname).join(" + "), buffer: combinedBuffer },
+                sourceReportType: DAT_SCREENSHOT_REPORT_TYPE,
+                parsed,
+                checksum: crypto.createHash("sha256").update(combinedBuffer).digest("hex"),
+              }];
+            })()
+          : files.map((file) => {
           const sourceReportType = detectStaySalesReportType(file.buffer);
           if (!sourceReportType)
             throw new Error(
@@ -943,7 +1014,7 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
               .update(file.buffer)
               .digest("hex"),
           };
-        });
+            });
         const selectedTypes = new Set(
           prepared.map((item) => item.sourceReportType),
         );
@@ -953,6 +1024,9 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
           });
         const conflicts = [] as any[];
         for (const item of prepared) {
+          const conflictSourceTypes = isAuthoritativeHotelProductionReport(item.sourceReportType)
+            ? [STAY_MARKET_REPORT_TYPE, DAT_EXCEL_REPORT_TYPE, DAT_SCREENSHOT_REPORT_TYPE]
+            : [item.sourceReportType];
           const existing = await db
             .select()
             .from(courtyardSalesImportBatches)
@@ -961,10 +1035,7 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
                 eq(courtyardSalesImportBatches.hotelId, hotelId),
                 eq(courtyardSalesImportBatches.reportYear, reportYear),
                 eq(courtyardSalesImportBatches.reportMonth, reportMonth),
-                eq(
-                  courtyardSalesImportBatches.sourceReportType,
-                  item.sourceReportType,
-                ),
+                inArray(courtyardSalesImportBatches.sourceReportType, conflictSourceTypes),
                 eq(courtyardSalesImportBatches.status, "completed"),
               ),
             );
@@ -1097,6 +1168,8 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
                 STAY_MARKET_REPORT_TYPE,
                 STAY_GROUP_SUMMARY_REPORT_TYPE,
                 STAY_RESERVATIONS_REPORT_TYPE,
+                DAT_EXCEL_REPORT_TYPE,
+                DAT_SCREENSHOT_REPORT_TYPE,
               ].includes(batch.sourceReportType)
             : batch.sourceReportType !== STAY_MARKET_REPORT_TYPE),
       );
@@ -1115,10 +1188,10 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
         periods.add(periodIndex(batch.reportYear, batch.reportMonth));
         periodsBySource.set(batch.sourceReportType, periods);
       }
-      const stayRows = rows.filter(
-        (row) =>
-          batchById.get(row.importBatchId)?.sourceReportType ===
-          STAY_MARKET_REPORT_TYPE,
+      const stayRows = rows.filter((row) =>
+        [STAY_MARKET_REPORT_TYPE, DAT_EXCEL_REPORT_TYPE, DAT_SCREENSHOT_REPORT_TYPE].includes(
+          batchById.get(row.importBatchId)?.sourceReportType,
+        ),
       );
       const companyNameRows = rows.filter(
         (row) =>
@@ -1352,7 +1425,9 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
         const expected =
           period.year >= 2026
             ? [
-                STAY_MARKET_REPORT_TYPE,
+                periodBatches.find((batch) => batch.sourceReportType === DAT_EXCEL_REPORT_TYPE)?.sourceReportType
+                  || periodBatches.find((batch) => batch.sourceReportType === DAT_SCREENSHOT_REPORT_TYPE)?.sourceReportType
+                  || STAY_MARKET_REPORT_TYPE,
                 STAY_GROUP_SUMMARY_REPORT_TYPE,
                 STAY_RESERVATIONS_REPORT_TYPE,
               ]

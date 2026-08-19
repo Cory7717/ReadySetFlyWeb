@@ -7,6 +7,8 @@ export function isAuthoritativeHotelProductionReport(sourceReportType: string) {
   return [
     "marriott_mint_all_market_segments",
     "stay_revenue_by_market_segment_with_groups",
+    "marriott_dat_analytical_demand_screenshot",
+    "marriott_dat_analytical_demand_excel",
   ].includes(sourceReportType);
 }
 export function salesImportReplacementScope(

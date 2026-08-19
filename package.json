@@ -26,6 +26,7 @@
     "test": "npm run test:unit && npm run test:membership-promotions && npm run test:flight-service",
     "test:membership-promotions": "tsx --test scripts/tests/membership-promotions.test.ts",
     "test:opsreport": "tsx --test scripts/tests/ops-report-parsers.test.ts",
+    "test:sales-intelligence": "tsx --test scripts/tests/courtyard-sales-dat-import.test.ts",
     "test:tips": "tsx --test scripts/tests/tips-grid-persistence.test.ts",
     "test:aviation-briefings": "tsx --test scripts/tests/aviation-briefings.test.ts",
     "test:aviation-contributors": "tsx --test scripts/tests/aviation-briefing-submissions.test.ts",

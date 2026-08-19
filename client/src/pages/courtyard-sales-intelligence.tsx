@@ -119,9 +119,11 @@ export default function CourtyardSalesIntelligence() {
       "stay_revenue_by_market_segment_with_groups",
       "stay_group_summary",
       "stay_reservations_company_names",
+      "marriott_dat_analytical_demand_excel",
+      "marriott_dat_analytical_demand_screenshot",
     ];
     if (Number(year) >= 2026 && !stayTypes.includes(reportType))
-      setReportType("stay_revenue_by_market_segment_with_groups");
+      setReportType("marriott_dat_analytical_demand_excel");
     if (Number(year) < 2026 && stayTypes.includes(reportType))
       setReportType("marriott_mint_group_account_tracking");
   }, [year, reportType]);
@@ -154,20 +156,47 @@ export default function CourtyardSalesIntelligence() {
           }).then((result) => ({ ...result, filename: file.name }));
         }),
       );
+      const datRows = new Map<string, any>();
+      reports.flatMap((report) => report.extractedRows || []).forEach((row) => {
+        if (!datRows.has(row.key)) datRows.set(row.key, row);
+      });
+      const deduplicatedDatRows = Array.from(datRows.values());
+      const datReports = reports.filter((report) => report.isDatScreenshot || report.isDatExcel);
+      const datExtractedCount = datReports.reduce((sum, report) => sum + (report.extractedRows?.length || 0), 0);
+      const combinedWarnings = reports.flatMap((report) => report.warnings || []).filter((warning) =>
+        !datReports.length || !/does not show (?:the beginning|the end)/i.test(warning),
+      );
+      if (datReports.length && !datReports.some((report) => report.showsTableStart)) combinedWarnings.push("The uploaded images do not show the beginning of the DAT table.");
+      if (datReports.length && !datReports.some((report) => report.showsTableEnd)) combinedWarnings.push("The uploaded images do not show the end of the DAT table; calculated totals may be incomplete.");
       return {
         reports,
         detectedDelimiter: "auto",
         rowsFound: reports.reduce((sum, r) => sum + r.rowsFound, 0),
         acceptedRows: reports.reduce((sum, r) => sum + r.acceptedRows, 0),
         rejectedRows: reports.reduce((sum, r) => sum + r.rejectedRows, 0),
-        duplicateRows: reports.reduce((sum, r) => sum + r.duplicateRows, 0),
-        warnings: reports.flatMap((r) => r.warnings || []),
+        duplicateRows: reports.reduce((sum, r) => sum + r.duplicateRows, 0) + Math.max(0, datExtractedCount - deduplicatedDatRows.length),
+        warnings: Array.from(new Set(combinedWarnings)),
+        reportDateRange: reports.find((r) => r.isDatScreenshot || r.isDatExcel)?.reportDateRange || null,
+        calculatedTotals: {
+          roomNights: deduplicatedDatRows.length
+            ? deduplicatedDatRows.reduce((sum, row) => sum + Number(row.roomNights || 0), 0)
+            : reports.reduce((sum, r) => sum + Number(r.calculatedTotals?.roomNights || 0), 0),
+          roomRevenue: deduplicatedDatRows.length
+            ? deduplicatedDatRows.reduce((sum, row) => sum + Number(row.roomRevenue || 0), 0)
+            : reports.reduce((sum, r) => sum + Number(r.calculatedTotals?.roomRevenue || 0), 0),
+        },
         preview: reports.flatMap((r) =>
           r.preview.map((row: any) => ({ ...row, filename: r.filename })),
         ),
       };
     },
     onSuccess: (result) => {
+      const datRange = result.reports?.find((report: any) => report.isDatScreenshot || report.isDatExcel)?.reportDateRange;
+      if (datRange?.start) {
+        const [imageYear, imageMonth] = String(datRange.start).split("-");
+        setYear(imageYear);
+        setMonth(String(Number(imageMonth)));
+      }
       setPreview(result);
     },
     onError: (e: Error) =>
@@ -186,6 +215,7 @@ export default function CourtyardSalesIntelligence() {
         form.append("hotelId", selectedHotel);
         form.append("reportMonth", month);
         form.append("reportYear", year);
+        form.append("reportType", reportType);
         form.append("replace", String(replace));
         return json("/api/courtyard/sales-intelligence/imports", {
           method: "POST",
@@ -2018,7 +2048,7 @@ function UploadDialog(p: any) {
           <DialogTitle>Upload Sales Reports</DialogTitle>
           <DialogDescription>
             {usesStayFormat
-              ? "Upload the selected monthly STAY report. Hotel Production controls totals; Named Groups builds the prospecting history."
+              ? "Use the DAT Excel export as the preferred source for monthly hotel production. STAY reports remain available for named groups and company-level prospecting; a DAT screenshot is available as a backup."
               : "Analytical Account Tracking exports may use .xls even when they contain tab-delimited text. Parsing happens securely on the server."}
           </DialogDescription>
         </DialogHeader>
@@ -2038,6 +2068,9 @@ function UploadDialog(p: any) {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="marriott_dat_analytical_demand_excel">
+                      DAT Excel Export — Preferred
+                    </SelectItem>
                     <SelectItem value="stay_revenue_by_market_segment_with_groups">
                       Hotel Production — Market Segments
                     </SelectItem>
@@ -2047,11 +2080,18 @@ function UploadDialog(p: any) {
                     <SelectItem value="stay_group_summary">
                       Named Groups — Group Summary
                     </SelectItem>
+                    <SelectItem value="marriott_dat_analytical_demand_screenshot">
+                      DAT Screenshot — Backup
+                    </SelectItem>
                   </SelectContent>
                 </Select>
                 <div className="rounded-md border border-[#2f5f46] bg-[#e7f0e9] p-3 text-sm text-[#173b2a]">
                   {p.reportType === "stay_group_summary"
                     ? "Imports group names, booking codes, stay dates, picked-up rooms, revenue, ADR, cutoff dates, and block performance. It does not affect hotel totals."
+                    : p.reportType === "marriott_dat_analytical_demand_excel"
+                      ? "Preferred hotel-production source. Upload the DAT Excel export; its Filters sheet sets the reporting Timeframe and its Detail Selection rows calculate room-night and room-revenue totals without OCR."
+                    : p.reportType === "marriott_dat_analytical_demand_screenshot"
+                      ? "Backup only. Upload one or more screenshots covering the complete DAT table. TimeFrame controls the reporting month; visible rows are extracted with OCR and overlapping rows are counted once."
                     : "Authoritative source for Total, Special Corp/Govt rollups, and every market-segment tab."}
                 </div>
               </div>
@@ -2125,14 +2165,18 @@ function UploadDialog(p: any) {
           <div className="sm:col-span-2">
             <Label>
               {usesStayFormat
-                ? "STAY report files (select one or more)"
+                ? p.reportType === "marriott_dat_analytical_demand_excel"
+                  ? "DAT Excel export (.xlsx — preferred)"
+                  : p.reportType === "marriott_dat_analytical_demand_screenshot"
+                  ? "DAT screenshots (PNG, JPG, or WebP; up to 3)"
+                  : "STAY report files (select one or more)"
                 : "File (.xls, .xlsx, .csv, .tsv, .txt)"}
             </Label>
             <Input
               key={`${usesStayFormat ? "stay" : "mint"}-${p.reportType}`}
               type="file"
-              accept=".xls,.xlsx,.csv,.tsv,.txt"
-              multiple={usesStayFormat}
+              accept={p.reportType === "marriott_dat_analytical_demand_excel" ? ".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" : p.reportType === "marriott_dat_analytical_demand_screenshot" ? ".png,.jpg,.jpeg,.webp,image/png,image/jpeg,image/webp" : ".xls,.xlsx,.csv,.tsv,.txt"}
+              multiple={usesStayFormat && p.reportType !== "marriott_dat_analytical_demand_excel"}
               onChange={(e) => p.setFiles(Array.from(e.target.files || []))}
             />
           </div>
@@ -2152,6 +2196,12 @@ function UploadDialog(p: any) {
                 <Badge variant="secondary">
                   {p.preview.duplicateRows} duplicate rows skipped
                 </Badge>
+              )}
+              {p.preview.reportDateRange && (
+                <Badge variant="outline">TimeFrame {p.preview.reportDateRange.start} to {p.preview.reportDateRange.end}</Badge>
+              )}
+              {p.preview.reportDateRange && (
+                <Badge variant="outline">Calculated total: {Math.round(p.preview.calculatedTotals.roomNights).toLocaleString()} rooms · {money.format(p.preview.calculatedTotals.roomRevenue)}</Badge>
               )}
             </div>
             <div className="overflow-x-auto">
@@ -2188,7 +2238,7 @@ function UploadDialog(p: any) {
             </div>
             {p.preview.warnings.length > 0 && (
               <div className="text-xs text-[#6e5d50]">
-                Optional columns not present:{" "}
+                {p.preview.reportDateRange ? "Import notes: " : "Optional columns not present: "}
                 {p.preview.warnings.slice(0, 6).join(", ")}
                 {p.preview.warnings.length > 6 ? "…" : ""}
               </div>

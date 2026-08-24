@@ -3045,7 +3045,7 @@ function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus,
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <CardTitle className={C.ink}>{t("Schedule requests")}</CardTitle>
-            <CardDescription className={C.muted}>{spanish ? "Las solicitudes deben presentarse con no mas de un mes de anticipacion. Las solicitudes dentro de 14 dias estan fuera de la politica del hotel y sujetas a aprobacion del gerente." : "Requests may only be submitted up to one month in advance. Requests inside 14 days are outside hotel policy and subject to manager approval."}</CardDescription>
+            <CardDescription className={C.muted}>{spanish ? "Las solicitudes deben presentarse con no mas de un mes calendario de anticipacion. Las solicitudes dentro de 14 dias estan fuera de la politica del hotel y sujetas a aprobacion del gerente." : "Requests may only be submitted up to one calendar month in advance. Requests inside 14 days are outside hotel policy and subject to manager approval."}</CardDescription>
             {isAdmin && (
               <div className="mt-2 flex flex-wrap gap-2">
                 <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-900">{pendingCount} {spanish ? "pendiente(s)" : "pending"}</Badge>

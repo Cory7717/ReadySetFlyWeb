@@ -3546,7 +3546,7 @@ export function registerScheduleRoutes(app: Express) {
       }
       const latestRequestDate = addMonths(today, 1);
       if (parsed.data.requestDate > latestRequestDate || requestEnd > latestRequestDate) {
-        return res.status(400).json({ error: "Schedule requests may only be submitted up to one month in advance." });
+        return res.status(400).json({ error: "Schedule requests may only be submitted up to one calendar month in advance." });
       }
       const leadDays = daysBetween(today, parsed.data.requestDate);
       const policyWarning = leadDays < 14;

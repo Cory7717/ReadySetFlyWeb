@@ -3088,14 +3088,14 @@ function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus,
           setPolicyOpen(open);
           if (!open) setPolicyAccepted(false);
         }}>
-          <DialogContent className="flex max-h-[90dvh] max-w-2xl grid-rows-none flex-col overflow-hidden p-0">
-            <DialogHeader className="shrink-0 border-b border-[#e0d3c1] px-6 py-5">
-              <DialogTitle className={C.ink}>{spanish ? "Politica de solicitudes de tiempo libre" : "Time-Off Request Policy"}</DialogTitle>
-              <DialogDescription className={C.muted}>
+          <DialogContent className="flex max-h-[90dvh] max-w-2xl grid-rows-none flex-col overflow-hidden border-[#c9b89f] bg-white p-0 text-[#201814] dark:border-[#c9b89f] dark:bg-white dark:text-[#201814] [&>button]:text-[#201814] [&>button]:opacity-80">
+            <DialogHeader className="shrink-0 border-b border-[#e0d3c1] bg-[#fffaf2] px-6 py-5 dark:bg-[#fffaf2]">
+              <DialogTitle className="text-[#201814] dark:text-[#201814]">{spanish ? "Politica de solicitudes de tiempo libre" : "Time-Off Request Policy"}</DialogTitle>
+              <DialogDescription className="text-[#5f5247] dark:text-[#5f5247]">
                 {spanish ? "Lea y acepte esta politica antes de enviar su solicitud." : "Please read and acknowledge this policy before submitting your request."}
               </DialogDescription>
             </DialogHeader>
-            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-4 text-sm leading-6 text-[#43382f]">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain bg-white px-6 py-4 text-sm leading-6 text-[#302720] dark:bg-white dark:text-[#302720]">
               <p className="mb-3">To maintain adequate staffing and provide a fair process for all associates, the following rules apply to ordinary time-off requests:</p>
               <ol className="list-decimal space-y-2 pl-5">
                 <li>Requests may be submitted no more than one calendar month before the requested date.</li>
@@ -3112,18 +3112,18 @@ function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus,
                 <li>This policy does not reduce or replace rights relating to legally protected leave or absences, including applicable family and medical leave, pregnancy or disability accommodations, military service, jury duty, voting, workers’ compensation, or other protected reasons. Associates who believe their request may involve a protected reason should contact their supervisor or Human Resources. They do not need to disclose private medical details in the scheduling request.</li>
                 <li>Approval under this scheduling policy does not determine whether the time off is paid. PTO eligibility, available balances, and payment are governed by the company’s separate written leave and payroll policies.</li>
               </ol>
-              <div className="mt-5 rounded-lg border border-[#d6c8b5] p-4">
+              <div className="mt-5 rounded-lg border border-[#d6c8b5] bg-[#fffdf9] p-4 text-[#302720] dark:bg-[#fffdf9] dark:text-[#302720]">
                 <p className="font-semibold text-[#201814]">Holiday Scheduling</p>
                 <p className="mt-1">Because the hotel operates throughout the year, associates may be scheduled to work holidays. Holiday assignments will be rotated as equitably as reasonably possible among qualified associates. Associates should generally expect to alternate major holiday assignments from year to year; prior-year assignments will be considered but do not guarantee a particular holiday off.</p>
                 <p className="mt-2">Major holidays include New Year’s Day, Memorial Day, Independence Day, Labor Day, Thanksgiving Day, Christmas Eve, Christmas Day, and New Year’s Eve. Holiday requests remain subject to staffing, qualifications, occupancy, prior approvals, and the rotation record. Voluntary exchanges require supervisor approval. Religious and other legally protected accommodation requests will be reviewed individually.</p>
               </div>
-              <div className="mt-5 rounded-lg border border-[#d6c8b5] bg-[#fbf6ee] p-4">
-                <p className="font-semibold text-[#201814]">Acknowledgment</p>
+              <div className="mt-5 rounded-lg border border-[#d6c8b5] bg-[#fbf6ee] p-4 text-[#302720] dark:bg-[#fbf6ee] dark:text-[#302720]">
+                <p className="font-semibold text-[#201814] dark:text-[#201814]">Acknowledgment</p>
                 <p className="mt-1">I have read and understand the Time-Off Request Policy. I understand that submitting a request does not mean it has been approved, that I must report to work unless the request is approved or I receive other instructions, and that emergencies and potentially protected leave should be reported through the appropriate supervisor or Human Resources process.</p>
               </div>
             </div>
-            <div className="shrink-0 border-t border-[#e0d3c1] bg-white px-6 py-4">
-              <label className="flex cursor-pointer items-start gap-3 text-sm font-medium text-[#201814]">
+            <div className="shrink-0 border-t border-[#e0d3c1] bg-[#fffaf2] px-6 py-4 text-[#201814] dark:bg-[#fffaf2] dark:text-[#201814]">
+              <label className="flex cursor-pointer items-start gap-3 text-sm font-medium text-[#201814] dark:text-[#201814]">
                 <input
                   type="checkbox"
                   className="mt-1 h-4 w-4 accent-[#2f6b4f]"

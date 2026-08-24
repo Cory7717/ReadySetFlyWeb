@@ -41,6 +41,7 @@ const DEPARTMENTS = ["Managers", "Above Property", "Front Desk", "Night Audit", 
 const REQUIRED_DEPARTMENTS = ["Front Desk", "Night Audit", "Bistro", "Maintenance", "Housekeeping"];
 const SCHEDULE_ROLES = ["Above Property", "GM", "DOS", "DOS / Sales", "Sales", "MOD", "Executive Housekeeper", "Exec HK", "Front Desk Supervisor", "FD AM", "FD PM", "Night Audit", "Bistro Manager", "Bistro Attendant", "Maintenance", "Room Attendant", "Laundry", "Room Inspector", "Houseperson"];
 const SCHEDULE_DAY_LABELS = ["Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"];
+const TIME_OFF_POLICY_VERSION = "2026-08-24";
 const DAY_MS = 86_400_000;
 const TARGET_OCCUPANCY_PERCENT = Number(process.env.SCHEDULE_TARGET_OCCUPANCY_PERCENT || 65);
 const TARGET_HPOR = Number(process.env.SCHEDULE_TARGET_HPOR || 1.4);
@@ -1416,9 +1417,13 @@ const scheduleRequestSchema = z.object({
   startTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/).optional().nullable(),
   endTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/).optional().nullable(),
   notes: z.string().trim().min(1).max(2000),
+  policyAccepted: z.boolean().optional(),
 }).refine(
   (request) => Boolean(request.startTime) === Boolean(request.endTime),
   { message: "Start and end times must be provided together.", path: ["endTime"] },
+).refine(
+  (request) => request.requestType !== "time_off" || request.policyAccepted === true,
+  { message: "The Time-Off Request Policy must be accepted before submitting a time-off request.", path: ["policyAccepted"] },
 );
 
 const scheduleRequestStatusSchema = z.object({
@@ -3548,7 +3553,13 @@ export function registerScheduleRoutes(app: Express) {
       if (!request) {
         return res.status(409).json({ error: "This request cannot be processed due to a conflicting request. Please contact your direct supervisor to discuss this request." });
       }
-      await audit(null, req.scheduleUser.id, "schedule_request_submitted", { requestId: request.id, requestDate: request.requestDate, requestEndDate: request.requestEndDate });
+      await audit(null, req.scheduleUser.id, "schedule_request_submitted", {
+        requestId: request.id,
+        requestDate: request.requestDate,
+        requestEndDate: request.requestEndDate,
+        timeOffPolicyAccepted: parsed.data.requestType === "time_off" ? true : undefined,
+        timeOffPolicyVersion: parsed.data.requestType === "time_off" ? TIME_OFF_POLICY_VERSION : undefined,
+      });
       let emailSent = false;
       try {
         const managerEmails = await getDepartmentManagerEmails(department);

@@ -2946,24 +2946,45 @@ function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus,
   const [form, setForm] = useState({ requestDate: "", requestEndDate: "", requestType: "time_off", startTime: "", endTime: "", notes: "" });
   const [expanded, setExpanded] = useState(true);
   const [pastExpanded, setPastExpanded] = useState(false);
+  const [policyOpen, setPolicyOpen] = useState(false);
+  const [policyAccepted, setPolicyAccepted] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
   const t = (value: string) => tr(spanish, value);
   const today = localDateKey();
   const latestRequestDate = addMonthsLocal(today, 1);
   const isPastRequest = (request: ScheduleRequest) => Boolean(request.isPast ?? ((request.requestEndDate || request.requestDate) < today));
   const activeRequests = requests.filter((request) => !isPastRequest(request));
   const pastRequests = requests.filter(isPastRequest);
-  const submit = async () => {
+  const submit = () => {
+    if (form.requestType !== "time_off") {
+      void submitRequest(false);
+      return;
+    }
+    setPolicyAccepted(false);
+    setPolicyOpen(true);
+  };
+  const submitRequest = async (acceptedPolicy: boolean) => {
+    if (submitting) return;
     if (daysBetweenLocal(localDateKey(), form.requestDate) < 14) {
       window.alert(spanish
         ? "Esta solicitud es para una fecha dentro de los proximos 14 dias. Puede enviarla, pero es posible que no sea aprobada."
         : "This request is for a date within the next 14 days. You may submit it, but approval is not guaranteed.");
     }
+    setSubmitting(true);
     try {
-      await onSubmit({ ...form, requestEndDate: form.requestEndDate || form.requestDate, startTime: form.startTime || null, endTime: form.endTime || null });
+      await onSubmit({ ...form, requestEndDate: form.requestEndDate || form.requestDate, startTime: form.startTime || null, endTime: form.endTime || null, policyAccepted: acceptedPolicy });
       setForm({ requestDate: "", requestEndDate: "", requestType: "time_off", startTime: "", endTime: "", notes: "" });
+      setPolicyOpen(false);
+      setPolicyAccepted(false);
     } catch {
       // The mutation displays the server's rejection and the form remains available for correction.
+    } finally {
+      setSubmitting(false);
     }
+  };
+  const acceptPolicyAndSubmit = async () => {
+    if (!policyAccepted) return;
+    await submitRequest(true);
   };
   const pendingCount = activeRequests.filter((request) => request.status === "submitted").length;
   const approvedCount = activeRequests.filter((request) => request.status === "approved").length;
@@ -3062,6 +3083,61 @@ function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus,
           <div><Label>{t("Notes")}</Label><Input className={C.field} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder={t("Request details")} /></div>
           <div className="flex items-end"><Button className={C.green} disabled={!form.requestDate || !form.notes.trim()} onClick={submit}>{t("Submit")}</Button></div>
         </div>
+        <Dialog open={policyOpen} onOpenChange={(open) => {
+          if (submitting) return;
+          setPolicyOpen(open);
+          if (!open) setPolicyAccepted(false);
+        }}>
+          <DialogContent className="max-h-[90vh] max-w-2xl overflow-hidden p-0">
+            <DialogHeader className="border-b border-[#e0d3c1] px-6 py-5">
+              <DialogTitle className={C.ink}>{spanish ? "Politica de solicitudes de tiempo libre" : "Time-Off Request Policy"}</DialogTitle>
+              <DialogDescription className={C.muted}>
+                {spanish ? "Lea y acepte esta politica antes de enviar su solicitud." : "Please read and acknowledge this policy before submitting your request."}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="overflow-y-auto px-6 py-4 text-sm leading-6 text-[#43382f]">
+              <p className="mb-3">To maintain adequate staffing and provide a fair process for all associates, the following rules apply to ordinary time-off requests:</p>
+              <ol className="list-decimal space-y-2 pl-5">
+                <li>Requests may be submitted no more than one calendar month before the requested date.</li>
+                <li>Associates should submit foreseeable requests as early as possible. Requests submitted fewer than 14 days before the requested date may receive additional review and are not guaranteed approval.</li>
+                <li>A request is not approved until its status shows “Approved.” Submitting a request does not authorize an absence.</li>
+                <li>Requests are subject to staffing needs, anticipated occupancy, the number of qualified associates available, previously submitted requests, and other operational requirements.</li>
+                <li>A request cannot be submitted when another pending or approved request already affects the same department, date, and overlapping shift. The associate may contact their direct supervisor to discuss exceptional circumstances, but supervisor review does not guarantee approval.</li>
+                <li>Associates should not make nonrefundable plans until their request has been approved.</li>
+                <li>Associates must continue reporting to all scheduled shifts unless the request is approved or a supervisor provides other instructions.</li>
+                <li>This request system is not the call-in procedure for an illness, emergency, unexpected absence, or late arrival. Associates must follow the established call-in procedure and contact their supervisor as soon as reasonably possible.</li>
+                <li>Associates may not submit false or misleading information, submit requests on behalf of another associate, or use repeated requests to interfere with scheduling. Misuse may result in denial of the request and appropriate corrective action, applied consistently with company policy and applicable law.</li>
+                <li>Approval of one request does not guarantee approval of another request, even when the circumstances appear similar. Each request is evaluated using the staffing and operational circumstances applicable to the requested date.</li>
+                <li>An approved request may be changed only after consultation with the associate and when operationally necessary, subject to company policy and applicable law.</li>
+                <li>This policy does not reduce or replace rights relating to legally protected leave or absences, including applicable family and medical leave, pregnancy or disability accommodations, military service, jury duty, voting, workers’ compensation, or other protected reasons. Associates who believe their request may involve a protected reason should contact their supervisor or Human Resources. They do not need to disclose private medical details in the scheduling request.</li>
+                <li>Approval under this scheduling policy does not determine whether the time off is paid. PTO eligibility, available balances, and payment are governed by the company’s separate written leave and payroll policies.</li>
+              </ol>
+              <div className="mt-5 rounded-lg border border-[#d6c8b5] bg-[#fbf6ee] p-4">
+                <p className="font-semibold text-[#201814]">Acknowledgment</p>
+                <p className="mt-1">I have read and understand the Time-Off Request Policy. I understand that submitting a request does not mean it has been approved, that I must report to work unless the request is approved or I receive other instructions, and that emergencies and potentially protected leave should be reported through the appropriate supervisor or Human Resources process.</p>
+              </div>
+            </div>
+            <div className="border-t border-[#e0d3c1] bg-white px-6 py-4">
+              <label className="flex cursor-pointer items-start gap-3 text-sm font-medium text-[#201814]">
+                <input
+                  type="checkbox"
+                  className="mt-1 h-4 w-4 accent-[#2f6b4f]"
+                  checked={policyAccepted}
+                  disabled={submitting}
+                  onChange={(event) => setPolicyAccepted(event.target.checked)}
+                  data-testid="checkbox-time-off-policy"
+                />
+                <span>I have read and agree to follow the Time-Off Request Policy.</span>
+              </label>
+              <div className="mt-4 flex justify-end gap-2">
+                <Button type="button" variant="outline" className={C.outline} disabled={submitting} onClick={() => setPolicyOpen(false)}>Cancel</Button>
+                <Button type="button" className={C.green} disabled={!policyAccepted || submitting} onClick={acceptPolicyAndSubmit} data-testid="button-agree-submit-time-off">
+                  {submitting ? "Submitting..." : "Agree and Submit"}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <div className="text-sm font-semibold text-[#201814]">{spanish ? "Solicitudes actuales" : "Current requests"}</div>

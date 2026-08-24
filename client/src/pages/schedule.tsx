@@ -2943,7 +2943,7 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
 }
 
 function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus, onCancel }: { requests: ScheduleRequest[]; isAdmin: boolean; spanish: boolean; onSubmit: (request: any) => Promise<void>; onStatus: (request: ScheduleRequest, status: string) => void; onCancel: (request: ScheduleRequest) => void }) {
-  const [form, setForm] = useState({ requestDate: "", requestEndDate: "", requestType: "time_off", startTime: "", endTime: "", notes: "", isProtectedLeave: false });
+  const [form, setForm] = useState({ requestDate: "", requestEndDate: "", requestType: "time_off", startTime: "", endTime: "", notes: "" });
   const [expanded, setExpanded] = useState(true);
   const [pastExpanded, setPastExpanded] = useState(false);
   const [policyOpen, setPolicyOpen] = useState(false);
@@ -2973,7 +2973,7 @@ function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus,
     setSubmitting(true);
     try {
       await onSubmit({ ...form, requestEndDate: form.requestEndDate || form.requestDate, startTime: form.startTime || null, endTime: form.endTime || null, policyAccepted: acceptedPolicy });
-      setForm({ requestDate: "", requestEndDate: "", requestType: "time_off", startTime: "", endTime: "", notes: "", isProtectedLeave: false });
+      setForm({ requestDate: "", requestEndDate: "", requestType: "time_off", startTime: "", endTime: "", notes: "" });
       setPolicyOpen(false);
       setPolicyAccepted(false);
     } catch {
@@ -3083,12 +3083,6 @@ function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus,
           <div><Label>{t("Notes")}</Label><Input className={C.field} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder={t("Request details")} /></div>
           <div className="flex items-end"><Button className={C.green} disabled={!form.requestDate || !form.notes.trim()} onClick={submit}>{t("Submit")}</Button></div>
         </div>
-        {form.requestType === "time_off" && (
-          <label className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950">
-            <input type="checkbox" className="mt-1 h-4 w-4 shrink-0" checked={form.isProtectedLeave} onChange={(event) => setForm({ ...form, isProtectedLeave: event.target.checked })} />
-            <span><span className="font-semibold">This may involve protected leave or an accommodation.</span><br />Select this for possible medical, family, military, religious, disability, pregnancy, jury duty, workers’ compensation, or similar protected reasons. Do not enter private medical details here; contact your supervisor or Human Resources.</span>
-          </label>
-        )}
         <Dialog open={policyOpen} onOpenChange={(open) => {
           if (submitting) return;
           setPolicyOpen(open);

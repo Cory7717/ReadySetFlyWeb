@@ -8,7 +8,7 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import bcrypt from "bcrypt";
 import { XMLParser } from "fast-xml-parser";
 import { z } from "zod";
-import { and, asc, desc, eq, inArray, isNull, lte, lt } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lte, lt, sql } from "drizzle-orm";
 import { normalizeAgilysysScreenshotDays } from "@shared/schedule-agilysys-screenshot";
 import { db } from "../db";
 import { createSoftAuthRateLimiter } from "../middleware/rateLimit";
@@ -118,7 +118,7 @@ function isSalariedScheduleManager(employee: any) {
 function parseDateKey(value: string) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
   const date = new Date(`${value}T00:00:00.000Z`);
-  return Number.isNaN(date.getTime()) ? null : date;
+  return Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value ? null : date;
 }
 
 function toDateKey(date: Date) {
@@ -128,6 +128,16 @@ function toDateKey(date: Date) {
 function addDays(dateKey: string, days: number) {
   const date = parseDateKey(dateKey)!;
   date.setUTCDate(date.getUTCDate() + days);
+  return toDateKey(date);
+}
+
+function addMonths(dateKey: string, months: number) {
+  const date = parseDateKey(dateKey)!;
+  const targetMonth = date.getUTCMonth() + months;
+  const targetYear = date.getUTCFullYear() + Math.floor(targetMonth / 12);
+  const normalizedMonth = ((targetMonth % 12) + 12) % 12;
+  const lastDayOfTargetMonth = new Date(Date.UTC(targetYear, normalizedMonth + 1, 0)).getUTCDate();
+  date.setUTCFullYear(targetYear, normalizedMonth, Math.min(date.getUTCDate(), lastDayOfTargetMonth));
   return toDateKey(date);
 }
 
@@ -170,6 +180,27 @@ function dateInRequestRange(request: any, dateKey: string) {
 
 function requestRangesOverlap(left: any, right: any) {
   return left.requestDate <= requestEndDate(right) && requestEndDate(left) >= right.requestDate;
+}
+
+function requestTimeWindowsOverlap(left: any, right: any) {
+  if ((!left.startTime && !left.endTime) || (!right.startTime && !right.endTime)) return true;
+  if (!left.startTime || !left.endTime || !right.startTime || !right.endTime) return true;
+
+  const expandWindow = (startTime: string, endTime: string) => {
+    const start = minutesFromTime(startTime);
+    const end = minutesFromTime(endTime);
+    if (start == null || end == null) return [[0, 24 * 60]] as Array<[number, number]>;
+    if (start === end) return [[0, 24 * 60]] as Array<[number, number]>;
+    return end > start
+      ? [[start, end]] as Array<[number, number]>
+      : [[start, 24 * 60], [0, end]] as Array<[number, number]>;
+  };
+
+  const leftWindows = expandWindow(left.startTime, left.endTime);
+  const rightWindows = expandWindow(right.startTime, right.endTime);
+  return leftWindows.some(([leftStart, leftEnd]) =>
+    rightWindows.some(([rightStart, rightEnd]) => leftStart < rightEnd && rightStart < leftEnd),
+  );
 }
 
 function normalizeDepartment(value?: string | null) {
@@ -1382,10 +1413,13 @@ const scheduleRequestSchema = z.object({
   requestDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   requestEndDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
   requestType: z.enum(["time_off", "preferred_shift", "availability", "other"]).default("time_off"),
-  startTime: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
-  endTime: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
+  startTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/).optional().nullable(),
+  endTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/).optional().nullable(),
   notes: z.string().trim().min(1).max(2000),
-});
+}).refine(
+  (request) => Boolean(request.startTime) === Boolean(request.endTime),
+  { message: "Start and end times must be provided together.", path: ["endTime"] },
+);
 
 const scheduleRequestStatusSchema = z.object({
   status: z.enum(["submitted", "approved", "denied", "cancelled"]),
@@ -3458,6 +3492,9 @@ export function registerScheduleRoutes(app: Express) {
       const parsed = scheduleRequestSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Invalid schedule request", validation: parsed.error.format() });
       const requestEnd = parsed.data.requestEndDate || parsed.data.requestDate;
+      if (!parseDateKey(parsed.data.requestDate) || !parseDateKey(requestEnd)) {
+        return res.status(400).json({ error: "Schedule request dates must be valid calendar dates." });
+      }
       const requestSpan = daysBetween(parsed.data.requestDate, requestEnd);
       if (requestSpan < 0) {
         return res.status(400).json({ error: "Request end date must be the same as or after the start date." });
@@ -3465,28 +3502,52 @@ export function registerScheduleRoutes(app: Express) {
       if (requestSpan > 30) {
         return res.status(400).json({ error: "Schedule requests may cover up to 31 consecutive days." });
       }
-      const leadDays = daysBetween(todayDateKey(), parsed.data.requestDate);
+      const today = todayDateKey();
+      if (parsed.data.requestDate < today || requestEnd < today) {
+        return res.status(400).json({ error: "Schedule requests cannot be submitted for past dates." });
+      }
+      const latestRequestDate = addMonths(today, 1);
+      if (parsed.data.requestDate > latestRequestDate || requestEnd > latestRequestDate) {
+        return res.status(400).json({ error: "Schedule requests may only be submitted up to one month in advance." });
+      }
+      const leadDays = daysBetween(today, parsed.data.requestDate);
       const policyWarning = leadDays < 14;
       const department = await getScheduleRequestDepartment(req.scheduleUser);
-      const activeExisting = await db.select().from(scheduleRequests).where(and(eq(scheduleRequests.requesterUserId, req.scheduleUser.id), inArray(scheduleRequests.status, ["submitted", "approved"] as any)));
-      if (activeExisting.some((request) => requestRangesOverlap(request, { requestDate: parsed.data.requestDate, requestEndDate: requestEnd }))) {
-        return res.status(409).json({ error: "You already have a submitted or approved request overlapping those dates." });
+      const request = await db.transaction(async (tx) => {
+        // Serialize submissions within a department so concurrent requests cannot both pass the conflict check.
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`schedule-request:${department}`}))`);
+        const activeExisting = await tx
+          .select()
+          .from(scheduleRequests)
+          .where(and(
+            eq(scheduleRequests.department, department),
+            inArray(scheduleRequests.status, ["submitted", "approved"] as any),
+          ));
+        const hasConflictingRequest = activeExisting.some((existing) =>
+          requestRangesOverlap(existing, { requestDate: parsed.data.requestDate, requestEndDate: requestEnd }) &&
+          requestTimeWindowsOverlap(existing, parsed.data),
+        );
+        if (hasConflictingRequest) return null;
+        const [created] = await tx
+          .insert(scheduleRequests)
+          .values({
+            requesterUserId: req.scheduleUser.id,
+            department,
+            requestDate: parsed.data.requestDate,
+            requestEndDate: requestEnd,
+            requestGroupId: crypto.randomUUID(),
+            requestType: parsed.data.requestType,
+            startTime: parsed.data.startTime || null,
+            endTime: parsed.data.endTime || null,
+            notes: parsed.data.notes,
+            status: "submitted",
+          })
+          .returning();
+        return created;
+      });
+      if (!request) {
+        return res.status(409).json({ error: "This request cannot be processed due to a conflicting request. Please contact your direct supervisor to discuss this request." });
       }
-      const [request] = await db
-        .insert(scheduleRequests)
-        .values({
-          requesterUserId: req.scheduleUser.id,
-          department,
-          requestDate: parsed.data.requestDate,
-          requestEndDate: requestEnd,
-          requestGroupId: crypto.randomUUID(),
-          requestType: parsed.data.requestType,
-          startTime: parsed.data.startTime || null,
-          endTime: parsed.data.endTime || null,
-          notes: parsed.data.notes,
-          status: "submitted",
-        })
-        .returning();
       await audit(null, req.scheduleUser.id, "schedule_request_submitted", { requestId: request.id, requestDate: request.requestDate, requestEndDate: request.requestEndDate });
       let emailSent = false;
       try {

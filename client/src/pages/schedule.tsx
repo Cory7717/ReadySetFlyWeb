@@ -542,6 +542,16 @@ function localDateKey(date = new Date()) {
   return `${date.getFullYear()}-${month}-${day}`;
 }
 
+function addMonthsLocal(dateKey: string, months: number) {
+  const date = new Date(`${dateKey}T00:00:00`);
+  const targetMonth = date.getMonth() + months;
+  const targetYear = date.getFullYear() + Math.floor(targetMonth / 12);
+  const normalizedMonth = ((targetMonth % 12) + 12) % 12;
+  const lastDayOfTargetMonth = new Date(targetYear, normalizedMonth + 1, 0).getDate();
+  date.setFullYear(targetYear, normalizedMonth, Math.min(date.getDate(), lastDayOfTargetMonth));
+  return localDateKey(date);
+}
+
 function daysBetweenLocal(start: string, end: string) {
   const startDate = new Date(`${start}T00:00:00`);
   const endDate = new Date(`${end}T00:00:00`);
@@ -2932,23 +2942,28 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
   );
 }
 
-function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus, onCancel }: { requests: ScheduleRequest[]; isAdmin: boolean; spanish: boolean; onSubmit: (request: any) => void; onStatus: (request: ScheduleRequest, status: string) => void; onCancel: (request: ScheduleRequest) => void }) {
+function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus, onCancel }: { requests: ScheduleRequest[]; isAdmin: boolean; spanish: boolean; onSubmit: (request: any) => Promise<void>; onStatus: (request: ScheduleRequest, status: string) => void; onCancel: (request: ScheduleRequest) => void }) {
   const [form, setForm] = useState({ requestDate: "", requestEndDate: "", requestType: "time_off", startTime: "", endTime: "", notes: "" });
   const [expanded, setExpanded] = useState(true);
   const [pastExpanded, setPastExpanded] = useState(false);
   const t = (value: string) => tr(spanish, value);
   const today = localDateKey();
+  const latestRequestDate = addMonthsLocal(today, 1);
   const isPastRequest = (request: ScheduleRequest) => Boolean(request.isPast ?? ((request.requestEndDate || request.requestDate) < today));
   const activeRequests = requests.filter((request) => !isPastRequest(request));
   const pastRequests = requests.filter(isPastRequest);
-  const submit = () => {
+  const submit = async () => {
     if (daysBetweenLocal(localDateKey(), form.requestDate) < 14) {
       window.alert(spanish
         ? "Esta solicitud es para una fecha dentro de los proximos 14 dias. Puede enviarla, pero es posible que no sea aprobada."
         : "This request is for a date within the next 14 days. You may submit it, but approval is not guaranteed.");
     }
-    onSubmit({ ...form, requestEndDate: form.requestEndDate || form.requestDate, startTime: form.startTime || null, endTime: form.endTime || null });
-    setForm({ requestDate: "", requestEndDate: "", requestType: "time_off", startTime: "", endTime: "", notes: "" });
+    try {
+      await onSubmit({ ...form, requestEndDate: form.requestEndDate || form.requestDate, startTime: form.startTime || null, endTime: form.endTime || null });
+      setForm({ requestDate: "", requestEndDate: "", requestType: "time_off", startTime: "", endTime: "", notes: "" });
+    } catch {
+      // The mutation displays the server's rejection and the form remains available for correction.
+    }
   };
   const pendingCount = activeRequests.filter((request) => request.status === "submitted").length;
   const approvedCount = activeRequests.filter((request) => request.status === "approved").length;
@@ -3009,7 +3024,7 @@ function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus,
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <CardTitle className={C.ink}>{t("Schedule requests")}</CardTitle>
-            <CardDescription className={C.muted}>{t("Requests inside 14 days are outside hotel policy and subject to manager approval.")}</CardDescription>
+            <CardDescription className={C.muted}>{spanish ? "Las solicitudes deben presentarse con no mas de un mes de anticipacion. Las solicitudes dentro de 14 dias estan fuera de la politica del hotel y sujetas a aprobacion del gerente." : "Requests may only be submitted up to one month in advance. Requests inside 14 days are outside hotel policy and subject to manager approval."}</CardDescription>
             {isAdmin && (
               <div className="mt-2 flex flex-wrap gap-2">
                 <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-900">{pendingCount} {spanish ? "pendiente(s)" : "pending"}</Badge>
@@ -3028,8 +3043,8 @@ function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus,
       </CardHeader>
       {expanded && <CardContent className="space-y-4">
         <div className="grid gap-3 md:grid-cols-[150px_150px_180px_120px_120px_1fr_auto]">
-          <div><Label>{spanish ? "Fecha inicio" : "Start date"}</Label><Input className={C.field} type="date" value={form.requestDate} onChange={(event) => setForm({ ...form, requestDate: event.target.value, requestEndDate: form.requestEndDate || event.target.value })} /></div>
-          <div><Label>{spanish ? "Fecha fin" : "End date"}</Label><Input className={C.field} type="date" min={form.requestDate || undefined} value={form.requestEndDate} onChange={(event) => setForm({ ...form, requestEndDate: event.target.value })} /></div>
+          <div><Label>{spanish ? "Fecha inicio" : "Start date"}</Label><Input className={C.field} type="date" min={today} max={latestRequestDate} value={form.requestDate} onChange={(event) => setForm({ ...form, requestDate: event.target.value, requestEndDate: form.requestEndDate || event.target.value })} /></div>
+          <div><Label>{spanish ? "Fecha fin" : "End date"}</Label><Input className={C.field} type="date" min={form.requestDate || today} max={latestRequestDate} value={form.requestEndDate} onChange={(event) => setForm({ ...form, requestEndDate: event.target.value })} /></div>
           <div>
             <Label>{t("Type")}</Label>
             <Select value={form.requestType} onValueChange={(requestType) => setForm({ ...form, requestType })}>
@@ -3767,7 +3782,7 @@ export default function SchedulePage() {
             requests={requests.data?.requests || []}
             isAdmin={canManageSchedule}
             spanish={spanish}
-            onSubmit={(request) => submitRequest.mutate(request)}
+            onSubmit={async (request) => { await submitRequest.mutateAsync(request); }}
             onStatus={(request, status) => {
               const overlapCount = Number(request.overlapConflictCount || request.conflictCount || 0);
               const first = request.firstOverlapRequest;

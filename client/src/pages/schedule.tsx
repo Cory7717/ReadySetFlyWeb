@@ -2943,7 +2943,7 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
 }
 
 function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus, onCancel }: { requests: ScheduleRequest[]; isAdmin: boolean; spanish: boolean; onSubmit: (request: any) => Promise<void>; onStatus: (request: ScheduleRequest, status: string) => void; onCancel: (request: ScheduleRequest) => void }) {
-  const [form, setForm] = useState({ requestDate: "", requestEndDate: "", requestType: "time_off", startTime: "", endTime: "", notes: "" });
+  const [form, setForm] = useState({ requestDate: "", requestEndDate: "", requestType: "time_off", startTime: "", endTime: "", notes: "", isProtectedLeave: false });
   const [expanded, setExpanded] = useState(true);
   const [pastExpanded, setPastExpanded] = useState(false);
   const [policyOpen, setPolicyOpen] = useState(false);
@@ -2973,7 +2973,7 @@ function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus,
     setSubmitting(true);
     try {
       await onSubmit({ ...form, requestEndDate: form.requestEndDate || form.requestDate, startTime: form.startTime || null, endTime: form.endTime || null, policyAccepted: acceptedPolicy });
-      setForm({ requestDate: "", requestEndDate: "", requestType: "time_off", startTime: "", endTime: "", notes: "" });
+      setForm({ requestDate: "", requestEndDate: "", requestType: "time_off", startTime: "", endTime: "", notes: "", isProtectedLeave: false });
       setPolicyOpen(false);
       setPolicyAccepted(false);
     } catch {
@@ -3019,6 +3019,12 @@ function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus,
             </div>
           )}
         </div>
+        {form.requestType === "time_off" && (
+          <label className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-950">
+            <input type="checkbox" className="mt-1 h-4 w-4" checked={form.isProtectedLeave} onChange={(event) => setForm({ ...form, isProtectedLeave: event.target.checked })} />
+            <span><span className="font-semibold">This may involve protected leave or an accommodation.</span><br />Select this for possible medical, family, military, religious, disability, pregnancy, jury-duty, workers’ compensation, or similar protected reasons. Do not enter private medical details here; contact your supervisor or Human Resources.</span>
+          </label>
+        )}
         <div className="flex flex-wrap items-center gap-2 md:justify-end">
           {isAdmin && request.status === "submitted" && overlapCount > 0 && (
             <Badge variant="outline" className="border-orange-300 bg-orange-50 text-orange-900">
@@ -3112,6 +3118,11 @@ function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus,
                 <li>This policy does not reduce or replace rights relating to legally protected leave or absences, including applicable family and medical leave, pregnancy or disability accommodations, military service, jury duty, voting, workers’ compensation, or other protected reasons. Associates who believe their request may involve a protected reason should contact their supervisor or Human Resources. They do not need to disclose private medical details in the scheduling request.</li>
                 <li>Approval under this scheduling policy does not determine whether the time off is paid. PTO eligibility, available balances, and payment are governed by the company’s separate written leave and payroll policies.</li>
               </ol>
+              <div className="mt-5 rounded-lg border border-[#d6c8b5] p-4">
+                <p className="font-semibold text-[#201814]">Holiday Scheduling</p>
+                <p className="mt-1">Because the hotel operates throughout the year, associates may be scheduled to work holidays. Holiday assignments will be rotated as equitably as reasonably possible among qualified associates. Associates should generally expect to alternate major holiday assignments from year to year; prior-year assignments will be considered but do not guarantee a particular holiday off.</p>
+                <p className="mt-2">Major holidays include New Year’s Day, Memorial Day, Independence Day, Labor Day, Thanksgiving Day, Christmas Eve, Christmas Day, and New Year’s Eve. Holiday requests remain subject to staffing, qualifications, occupancy, prior approvals, and the rotation record. Voluntary exchanges require supervisor approval. Religious and other legally protected accommodation requests will be reviewed individually.</p>
+              </div>
               <div className="mt-5 rounded-lg border border-[#d6c8b5] bg-[#fbf6ee] p-4">
                 <p className="font-semibold text-[#201814]">Acknowledgment</p>
                 <p className="mt-1">I have read and understand the Time-Off Request Policy. I understand that submitting a request does not mean it has been approved, that I must report to work unless the request is approved or I receive other instructions, and that emergencies and potentially protected leave should be reported through the appropriate supervisor or Human Resources process.</p>
@@ -3156,6 +3167,44 @@ function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus,
           )}
         </div>
       </CardContent>}
+    </Card>
+  );
+}
+
+function ScheduleRequestOperations({ data, isAdmin, onSaveCoverage, onSaveBlackout, onSaveHoliday, onCreateExchange, onExchangeStatus }: any) {
+  const [coverage, setCoverage] = useState({ department: "Front Desk", role: "FD AM", startTime: "07:00", endTime: "15:00", minimumAssociates: 1, active: true });
+  const [blackout, setBlackout] = useState({ blackoutDate: "", department: "", label: "", reason: "" });
+  const [holiday, setHoliday] = useState({ holidayDate: "", holidayName: "Thanksgiving Day", employeeId: "", worked: true, notes: "" });
+  const [exchange, setExchange] = useState({ shiftDate: "", startTime: "", endTime: "", notes: "" });
+  return (
+    <Card className={`${C.shell} print:hidden`}>
+      <CardHeader><CardTitle className={C.ink}>Schedule request operations</CardTitle><CardDescription className={C.muted}>Coverage controls, holiday fairness, high-demand dates, exchanges, notifications, and policy records.</CardDescription></CardHeader>
+      <CardContent className="space-y-5">
+        <div className="rounded-lg border border-[#e0d3c1] bg-white p-4">
+          <div className="font-semibold">Shift exchange</div>
+          <div className="mt-2 grid gap-2 sm:grid-cols-5">
+            <Input type="date" className={C.field} value={exchange.shiftDate} onChange={(e) => setExchange({ ...exchange, shiftDate: e.target.value })} />
+            <Input type="time" className={C.field} value={exchange.startTime} onChange={(e) => setExchange({ ...exchange, startTime: e.target.value })} />
+            <Input type="time" className={C.field} value={exchange.endTime} onChange={(e) => setExchange({ ...exchange, endTime: e.target.value })} />
+            <Input className={C.field} placeholder="Exchange details" value={exchange.notes} onChange={(e) => setExchange({ ...exchange, notes: e.target.value })} />
+            <Button className={C.green} disabled={!exchange.shiftDate || !exchange.startTime || !exchange.endTime} onClick={() => onCreateExchange(exchange)}>Propose exchange</Button>
+          </div>
+          <div className="mt-3 space-y-2">{(data?.exchanges || []).map((item: any) => <div key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded border p-2 text-sm"><span>{item.shiftDate} · {item.startTime?.slice(0, 5)}–{item.endTime?.slice(0, 5)} · <b>{item.status}</b></span><div className="flex gap-2">{isAdmin && item.status === "accepted" && <Button size="sm" onClick={() => onExchangeStatus(item.id, "approved")}>Approve</Button>}{isAdmin && !["approved", "denied", "cancelled"].includes(item.status) && <Button size="sm" variant="outline" onClick={() => onExchangeStatus(item.id, "denied")}>Deny</Button>}</div></div>)}</div>
+        </div>
+        {isAdmin && <>
+          <div className="grid gap-4 lg:grid-cols-3">
+            <div className="rounded-lg border bg-white p-4"><div className="font-semibold">Minimum role coverage</div><div className="mt-2 space-y-2"><Input className={C.field} placeholder="Department" value={coverage.department} onChange={(e) => setCoverage({ ...coverage, department: e.target.value })}/><Input className={C.field} placeholder="Qualified role" value={coverage.role} onChange={(e) => setCoverage({ ...coverage, role: e.target.value })}/><div className="flex gap-2"><Input type="time" value={coverage.startTime} onChange={(e) => setCoverage({ ...coverage, startTime: e.target.value })}/><Input type="time" value={coverage.endTime} onChange={(e) => setCoverage({ ...coverage, endTime: e.target.value })}/><Input type="number" min={1} value={coverage.minimumAssociates} onChange={(e) => setCoverage({ ...coverage, minimumAssociates: Number(e.target.value) })}/></div><Button className={C.green} onClick={() => onSaveCoverage(coverage)}>Save coverage rule</Button></div></div>
+            <div className="rounded-lg border bg-white p-4"><div className="font-semibold">High-demand date</div><div className="mt-2 space-y-2"><Input type="date" value={blackout.blackoutDate} onChange={(e) => setBlackout({ ...blackout, blackoutDate: e.target.value })}/><Input placeholder="Department (blank = all)" value={blackout.department} onChange={(e) => setBlackout({ ...blackout, department: e.target.value })}/><Input placeholder="Event or label" value={blackout.label} onChange={(e) => setBlackout({ ...blackout, label: e.target.value })}/><Input placeholder="Review reason" value={blackout.reason} onChange={(e) => setBlackout({ ...blackout, reason: e.target.value })}/><Button className={C.green} onClick={() => onSaveBlackout({ ...blackout, department: blackout.department || null })}>Add date</Button></div></div>
+            <div className="rounded-lg border bg-white p-4"><div className="font-semibold">Holiday rotation record</div><div className="mt-2 space-y-2"><Input type="date" value={holiday.holidayDate} onChange={(e) => setHoliday({ ...holiday, holidayDate: e.target.value })}/><Select value={holiday.holidayName} onValueChange={(holidayName) => setHoliday({ ...holiday, holidayName })}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{["New Year’s Day","Memorial Day","Independence Day","Labor Day","Thanksgiving Day","Christmas Eve","Christmas Day","New Year’s Eve"].map((name) => <SelectItem key={name} value={name}>{name}</SelectItem>)}</SelectContent></Select><Select value={holiday.employeeId} onValueChange={(employeeId) => setHoliday({ ...holiday, employeeId })}><SelectTrigger><SelectValue placeholder="Associate"/></SelectTrigger><SelectContent>{(data?.employees || []).map((employee: any) => <SelectItem key={employee.id} value={employee.id}>{employee.displayName} · {employee.department}</SelectItem>)}</SelectContent></Select><Button className={C.green} disabled={!holiday.holidayDate || !holiday.employeeId} onClick={() => onSaveHoliday(holiday)}>Record assignment</Button></div></div>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-3">
+            <div><div className="font-semibold">Coverage rules</div>{(data?.coverageRequirements || []).map((item: any) => <div key={item.id} className="text-sm">{item.department}: {item.role} {item.startTime?.slice(0,5)}–{item.endTime?.slice(0,5)} · minimum {item.minimumAssociates}</div>)}</div>
+            <div><div className="font-semibold">High-demand dates</div>{(data?.blackouts || []).map((item: any) => <div key={item.id} className="text-sm">{item.blackoutDate}: {item.label} {item.department ? `· ${item.department}` : "· all departments"}</div>)}</div>
+            <div><div className="font-semibold">Holiday fairness</div>{(data?.fairness || []).map((item: any) => <div key={item.employeeId} className="text-sm">{item.employeeName} · {item.holidaysWorked} holiday assignment(s)</div>)}</div>
+          </div>
+          <div className="text-xs text-[#5f5247]">Policy acceptance history: {(data?.policyHistory || []).length} recorded submission(s) for your account. All manager overrides and workflow changes are retained in the schedule audit log.</div>
+        </>}
+      </CardContent>
     </Card>
   );
 }
@@ -3256,6 +3305,7 @@ export default function SchedulePage() {
   const auth = useQuery<{ user: ScheduleUser | null }>({ queryKey: ["/api/schedule/auth/me"], queryFn: () => fetchJson("/api/schedule/auth/me"), enabled: !shareToken });
   const weeks = useQuery<{ weeks: WeeklySchedule[] }>({ queryKey: ["/api/schedule/weeks"], queryFn: () => fetchJson("/api/schedule/weeks"), enabled: !!auth.data?.user && !shareToken && !requestOnly });
   const requests = useQuery<{ requests: ScheduleRequest[] }>({ queryKey: ["/api/schedule/requests"], queryFn: () => fetchJson("/api/schedule/requests"), enabled: !!auth.data?.user && !shareToken });
+  const requestPlatform = useQuery<any>({ queryKey: ["/api/schedule/request-platform"], queryFn: () => fetchJson("/api/schedule/request-platform"), enabled: !!auth.data?.user && !shareToken });
   const share = useQuery<SchedulePayload>({ queryKey: ["/api/schedule/share", shareToken], queryFn: () => fetchJson(`/api/schedule/share/${shareToken}`), enabled: !!shareToken });
   const weekId = selectedWeekId || weeks.data?.weeks?.[0]?.id || "";
   const detail = useQuery<SchedulePayload>({ queryKey: ["/api/schedule/weeks", weekId], queryFn: () => fetchJson(`/api/schedule/weeks/${weekId}`), enabled: !!weekId && !shareToken && !requestOnly });
@@ -3643,19 +3693,25 @@ export default function SchedulePage() {
       const response = await apiRequest("POST", "/api/schedule/requests", request);
       return response.json();
     },
-    onSuccess: (data: { emailSent?: boolean; policyWarning?: boolean }) => {
+    onSuccess: (data: { emailSent?: boolean; policyWarning?: boolean; highDemandWarning?: boolean; request?: ScheduleRequest }) => {
       toast({
-        title: "Schedule request submitted",
-        description: data.policyWarning
+        title: data.request?.status === "waitlisted" ? "Added to waitlist" : "Schedule request submitted",
+        description: data.request?.status === "waitlisted" ? "You will be promoted automatically if the conflicting request is cancelled." : data.highDemandWarning ? "This is a high-demand date and will receive enhanced manager review." : data.policyWarning
           ? "Request saved with policy warning: inside 14 days and subject to manager approval."
           : data.emailSent ? "Your department manager was notified." : "Your request was saved. Manager email could not be sent automatically.",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/schedule/requests"] });
     },
-    onError: (error: Error) => toast({ title: "Request not submitted", description: error.message, variant: "destructive" }),
+    onError: (error: Error & { code?: string }, variables: any) => {
+      if (error.code === "SCHEDULE_REQUEST_CONFLICT" && !variables.joinWaitlist && window.confirm(`${error.message}\n\nWould you like to join the waitlist?`)) {
+        submitRequest.mutate({ ...variables, joinWaitlist: true });
+        return;
+      }
+      toast({ title: "Request not submitted", description: error.message, variant: "destructive" });
+    },
   });
   const updateRequestStatus = useMutation({
-    mutationFn: ({ id, status }: { id: string; status: string }) => apiRequest("PATCH", `/api/schedule/requests/${id}/status`, { status }),
+    mutationFn: ({ id, status, overrideReason, coveragePlan }: { id: string; status: string; overrideReason?: string; coveragePlan?: string }) => apiRequest("PATCH", `/api/schedule/requests/${id}/status`, { status, overrideReason, coveragePlan }),
     onSuccess: () => {
       toast({ title: "Request updated" });
       queryClient.invalidateQueries({ queryKey: ["/api/schedule/requests"] });
@@ -3671,6 +3727,11 @@ export default function SchedulePage() {
       if (weekId) queryClient.invalidateQueries({ queryKey: ["/api/schedule/weeks", weekId] });
     },
     onError: (error: Error) => toast({ title: "Request cancellation failed", description: error.message, variant: "destructive" }),
+  });
+  const platformMutation = useMutation({
+    mutationFn: async ({ method = "POST", path, body }: any) => { const response = await apiRequest(method, `/api/schedule/request-platform/${path}`, body); return response.json(); },
+    onSuccess: () => { toast({ title: "Schedule request operations updated" }); queryClient.invalidateQueries({ queryKey: ["/api/schedule/request-platform"] }); },
+    onError: (error: Error) => toast({ title: "Update failed", description: error.message, variant: "destructive" }),
   });
 
   if (!shareToken && auth.isLoading) return <div className={`min-h-screen p-8 ${C.page}`}>Loading Schedule...</div>;
@@ -3870,11 +3931,30 @@ export default function SchedulePage() {
               ) {
                 return;
               }
-              updateRequestStatus.mutate({ id: request.id, status });
+              let overrideReason: string | undefined;
+              let coveragePlan: string | undefined;
+              if (status === "approved" && overlapCount > 0) {
+                overrideReason = window.prompt("Document the reason for overriding this conflict:")?.trim() || undefined;
+                if (!overrideReason) return;
+                coveragePlan = window.prompt("Document how the affected shift will remain covered:")?.trim() || undefined;
+                if (!coveragePlan) return;
+              }
+              updateRequestStatus.mutate({ id: request.id, status, overrideReason, coveragePlan });
             }}
             onCancel={(request) => {
               if (window.confirm(`Cancel this request for ${formatRequestDateRange(request)}?`)) cancelRequest.mutate(request.id);
             }}
+          />
+        )}
+        {!shareToken && user && (
+          <ScheduleRequestOperations
+            data={requestPlatform.data}
+            isAdmin={canManageSchedule}
+            onSaveCoverage={(body: any) => platformMutation.mutate({ path: "coverage", body })}
+            onSaveBlackout={(body: any) => platformMutation.mutate({ path: "blackouts", body })}
+            onSaveHoliday={(body: any) => platformMutation.mutate({ path: "holidays", body })}
+            onCreateExchange={(body: any) => platformMutation.mutate({ path: "exchanges", body })}
+            onExchangeStatus={(id: string, status: string) => platformMutation.mutate({ method: "PATCH", path: `exchanges/${id}`, body: { status } })}
           />
         )}
 

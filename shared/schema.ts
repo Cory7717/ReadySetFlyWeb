@@ -1115,6 +1115,11 @@ export const scheduleRequests = pgTable(
     endTime: time("end_time"),
     notes: text("notes"),
     status: text("status").notNull().default("submitted"),
+    isProtectedLeave: boolean("is_protected_leave").notNull().default(false),
+    policyVersion: text("policy_version"),
+    policyAcceptedAt: timestamp("policy_accepted_at"),
+    managerOverrideReason: text("manager_override_reason"),
+    coveragePlan: text("coverage_plan"),
     reviewedByUserId: varchar("reviewed_by_user_id").references(
       () => tipsUsers.id,
       { onDelete: "set null" },
@@ -1130,6 +1135,60 @@ export const scheduleRequests = pgTable(
     index("idx_schedule_requests_status").on(table.status),
   ],
 );
+
+export const scheduleCoverageRequirements = pgTable("schedule_coverage_requirements", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  department: text("department").notNull(),
+  role: text("role").notNull(),
+  startTime: time("start_time").notNull(),
+  endTime: time("end_time").notNull(),
+  minimumAssociates: integer("minimum_associates").notNull().default(1),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [uniqueIndex("uniq_schedule_coverage_requirement").on(table.department, table.role, table.startTime, table.endTime)]);
+
+export const scheduleBlackoutDates = pgTable("schedule_blackout_dates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  blackoutDate: date("blackout_date").notNull(),
+  department: text("department"),
+  label: text("label").notNull(),
+  reason: text("reason"),
+  restriction: text("restriction").notNull().default("enhanced_review"),
+  createdByUserId: varchar("created_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [index("idx_schedule_blackout_date").on(table.blackoutDate)]);
+
+export const scheduleHolidayAssignments = pgTable("schedule_holiday_assignments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  holidayDate: date("holiday_date").notNull(),
+  holidayName: text("holiday_name").notNull(),
+  employeeId: varchar("employee_id").notNull().references(() => scheduleEmployees.id, { onDelete: "cascade" }),
+  worked: boolean("worked").notNull().default(true),
+  notes: text("notes"),
+  recordedByUserId: varchar("recorded_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  uniqueIndex("uniq_schedule_holiday_employee").on(table.holidayDate, table.employeeId),
+  index("idx_schedule_holiday_date").on(table.holidayDate),
+]);
+
+export const scheduleShiftExchanges = pgTable("schedule_shift_exchanges", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  requesterUserId: varchar("requester_user_id").notNull().references(() => tipsUsers.id, { onDelete: "cascade" }),
+  replacementUserId: varchar("replacement_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
+  shiftDate: date("shift_date").notNull(),
+  startTime: time("start_time").notNull(),
+  endTime: time("end_time").notNull(),
+  department: text("department").notNull(),
+  notes: text("notes"),
+  status: text("status").notNull().default("proposed"),
+  replacementAcceptedAt: timestamp("replacement_accepted_at"),
+  reviewedByUserId: varchar("reviewed_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
+  reviewedAt: timestamp("reviewed_at"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [index("idx_schedule_exchange_date").on(table.shiftDate), index("idx_schedule_exchange_status").on(table.status)]);
 
 export const scheduleHousekeepingBoards = pgTable(
   "schedule_housekeeping_boards",

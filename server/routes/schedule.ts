@@ -15,13 +15,17 @@ import { createSoftAuthRateLimiter } from "../middleware/rateLimit";
 import { getUncachableResendClient } from "../resendClient";
 import {
   scheduleAuditLog,
+  scheduleBlackoutDates,
+  scheduleCoverageRequirements,
   scheduleActualHours,
   scheduleEmployees,
   scheduleForecastDays,
   scheduleHousekeepingBoards,
+  scheduleHolidayAssignments,
   scheduleRequests,
   scheduleShareLinks,
   scheduleShiftAssignments,
+  scheduleShiftExchanges,
   scheduleTemplateShifts,
   scheduleTemplates,
   scheduleShiftTypes,
@@ -788,6 +792,19 @@ async function sendScheduleRequestEmail(request: any, requester: any, managerEma
   return true;
 }
 
+async function sendScheduleRequestStatusEmail(request: any, requester: any, message?: string) {
+  const email = normalizeEmail(String(requester?.email || ""));
+  if (!email) return false;
+  const { client, fromEmail } = await getUncachableResendClient();
+  await client.emails.send({
+    from: fromEmail,
+    to: [email],
+    subject: `Schedule request ${request.status} - ${request.requestDate}`,
+    text: `${scheduleDisplayName(requester)},\n\nYour schedule request for ${request.requestDate}${request.requestEndDate && request.requestEndDate !== request.requestDate ? ` through ${request.requestEndDate}` : ""} is now ${request.status}.\n${message || ""}\n\nReview your request at ${(process.env.FRONTEND_BASE_URL || "https://readysetfly.us").replace(/\/$/, "")}/schedule?requests=1`,
+  });
+  return true;
+}
+
 async function getOrCreateScheduleShareLink(schedule: any, userId: string) {
   const [existing] = await db
     .select()
@@ -1418,6 +1435,8 @@ const scheduleRequestSchema = z.object({
   endTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/).optional().nullable(),
   notes: z.string().trim().min(1).max(2000),
   policyAccepted: z.boolean().optional(),
+  isProtectedLeave: z.boolean().default(false),
+  joinWaitlist: z.boolean().default(false),
 }).refine(
   (request) => Boolean(request.startTime) === Boolean(request.endTime),
   { message: "Start and end times must be provided together.", path: ["endTime"] },
@@ -1427,8 +1446,19 @@ const scheduleRequestSchema = z.object({
 );
 
 const scheduleRequestStatusSchema = z.object({
-  status: z.enum(["submitted", "approved", "denied", "cancelled"]),
+  status: z.enum(["submitted", "approved", "denied", "cancelled", "waitlisted"]),
+  overrideReason: z.string().trim().min(5).max(1000).optional(),
+  coveragePlan: z.string().trim().min(5).max(1000).optional(),
 });
+
+const coverageRequirementSchema = z.object({
+  department: z.string().min(1).max(100), role: z.string().min(1).max(100),
+  startTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/), endTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/),
+  minimumAssociates: z.number().int().min(1).max(25), active: z.boolean().default(true),
+});
+const blackoutSchema = z.object({ blackoutDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), department: z.string().max(100).optional().nullable(), label: z.string().min(1).max(120), reason: z.string().max(1000).optional().nullable() });
+const holidayAssignmentSchema = z.object({ holidayDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), holidayName: z.string().min(1).max(100), employeeId: z.string().min(1), worked: z.boolean().default(true), notes: z.string().max(500).optional().nullable() });
+const shiftExchangeSchema = z.object({ replacementUserId: z.string().optional().nullable(), shiftDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), startTime: z.string(), endTime: z.string(), notes: z.string().max(1000).optional().nullable() });
 
 const scheduleTeamMessageSchema = z.object({
   subject: z.string().trim().min(3).max(160),
@@ -3486,7 +3516,10 @@ export function registerScheduleRoutes(app: Express) {
       } else {
         rows = await query.where(eq(scheduleRequests.requesterUserId, req.scheduleUser.id)).orderBy(desc(scheduleRequests.requestDate), desc(scheduleRequests.createdAt));
       }
-      res.json({ requests: await addRequestConflictInfo(rows) });
+      const requestsWithConflicts = await addRequestConflictInfo(rows);
+      res.json({ requests: requestsWithConflicts.map((request: any) => request.isProtectedLeave && request.requesterUserId !== req.scheduleUser.id && !user.isSuperAdmin
+        ? { ...request, notes: "Protected leave details are restricted. Contact Human Resources." }
+        : request) });
     } catch (error) {
       next(error);
     }
@@ -3518,6 +3551,11 @@ export function registerScheduleRoutes(app: Express) {
       const leadDays = daysBetween(today, parsed.data.requestDate);
       const policyWarning = leadDays < 14;
       const department = await getScheduleRequestDepartment(req.scheduleUser);
+      const requesterEmployee = await getScheduleEmployeeForUser(req.scheduleUser);
+      const blackoutRows = await db.select().from(scheduleBlackoutDates).where(and(
+        lte(scheduleBlackoutDates.blackoutDate, requestEnd),
+      ));
+      const highDemandWarning = blackoutRows.some((item) => item.blackoutDate >= parsed.data.requestDate && (!item.department || item.department === department));
       const request = await db.transaction(async (tx) => {
         // Serialize submissions within a department so concurrent requests cannot both pass the conflict check.
         await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`schedule-request:${department}`}))`);
@@ -3528,11 +3566,25 @@ export function registerScheduleRoutes(app: Express) {
             eq(scheduleRequests.department, department),
             inArray(scheduleRequests.status, ["submitted", "approved"] as any),
           ));
-        const hasConflictingRequest = activeExisting.some((existing) =>
+        const overlappingRequests = activeExisting.filter((existing) =>
           requestRangesOverlap(existing, { requestDate: parsed.data.requestDate, requestEndDate: requestEnd }) &&
-          requestTimeWindowsOverlap(existing, parsed.data),
+          requestTimeWindowsOverlap(existing, parsed.data) && ["time_off", "availability"].includes(existing.requestType),
         );
-        if (hasConflictingRequest) return null;
+        const requirements = await tx.select().from(scheduleCoverageRequirements).where(and(eq(scheduleCoverageRequirements.department, department), eq(scheduleCoverageRequirements.active, true)));
+        const requesterRoleText = [requesterEmployee?.position, ...rolesArray(requesterEmployee?.rolesJson)].filter(Boolean).join(" ").toLowerCase();
+        const applicableRequirements = requirements.filter((rule) =>
+          requesterRoleText.includes(rule.role.toLowerCase()) && requestTimeWindowsOverlap(rule, parsed.data),
+        );
+        let hasConflictingRequest = overlappingRequests.length > 0;
+        if (applicableRequirements.length) {
+          const departmentEmployees = await tx.select().from(scheduleEmployees).where(and(eq(scheduleEmployees.department, department), eq(scheduleEmployees.active, true)));
+          hasConflictingRequest = applicableRequirements.some((rule) => {
+            const qualified = departmentEmployees.filter((employee) => [employee.position, ...rolesArray(employee.rolesJson)].filter(Boolean).join(" ").toLowerCase().includes(rule.role.toLowerCase())).length;
+            return qualified - overlappingRequests.length - 1 < rule.minimumAssociates;
+          });
+        }
+        hasConflictingRequest = !parsed.data.isProtectedLeave && hasConflictingRequest;
+        if (hasConflictingRequest && !parsed.data.joinWaitlist) return null;
         const [created] = await tx
           .insert(scheduleRequests)
           .values({
@@ -3545,13 +3597,16 @@ export function registerScheduleRoutes(app: Express) {
             startTime: parsed.data.startTime || null,
             endTime: parsed.data.endTime || null,
             notes: parsed.data.notes,
-            status: "submitted",
+            status: hasConflictingRequest ? "waitlisted" : "submitted",
+            isProtectedLeave: parsed.data.isProtectedLeave,
+            policyVersion: parsed.data.requestType === "time_off" ? TIME_OFF_POLICY_VERSION : null,
+            policyAcceptedAt: parsed.data.requestType === "time_off" ? new Date() : null,
           })
           .returning();
         return created;
       });
       if (!request) {
-        return res.status(409).json({ error: "This request cannot be processed due to a conflicting request. Please contact your direct supervisor to discuss this request." });
+        return res.status(409).json({ error: "This request cannot be processed due to a conflicting request. Please contact your direct supervisor to discuss this request, or join the waitlist.", code: "SCHEDULE_REQUEST_CONFLICT", canWaitlist: true });
       }
       await audit(null, req.scheduleUser.id, "schedule_request_submitted", {
         requestId: request.id,
@@ -3559,6 +3614,8 @@ export function registerScheduleRoutes(app: Express) {
         requestEndDate: request.requestEndDate,
         timeOffPolicyAccepted: parsed.data.requestType === "time_off" ? true : undefined,
         timeOffPolicyVersion: parsed.data.requestType === "time_off" ? TIME_OFF_POLICY_VERSION : undefined,
+        protectedLeaveRoute: parsed.data.isProtectedLeave,
+        waitlisted: request.status === "waitlisted",
       });
       let emailSent = false;
       try {
@@ -3572,7 +3629,7 @@ export function registerScheduleRoutes(app: Express) {
           error: emailError?.message || emailError,
         });
       }
-      res.status(201).json({ request, emailSent, policyWarning });
+      res.status(201).json({ request, emailSent, policyWarning, highDemandWarning });
     } catch (error) {
       next(error);
     }
@@ -3589,13 +3646,24 @@ export function registerScheduleRoutes(app: Express) {
         const departments = await getScheduleRequestDepartmentsForManager(req.scheduleUser);
         if (!departments.includes(existing.department)) return res.status(403).json({ error: "This request belongs to another department." });
       }
+      if (parsed.data.status === "approved") {
+        const active = await db.select().from(scheduleRequests).where(and(
+          eq(scheduleRequests.department, existing.department),
+          inArray(scheduleRequests.status, ["submitted", "approved"] as any),
+        ));
+        const conflicting = active.some((candidate) => candidate.id !== existing.id && requestRangesOverlap(candidate, existing) && requestTimeWindowsOverlap(candidate, existing));
+        if (conflicting && (!parsed.data.overrideReason || !parsed.data.coveragePlan)) {
+          return res.status(409).json({ error: "Approval requires an override reason and documented coverage plan because another active request conflicts.", code: "COVERAGE_OVERRIDE_REQUIRED" });
+        }
+      }
       const [request] = await db
         .update(scheduleRequests)
-        .set({ status: parsed.data.status, reviewedByUserId: req.scheduleUser.id, reviewedAt: new Date(), updatedAt: new Date() })
+        .set({ status: parsed.data.status, reviewedByUserId: req.scheduleUser.id, reviewedAt: new Date(), managerOverrideReason: parsed.data.overrideReason, coveragePlan: parsed.data.coveragePlan, updatedAt: new Date() })
         .where(eq(scheduleRequests.id, req.params.id))
         .returning();
       await audit(null, req.scheduleUser.id, "schedule_request_status_updated", { requestId: request.id, status: request.status });
       const [requester] = await db.select().from(tipsUsers).where(eq(tipsUsers.id, request.requesterUserId)).limit(1);
+      try { await sendScheduleRequestStatusEmail(request, requester); } catch (emailError) { console.error("Schedule request status email failed", emailError); }
       const [requestWithConflicts] = await addRequestConflictInfo([{ request, user: requester }]);
       res.json({ request: requestWithConflicts });
     } catch (error) {
@@ -3622,12 +3690,65 @@ export function registerScheduleRoutes(app: Express) {
         .where(eq(scheduleRequests.id, req.params.id))
         .returning();
       await audit(null, req.scheduleUser.id, "schedule_request_cancelled", { requestId: request.id, previousStatus: existing.status });
+      const waitlisted = await db.select().from(scheduleRequests).where(and(eq(scheduleRequests.department, existing.department), eq(scheduleRequests.status, "waitlisted" as any))).orderBy(asc(scheduleRequests.createdAt));
+      const next = waitlisted.find((candidate) => requestRangesOverlap(candidate, existing) && requestTimeWindowsOverlap(candidate, existing));
+      if (next) {
+        await db.update(scheduleRequests).set({ status: "submitted", updatedAt: new Date() }).where(eq(scheduleRequests.id, next.id));
+        await audit(null, req.scheduleUser.id, "schedule_request_promoted_from_waitlist", { requestId: next.id, cancelledRequestId: existing.id });
+      }
       const [requester] = await db.select().from(tipsUsers).where(eq(tipsUsers.id, request.requesterUserId)).limit(1);
+      try { await sendScheduleRequestStatusEmail(request, requester); } catch (emailError) { console.error("Schedule request cancellation email failed", emailError); }
       const [requestWithConflicts] = await addRequestConflictInfo([{ request, user: requester }]);
       res.json({ request: requestWithConflicts });
     } catch (error) {
       next(error);
     }
+  });
+
+  router.get("/request-platform", requireCourtyardAssociate, async (req: any, res, next) => {
+    try {
+      const user = publicScheduleUser(req.scheduleUser);
+      const [coverageRequirements, blackouts, holidayAssignments, exchanges, policyHistory] = await Promise.all([
+        user.isAdmin ? db.select().from(scheduleCoverageRequirements).orderBy(asc(scheduleCoverageRequirements.department), asc(scheduleCoverageRequirements.role)) : Promise.resolve([]),
+        db.select().from(scheduleBlackoutDates).orderBy(asc(scheduleBlackoutDates.blackoutDate)),
+        user.isAdmin ? db.select({ assignment: scheduleHolidayAssignments, employee: scheduleEmployees }).from(scheduleHolidayAssignments).innerJoin(scheduleEmployees, eq(scheduleHolidayAssignments.employeeId, scheduleEmployees.id)).orderBy(desc(scheduleHolidayAssignments.holidayDate)) : Promise.resolve([]),
+        user.isAdmin ? db.select().from(scheduleShiftExchanges).orderBy(desc(scheduleShiftExchanges.createdAt)) : db.select().from(scheduleShiftExchanges).where(eq(scheduleShiftExchanges.requesterUserId, req.scheduleUser.id)).orderBy(desc(scheduleShiftExchanges.createdAt)),
+        db.select().from(scheduleAuditLog).where(and(eq(scheduleAuditLog.actorUserId, req.scheduleUser.id), eq(scheduleAuditLog.action, "schedule_request_submitted"))).orderBy(desc(scheduleAuditLog.createdAt)),
+      ]);
+      const fairness = user.isAdmin ? Object.values(holidayAssignments.reduce((acc: any, row: any) => {
+        const id = row.assignment.employeeId;
+        acc[id] ||= { employeeId: id, employeeName: row.employee.displayName, department: row.employee.department, holidaysWorked: 0, assignments: [] };
+        if (row.assignment.worked) acc[id].holidaysWorked += 1;
+        acc[id].assignments.push({ holidayName: row.assignment.holidayName, holidayDate: row.assignment.holidayDate, worked: row.assignment.worked });
+        return acc;
+      }, {})) : [];
+      const employees = user.isAdmin ? await db.select({ id: scheduleEmployees.id, displayName: scheduleEmployees.displayName, department: scheduleEmployees.department }).from(scheduleEmployees).where(eq(scheduleEmployees.active, true)).orderBy(asc(scheduleEmployees.displayName)) : [];
+      res.json({ coverageRequirements, blackouts, holidayAssignments, exchanges, policyHistory, fairness, employees, holidayPolicyVersion: TIME_OFF_POLICY_VERSION });
+    } catch (error) { next(error); }
+  });
+
+  router.post("/request-platform/coverage", requireScheduleManager, async (req: any, res, next) => {
+    try { const parsed = coverageRequirementSchema.safeParse(req.body); if (!parsed.success) return res.status(400).json({ error: "Invalid coverage requirement" }); const [item] = await db.insert(scheduleCoverageRequirements).values(parsed.data).onConflictDoUpdate({ target: [scheduleCoverageRequirements.department, scheduleCoverageRequirements.role, scheduleCoverageRequirements.startTime, scheduleCoverageRequirements.endTime], set: { minimumAssociates: parsed.data.minimumAssociates, active: parsed.data.active, updatedAt: new Date() } }).returning(); await audit(null, req.scheduleUser.id, "coverage_requirement_saved", { id: item.id }); res.status(201).json({ item }); } catch (error) { next(error); }
+  });
+  router.post("/request-platform/blackouts", requireScheduleManager, async (req: any, res, next) => {
+    try { const parsed = blackoutSchema.safeParse(req.body); if (!parsed.success) return res.status(400).json({ error: "Invalid high-demand date" }); const [item] = await db.insert(scheduleBlackoutDates).values({ ...parsed.data, createdByUserId: req.scheduleUser.id }).returning(); await audit(null, req.scheduleUser.id, "high_demand_date_created", { id: item.id }); res.status(201).json({ item }); } catch (error) { next(error); }
+  });
+  router.post("/request-platform/holidays", requireScheduleManager, async (req: any, res, next) => {
+    try { const parsed = holidayAssignmentSchema.safeParse(req.body); if (!parsed.success) return res.status(400).json({ error: "Invalid holiday assignment" }); const [item] = await db.insert(scheduleHolidayAssignments).values({ ...parsed.data, recordedByUserId: req.scheduleUser.id }).onConflictDoUpdate({ target: [scheduleHolidayAssignments.holidayDate, scheduleHolidayAssignments.employeeId], set: { holidayName: parsed.data.holidayName, worked: parsed.data.worked, notes: parsed.data.notes } }).returning(); await audit(null, req.scheduleUser.id, "holiday_assignment_saved", { id: item.id }); res.status(201).json({ item }); } catch (error) { next(error); }
+  });
+  router.post("/request-platform/exchanges", requireCourtyardAssociate, async (req: any, res, next) => {
+    try { const parsed = shiftExchangeSchema.safeParse(req.body); if (!parsed.success) return res.status(400).json({ error: "Invalid shift exchange" }); const department = await getScheduleRequestDepartment(req.scheduleUser); const [item] = await db.insert(scheduleShiftExchanges).values({ ...parsed.data, requesterUserId: req.scheduleUser.id, department }).returning(); await audit(null, req.scheduleUser.id, "shift_exchange_proposed", { id: item.id }); res.status(201).json({ item }); } catch (error) { next(error); }
+  });
+  router.patch("/request-platform/exchanges/:id", requireCourtyardAssociate, async (req: any, res, next) => {
+    try {
+      const status = z.enum(["accepted", "approved", "denied", "cancelled"]).safeParse(req.body.status); if (!status.success) return res.status(400).json({ error: "Invalid exchange status" });
+      const [existing] = await db.select().from(scheduleShiftExchanges).where(eq(scheduleShiftExchanges.id, req.params.id)).limit(1); if (!existing) return res.status(404).json({ error: "Exchange not found" });
+      const user = publicScheduleUser(req.scheduleUser); const mayManage = user.isAdmin; const mayAccept = existing.replacementUserId === req.scheduleUser.id && status.data === "accepted"; const mayCancel = existing.requesterUserId === req.scheduleUser.id && status.data === "cancelled";
+      if (!mayManage && !mayAccept && !mayCancel) return res.status(403).json({ error: "Not authorized for this exchange" });
+      if (["approved", "denied"].includes(status.data) && !mayManage) return res.status(403).json({ error: "Manager approval required" });
+      const [item] = await db.update(scheduleShiftExchanges).set({ status: status.data, replacementAcceptedAt: status.data === "accepted" ? new Date() : existing.replacementAcceptedAt, reviewedByUserId: mayManage ? req.scheduleUser.id : existing.reviewedByUserId, reviewedAt: mayManage ? new Date() : existing.reviewedAt, updatedAt: new Date() }).where(eq(scheduleShiftExchanges.id, existing.id)).returning();
+      await audit(null, req.scheduleUser.id, "shift_exchange_status_updated", { id: item.id, status: item.status }); res.json({ item });
+    } catch (error) { next(error); }
   });
 
   router.post("/shift-types", requireScheduleManager, async (req: any, res, next) => {

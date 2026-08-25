@@ -1,33 +1,550 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { ArrowLeft, CalendarDays, ChevronLeft, ChevronRight, Plus, Share2 } from "lucide-react";
+import {
+  ArrowLeft,
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  Share2,
+} from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
-async function request(url:string,init?:RequestInit){const r=await fetch(apiUrl(url),{credentials:"include",...init});const b=await r.json();if(!r.ok)throw Object.assign(new Error(b.error||"Request failed"),{code:b.code,status:r.status});return b;}
-const key=(d:Date)=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-const colors:any={inquiry:"bg-slate-100 text-slate-800",courtesy_hold:"bg-amber-100 text-amber-900",tentative:"bg-orange-100 text-orange-900",contract_sent:"bg-blue-100 text-blue-900",definite:"bg-emerald-100 text-emerald-900",completed:"bg-gray-200 text-gray-800",cancelled:"bg-red-100 text-red-900",expired:"bg-red-50 text-red-700"};
-const empty={spaceId:"",groupName:"",eventName:"",eventDate:"",setupStartTime:"08:00",guestStartTime:"09:00",guestEndTime:"17:00",breakdownEndTime:"18:00",status:"inquiry",holdExpiresAt:"",attendance:"",squareFeetRequired:"2000",roomSetup:"classroom",salesOwner:"",clientName:"",clientEmail:"",clientPhone:"",expectedRevenue:"",expectedRoomNights:"",cateringNotes:"",avNotes:"",accessibilityNotes:"",internalNotes:"",accountKey:"",opportunityId:"",conflictOverrideReason:""};
+async function request(url: string, init?: RequestInit) {
+  const r = await fetch(apiUrl(url), { credentials: "include", ...init });
+  const b = await r.json();
+  if (!r.ok)
+    throw Object.assign(new Error(b.error || "Request failed"), {
+      code: b.code,
+      status: r.status,
+    });
+  return b;
+}
+const key = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const colors: any = {
+  inquiry: "bg-slate-100 text-slate-800",
+  courtesy_hold: "bg-amber-100 text-amber-900",
+  tentative: "bg-orange-100 text-orange-900",
+  contract_sent: "bg-blue-100 text-blue-900",
+  definite: "bg-emerald-100 text-emerald-900",
+  completed: "bg-gray-200 text-gray-800",
+  cancelled: "bg-red-100 text-red-900",
+  expired: "bg-red-50 text-red-700",
+};
+const empty = {
+  spaceId: "",
+  groupName: "",
+  eventName: "",
+  eventDate: "",
+  setupStartTime: "08:00",
+  guestStartTime: "09:00",
+  guestEndTime: "17:00",
+  breakdownEndTime: "18:00",
+  status: "inquiry",
+  holdExpiresAt: "",
+  attendance: "",
+  squareFeetRequired: "2000",
+  roomSetup: "classroom",
+  salesOwner: "",
+  clientName: "",
+  clientEmail: "",
+  clientPhone: "",
+  expectedRevenue: "",
+  expectedRoomNights: "",
+  cateringNotes: "",
+  avNotes: "",
+  accessibilityNotes: "",
+  internalNotes: "",
+  accountKey: "",
+  opportunityId: "",
+  conflictOverrideReason: "",
+};
 
-export default function CourtyardMeetingCalendar(){
- const {toast}=useToast(),qc=useQueryClient(); const [month,setMonth]=useState(new Date());const [open,setOpen]=useState(false);const [form,setForm]=useState<any>(empty);const [view,setView]=useState("month");
- const me=useQuery({queryKey:["sales-meeting-me"],queryFn:()=>request("/api/courtyard/sales-intelligence/me"),retry:false});const hotelId=me.data?.hotels?.[0]?.id||"";
- const first=new Date(month.getFullYear(),month.getMonth(),1),last=new Date(month.getFullYear(),month.getMonth()+1,0);const start=new Date(first);start.setDate(1-first.getDay());const end=new Date(last);end.setDate(last.getDate()+6-last.getDay());
- const cal=useQuery({queryKey:["meeting-calendar",hotelId,key(start),key(end)],queryFn:()=>request(`/api/courtyard/sales-intelligence/meeting-calendar?hotelId=${hotelId}&start=${key(start)}&end=${key(end)}`),enabled:!!hotelId});
- const save=useMutation({mutationFn:(body:any)=>request("/api/courtyard/sales-intelligence/meeting-calendar/events",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({hotelId,...body,attendance:body.attendance?Number(body.attendance):null,squareFeetRequired:body.squareFeetRequired?Number(body.squareFeetRequired):null,expectedRoomNights:body.expectedRoomNights?Number(body.expectedRoomNights):null})}),onSuccess:()=>{setOpen(false);setForm({...empty,spaceId:cal.data?.spaces?.[0]?.id||""});qc.invalidateQueries({queryKey:["meeting-calendar"]});toast({title:"Meeting-space event saved"})},onError:(e:any)=>{if(e.code==="MEETING_SPACE_CONFLICT"&&me.data?.user?.isAdmin){const reason=prompt(`${e.message}\n\nEnter the manager override reason:`);if(reason)save.mutate({...form,conflictOverrideReason:reason});return;}toast({title:"Could not save event",description:e.message,variant:"destructive"})}});
- const days=useMemo(()=>Array.from({length:Math.round((end.getTime()-start.getTime())/86400000)+1},(_,i)=>{const d=new Date(start);d.setDate(start.getDate()+i);return d;}),[key(start),key(end)]);
- if(me.isLoading)return <div className="min-h-screen bg-[#f7f1e7] p-8">Loading meeting calendar…</div>;if(me.error)return <div className="flex min-h-screen items-center justify-center bg-[#f7f1e7]"><Card><CardHeader><CardTitle>Sales access required</CardTitle></CardHeader><CardContent><Button asChild><Link href="/courtyard/sales-intelligence">Open Sales Intelligence to sign in</Link></Button></CardContent></Card></div>;
- const events=cal.data?.events||[];const openNew=(date="")=>{setForm({...empty,spaceId:cal.data?.spaces?.[0]?.id||"",eventDate:date});setOpen(true)};
- return <div className="min-h-screen bg-[#f7f1e7] text-[#201814]"><header className="border-b border-[#deceba] bg-[#fffaf2] px-4 py-4"><div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3"><div><div className="text-xs font-bold uppercase tracking-[.2em] text-[#8a6b3f]">Courtyard Austin Lakeline</div><h1 className="text-3xl font-semibold">Meeting Space Calendar</h1><p className="text-[#5f5247]">Operational availability for the hotel’s 2,000 sq. ft. meeting space.</p></div><div className="flex gap-2"><Button asChild variant="outline"><Link href="/courtyard/sales-intelligence"><ArrowLeft className="mr-2 h-4 w-4"/>Sales Intelligence</Link></Button><Button className="bg-[#2f5f46] text-white" onClick={()=>openNew()}><Plus className="mr-2 h-4 w-4"/>New event</Button></div></div></header><main className="mx-auto max-w-7xl space-y-4 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div className="flex items-center gap-2"><Button size="icon" variant="outline" onClick={()=>setMonth(new Date(month.getFullYear(),month.getMonth()-1,1))}><ChevronLeft/></Button><h2 className="min-w-48 text-center text-xl font-semibold">{month.toLocaleDateString("en-US",{month:"long",year:"numeric"})}</h2><Button size="icon" variant="outline" onClick={()=>setMonth(new Date(month.getFullYear(),month.getMonth()+1,1))}><ChevronRight/></Button></div><div className="flex gap-2"><Button variant={view==="month"?"default":"outline"} onClick={()=>setView("month")}>Month</Button><Button variant={view==="agenda"?"default":"outline"} onClick={()=>setView("agenda")}>Agenda</Button><Button variant="outline" onClick={async()=>{const recipientName=prompt("Recipient name:")||"Calendar recipient";const r=await request("/api/courtyard/sales-intelligence/meeting-calendar/shares",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({hotelId,recipientName,rangeStart:key(first),rangeEnd:key(last),expiresInDays:7})});await navigator.clipboard.writeText(r.url);toast({title:"View-only calendar link copied",description:r.url})}}><Share2 className="mr-2 h-4 w-4"/>Share month</Button></div></div>
- {view==="month"?<div className="overflow-hidden rounded-xl border border-[#cdbda8] bg-white"><div className="grid grid-cols-7 bg-[#eadfce] text-center text-sm font-semibold">{["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(x=><div className="p-2" key={x}>{x}</div>)}</div><div className="grid grid-cols-7">{days.map(d=>{const date=key(d),rows=events.filter((x:any)=>x.eventDate===date);return <button key={date} className={`min-h-32 border-t border-r p-2 text-left align-top hover:bg-[#fffaf2] ${d.getMonth()!==month.getMonth()?"bg-slate-50 text-slate-400":""}`} onClick={()=>openNew(date)}><div className="font-semibold">{d.getDate()}</div>{rows.map((x:any)=><div key={x.id} className={`mt-1 rounded p-1 text-xs ${colors[x.status]||colors.inquiry}`} onClick={e=>e.stopPropagation()}><b>{x.guestStartTime.slice(0,5)}</b> {x.groupName}<div>{x.status.replaceAll("_"," ")}</div></div>)}</button>})}</div></div>:<Card><CardContent className="space-y-2 p-4">{events.map((x:any)=><div key={x.id} className="flex flex-wrap justify-between gap-2 rounded border p-3"><div><b>{x.eventDate} · {x.groupName} — {x.eventName}</b><div className="text-sm">Occupied {x.setupStartTime.slice(0,5)}–{x.breakdownEndTime.slice(0,5)} · Guests {x.guestStartTime.slice(0,5)}–{x.guestEndTime.slice(0,5)} · {x.roomSetup}</div></div><Badge className={colors[x.status]}>{x.status.replaceAll("_"," ")}</Badge></div>)}</CardContent></Card>}
- </main><Dialog open={open} onOpenChange={setOpen}><DialogContent className="max-h-[92dvh] max-w-3xl overflow-y-auto bg-white text-[#201814]"><DialogHeader><DialogTitle>New meeting-space event</DialogTitle></DialogHeader><div className="grid gap-3 md:grid-cols-2"><div><Label>Group/company</Label><Input value={form.groupName} onChange={e=>setForm({...form,groupName:e.target.value})}/></div><div><Label>Event name</Label><Input value={form.eventName} onChange={e=>setForm({...form,eventName:e.target.value})}/></div><div><Label>Date</Label><Input type="date" value={form.eventDate} onChange={e=>setForm({...form,eventDate:e.target.value})}/></div><div><Label>Status</Label><Select value={form.status} onValueChange={status=>setForm({...form,status})}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{["inquiry","courtesy_hold","tentative","contract_sent","definite"].map(x=><SelectItem value={x} key={x}>{x.replaceAll("_"," ")}</SelectItem>)}</SelectContent></Select></div>{[["Setup start","setupStartTime"],["Guest start","guestStartTime"],["Guest end","guestEndTime"],["Breakdown end","breakdownEndTime"]].map(([label,k])=><div key={k}><Label>{label}</Label><Input type="time" value={form[k]} onChange={e=>setForm({...form,[k]:e.target.value})}/></div>)}<div><Label>Attendance</Label><Input type="number" value={form.attendance} onChange={e=>setForm({...form,attendance:e.target.value})}/></div><div><Label>Room setup</Label><Select value={form.roomSetup} onValueChange={roomSetup=>setForm({...form,roomSetup})}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{["classroom","theater","u_shape","conference","banquet","reception","custom"].map(x=><SelectItem value={x} key={x}>{x.replaceAll("_"," ")}</SelectItem>)}</SelectContent></Select></div><Input placeholder="Sales owner" value={form.salesOwner} onChange={e=>setForm({...form,salesOwner:e.target.value})}/><Input placeholder="Client contact" value={form.clientName} onChange={e=>setForm({...form,clientName:e.target.value})}/><Input type="email" placeholder="Client email" value={form.clientEmail} onChange={e=>setForm({...form,clientEmail:e.target.value})}/><Input placeholder="Client phone" value={form.clientPhone} onChange={e=>setForm({...form,clientPhone:e.target.value})}/><Input type="number" placeholder="Expected meeting revenue" value={form.expectedRevenue} onChange={e=>setForm({...form,expectedRevenue:e.target.value})}/><Input type="number" placeholder="Expected room nights" value={form.expectedRoomNights} onChange={e=>setForm({...form,expectedRoomNights:e.target.value})}/>{form.status==="courtesy_hold"&&<div><Label>Hold expires</Label><Input type="datetime-local" value={form.holdExpiresAt} onChange={e=>setForm({...form,holdExpiresAt:e.target.value})}/></div>}<Textarea className="md:col-span-2" placeholder="Catering, AV, accessibility, and internal notes" value={form.internalNotes} onChange={e=>setForm({...form,internalNotes:e.target.value})}/><Button className="bg-[#2f5f46] text-white md:col-span-2" disabled={save.isPending} onClick={()=>save.mutate(form)}>{save.isPending?"Saving…":"Save event"}</Button></div></DialogContent></Dialog></div>;
+export default function CourtyardMeetingCalendar() {
+  const { toast } = useToast(),
+    qc = useQueryClient();
+  const [month, setMonth] = useState(new Date());
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState<any>(empty);
+  const [view, setView] = useState("month");
+  const me = useQuery({
+    queryKey: ["sales-meeting-me"],
+    queryFn: () => request("/api/courtyard/sales-intelligence/me"),
+    retry: false,
+  });
+  const hotelId = me.data?.hotels?.[0]?.id || "";
+  const first = new Date(month.getFullYear(), month.getMonth(), 1),
+    last = new Date(month.getFullYear(), month.getMonth() + 1, 0);
+  const start = new Date(first);
+  start.setDate(1 - first.getDay());
+  const end = new Date(last);
+  end.setDate(last.getDate() + 6 - last.getDay());
+  const cal = useQuery({
+    queryKey: ["meeting-calendar", hotelId, key(start), key(end)],
+    queryFn: () =>
+      request(
+        `/api/courtyard/sales-intelligence/meeting-calendar?hotelId=${hotelId}&start=${key(start)}&end=${key(end)}`,
+      ),
+    enabled: !!hotelId,
+  });
+  const save = useMutation({
+    mutationFn: (body: any) =>
+      request("/api/courtyard/sales-intelligence/meeting-calendar/events", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          hotelId,
+          ...body,
+          attendance: body.attendance ? Number(body.attendance) : null,
+          squareFeetRequired: body.squareFeetRequired
+            ? Number(body.squareFeetRequired)
+            : null,
+          expectedRoomNights: body.expectedRoomNights
+            ? Number(body.expectedRoomNights)
+            : null,
+        }),
+      }),
+    onSuccess: () => {
+      setOpen(false);
+      setForm({ ...empty, spaceId: cal.data?.spaces?.[0]?.id || "" });
+      qc.invalidateQueries({ queryKey: ["meeting-calendar"] });
+      toast({ title: "Meeting-space event saved" });
+    },
+    onError: (e: any) => {
+      if (e.code === "MEETING_SPACE_CONFLICT" && me.data?.user?.isAdmin) {
+        const reason = prompt(
+          `${e.message}\n\nEnter the manager override reason:`,
+        );
+        if (reason) save.mutate({ ...form, conflictOverrideReason: reason });
+        return;
+      }
+      toast({
+        title: "Could not save event",
+        description: e.message,
+        variant: "destructive",
+      });
+    },
+  });
+  const days = useMemo(
+    () =>
+      Array.from(
+        {
+          length: Math.round((end.getTime() - start.getTime()) / 86400000) + 1,
+        },
+        (_, i) => {
+          const d = new Date(start);
+          d.setDate(start.getDate() + i);
+          return d;
+        },
+      ),
+    [key(start), key(end)],
+  );
+  if (me.isLoading)
+    return (
+      <div className="min-h-screen bg-[#f7f1e7] p-8">
+        Loading meeting calendar…
+      </div>
+    );
+  if (me.error)
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#f7f1e7]">
+        <Card>
+          <CardHeader>
+            <CardTitle>Sales access required</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Button asChild>
+              <Link href="/courtyard/sales-intelligence">
+                Open Sales Intelligence to sign in
+              </Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  const events = cal.data?.events || [];
+  const openNew = (date = "") => {
+    setForm({
+      ...empty,
+      spaceId: cal.data?.spaces?.[0]?.id || "",
+      eventDate: date,
+    });
+    setOpen(true);
+  };
+  return (
+    <div className="min-h-screen bg-[#f7f1e7] text-[#201814]">
+      <header className="border-b border-[#deceba] bg-[#fffaf2] px-4 py-4">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-xs font-bold uppercase tracking-[.2em] text-[#8a6b3f]">
+              Courtyard Austin Lakeline
+            </div>
+            <h1 className="text-3xl font-semibold">Meeting Space Calendar</h1>
+            <p className="text-[#5f5247]">
+              Operational availability for the hotel’s 2,000 sq. ft. meeting
+              space.
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button asChild variant="outline">
+              <Link href="/courtyard/sales-intelligence">
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Sales Intelligence
+              </Link>
+            </Button>
+            <Button
+              className="bg-[#2f5f46] text-white"
+              onClick={() => openNew()}
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              New event
+            </Button>
+          </div>
+        </div>
+      </header>
+      <main className="mx-auto max-w-7xl space-y-4 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <Button
+              size="icon"
+              variant="outline"
+              onClick={() =>
+                setMonth(new Date(month.getFullYear(), month.getMonth() - 1, 1))
+              }
+            >
+              <ChevronLeft />
+            </Button>
+            <h2 className="min-w-48 text-center text-xl font-semibold">
+              {month.toLocaleDateString("en-US", {
+                month: "long",
+                year: "numeric",
+              })}
+            </h2>
+            <Button
+              size="icon"
+              variant="outline"
+              onClick={() =>
+                setMonth(new Date(month.getFullYear(), month.getMonth() + 1, 1))
+              }
+            >
+              <ChevronRight />
+            </Button>
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant={view === "month" ? "default" : "outline"}
+              onClick={() => setView("month")}
+            >
+              Month
+            </Button>
+            <Button
+              variant={view === "agenda" ? "default" : "outline"}
+              onClick={() => setView("agenda")}
+            >
+              Agenda
+            </Button>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                const recipientName =
+                  prompt("Recipient name:") || "Calendar recipient";
+                const r = await request(
+                  "/api/courtyard/sales-intelligence/meeting-calendar/shares",
+                  {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      hotelId,
+                      recipientName,
+                      rangeStart: key(first),
+                      rangeEnd: key(last),
+                      expiresInDays: 7,
+                    }),
+                  },
+                );
+                await navigator.clipboard.writeText(r.url);
+                toast({
+                  title: "View-only calendar link copied",
+                  description: r.url,
+                });
+              }}
+            >
+              <Share2 className="mr-2 h-4 w-4" />
+              Share month
+            </Button>
+          </div>
+        </div>
+        {view === "month" ? (
+          <div className="overflow-hidden rounded-xl border border-[#cdbda8] bg-white">
+            <div className="grid grid-cols-7 bg-[#eadfce] text-center text-sm font-semibold">
+              {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((x) => (
+                <div className="p-2" key={x}>
+                  {x}
+                </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-7">
+              {days.map((d) => {
+                const date = key(d),
+                  rows = events.filter((x: any) => x.eventDate === date);
+                return (
+                  <button
+                    key={date}
+                    className={`min-h-32 border-t border-r p-2 text-left align-top hover:bg-[#fffaf2] ${d.getMonth() !== month.getMonth() ? "bg-slate-50 text-slate-400" : ""}`}
+                    onClick={() => openNew(date)}
+                  >
+                    <div className="font-semibold">{d.getDate()}</div>
+                    {rows.map((x: any) => (
+                      <div
+                        key={x.id}
+                        className={`mt-1 rounded p-1 text-xs ${colors[x.status] || colors.inquiry}`}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <b>{x.guestStartTime.slice(0, 5)}</b> {x.groupName}
+                        <div>{x.status.replaceAll("_", " ")}</div>
+                      </div>
+                    ))}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <Card>
+            <CardContent className="space-y-2 p-4">
+              {events.map((x: any) => (
+                <div
+                  key={x.id}
+                  className="flex flex-wrap justify-between gap-2 rounded border p-3"
+                >
+                  <div>
+                    <b>
+                      {x.eventDate} · {x.groupName} — {x.eventName}
+                    </b>
+                    <div className="text-sm">
+                      Occupied {x.setupStartTime.slice(0, 5)}–
+                      {x.breakdownEndTime.slice(0, 5)} · Guests{" "}
+                      {x.guestStartTime.slice(0, 5)}–
+                      {x.guestEndTime.slice(0, 5)} · {x.roomSetup}
+                    </div>
+                  </div>
+                  <Badge className={colors[x.status]}>
+                    {x.status.replaceAll("_", " ")}
+                  </Badge>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
+      </main>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-h-[92dvh] max-w-3xl overflow-y-auto bg-white text-[#201814]">
+          <DialogHeader>
+            <DialogTitle>New meeting-space event</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div>
+              <Label>Group/company</Label>
+              <Input
+                value={form.groupName}
+                onChange={(e) =>
+                  setForm({ ...form, groupName: e.target.value })
+                }
+              />
+            </div>
+            <div>
+              <Label>Event name</Label>
+              <Input
+                value={form.eventName}
+                onChange={(e) =>
+                  setForm({ ...form, eventName: e.target.value })
+                }
+              />
+            </div>
+            <div>
+              <Label>Date</Label>
+              <Input
+                type="date"
+                value={form.eventDate}
+                onChange={(e) =>
+                  setForm({ ...form, eventDate: e.target.value })
+                }
+              />
+            </div>
+            <div>
+              <Label>Status</Label>
+              <Select
+                value={form.status}
+                onValueChange={(status) => setForm({ ...form, status })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[
+                    "inquiry",
+                    "courtesy_hold",
+                    "tentative",
+                    "contract_sent",
+                    "definite",
+                  ].map((x) => (
+                    <SelectItem value={x} key={x}>
+                      {x.replaceAll("_", " ")}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            {[
+              ["Setup start", "setupStartTime"],
+              ["Guest start", "guestStartTime"],
+              ["Guest end", "guestEndTime"],
+              ["Breakdown end", "breakdownEndTime"],
+            ].map(([label, k]) => (
+              <div key={k}>
+                <Label>{label}</Label>
+                <Input
+                  type="time"
+                  value={form[k]}
+                  onChange={(e) => setForm({ ...form, [k]: e.target.value })}
+                />
+              </div>
+            ))}
+            <div>
+              <Label>Attendance</Label>
+              <Input
+                type="number"
+                value={form.attendance}
+                onChange={(e) =>
+                  setForm({ ...form, attendance: e.target.value })
+                }
+              />
+            </div>
+            <div>
+              <Label>Room setup</Label>
+              <Select
+                value={form.roomSetup}
+                onValueChange={(roomSetup) => setForm({ ...form, roomSetup })}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {[
+                    "classroom",
+                    "theater",
+                    "u_shape",
+                    "conference",
+                    "banquet",
+                    "reception",
+                    "custom",
+                  ].map((x) => (
+                    <SelectItem value={x} key={x}>
+                      {x.replaceAll("_", " ")}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Input
+              placeholder="Sales owner"
+              value={form.salesOwner}
+              onChange={(e) => setForm({ ...form, salesOwner: e.target.value })}
+            />
+            <Input
+              placeholder="Client contact"
+              value={form.clientName}
+              onChange={(e) => setForm({ ...form, clientName: e.target.value })}
+            />
+            <Input
+              type="email"
+              placeholder="Client email"
+              value={form.clientEmail}
+              onChange={(e) =>
+                setForm({ ...form, clientEmail: e.target.value })
+              }
+            />
+            <Input
+              placeholder="Client phone"
+              value={form.clientPhone}
+              onChange={(e) =>
+                setForm({ ...form, clientPhone: e.target.value })
+              }
+            />
+            <Input
+              type="number"
+              placeholder="Expected meeting revenue"
+              value={form.expectedRevenue}
+              onChange={(e) =>
+                setForm({ ...form, expectedRevenue: e.target.value })
+              }
+            />
+            <Input
+              type="number"
+              placeholder="Expected room nights"
+              value={form.expectedRoomNights}
+              onChange={(e) =>
+                setForm({ ...form, expectedRoomNights: e.target.value })
+              }
+            />
+            {form.status === "courtesy_hold" && (
+              <div>
+                <Label>Hold expires</Label>
+                <Input
+                  type="datetime-local"
+                  value={form.holdExpiresAt}
+                  onChange={(e) =>
+                    setForm({ ...form, holdExpiresAt: e.target.value })
+                  }
+                />
+              </div>
+            )}
+            <Textarea
+              className="md:col-span-2"
+              placeholder="Catering, AV, accessibility, and internal notes"
+              value={form.internalNotes}
+              onChange={(e) =>
+                setForm({ ...form, internalNotes: e.target.value })
+              }
+            />
+            <Button
+              className="bg-[#2f5f46] text-white md:col-span-2"
+              disabled={save.isPending}
+              onClick={() => save.mutate(form)}
+            >
+              {save.isPending ? "Saving…" : "Save event"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
 }

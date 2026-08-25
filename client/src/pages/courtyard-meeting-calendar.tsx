@@ -95,12 +95,27 @@ export default function CourtyardMeetingCalendar() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<any>(empty);
   const [view, setView] = useState("month");
+  const [accessPin, setAccessPin] = useState("");
   const me = useQuery({
     queryKey: ["sales-meeting-me"],
     queryFn: () => request("/api/courtyard/sales-intelligence/me"),
     retry: false,
   });
   const hotelId = me.data?.hotels?.[0]?.id || "";
+  const pinLogin = useMutation({
+    mutationFn: () =>
+      request("/api/courtyard/sales-intelligence/pin-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pin: accessPin }),
+      }),
+    onSuccess: () => {
+      setAccessPin("");
+      qc.invalidateQueries({ queryKey: ["sales-meeting-me"] });
+    },
+    onError: (error: Error) =>
+      toast({ title: "Could not unlock the calendar", description: error.message, variant: "destructive" }),
+  });
   const first = new Date(month.getFullYear(), month.getMonth(), 1),
     last = new Date(month.getFullYear(), month.getMonth() + 1, 0);
   const start = new Date(first);
@@ -173,23 +188,28 @@ export default function CourtyardMeetingCalendar() {
         Loading meeting calendar…
       </div>
     );
-  if (me.error)
+  if (me.error && [401, 403].includes((me.error as any).status))
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#f7f1e7]">
-        <Card>
+        <Card className="w-full max-w-md border-[#deceba] bg-white text-[#201814]">
           <CardHeader>
-            <CardTitle>Sales access required</CardTitle>
+            <CardTitle>Meeting Calendar</CardTitle>
+            <CardDescription>Enter the shared five-digit PIN used for Sales Intelligence.</CardDescription>
           </CardHeader>
-          <CardContent>
-            <Button asChild>
-              <Link href="/courtyard/sales-intelligence">
-                Open Sales Intelligence to sign in
-              </Link>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label>Shared PIN</Label>
+              <Input type="password" inputMode="numeric" autoComplete="one-time-code" maxLength={5} value={accessPin} onChange={(event) => setAccessPin(event.target.value.replace(/\D/g, "").slice(0, 5))} onKeyDown={(event) => { if (event.key === "Enter" && accessPin.length === 5) pinLogin.mutate(); }} />
+            </div>
+            <Button className="w-full bg-[#2f5f46] text-white hover:bg-[#244b37]" disabled={accessPin.length !== 5 || pinLogin.isPending} onClick={() => pinLogin.mutate()}>
+              {pinLogin.isPending ? "Unlocking…" : "Open Meeting Calendar"}
             </Button>
           </CardContent>
         </Card>
       </div>
     );
+  if (me.error)
+    return <div className="min-h-screen bg-[#f7f1e7] p-8 text-[#201814]">{(me.error as Error).message}</div>;
   const events = cal.data?.events || [];
   const openNew = (date = "") => {
     setForm({

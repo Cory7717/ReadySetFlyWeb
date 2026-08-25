@@ -110,7 +110,7 @@ export default function CourtyardSalesIntelligence() {
   );
   const [accessPin, setAccessPin] = useState("");
   const pinLogin = useMutation({
-    mutationFn: () => json("/api/opsreport/pin-login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: accessPin }) }),
+    mutationFn: () => json("/api/courtyard/sales-intelligence/pin-login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pin: accessPin }) }),
     onSuccess: () => { setAccessPin(""); qc.invalidateQueries({ queryKey: ["/api/courtyard/sales-intelligence/me"] }); },
     onError: (error: Error) => toast({ title: "Could not unlock Sales Intelligence", description: error.message, variant: "destructive" }),
   });
@@ -528,12 +528,12 @@ export default function CourtyardSalesIntelligence() {
         Loading Sales Intelligence…
       </div>
     );
-  if (me.error && (me.error as any).status === 401)
+  if (me.error && [401, 403].includes((me.error as any).status))
     return (
       <div className={`flex min-h-screen items-center justify-center p-6 ${C.page}`}>
         <Card className={`w-full max-w-md ${C.shell}`}>
-          <CardHeader><CardTitle>Sales Intelligence</CardTitle><CardDescription>Enter the same five-digit operations PIN used for the Ops Report. No account registration is required.</CardDescription></CardHeader>
-          <CardContent className="space-y-4"><div><Label>Operations PIN</Label><Input type="password" inputMode="numeric" autoComplete="one-time-code" maxLength={5} value={accessPin} onChange={(event) => setAccessPin(event.target.value.replace(/\D/g, "").slice(0, 5))} onKeyDown={(event) => { if (event.key === "Enter" && accessPin.length === 5) pinLogin.mutate(); }} /></div><Button className={C.green} disabled={accessPin.length !== 5 || pinLogin.isPending} onClick={() => pinLogin.mutate()}>{pinLogin.isPending ? "Unlocking…" : "Open Sales Intelligence"}</Button><p className="text-xs text-[#5f5247]">Regional access is limited to Courtyard Austin Northwest/Lakeline and is identified as Regional VP access.</p></CardContent>
+          <CardHeader><CardTitle>Sales Intelligence</CardTitle><CardDescription>Enter the shared five-digit PIN to open Sales Intelligence and the Meeting Calendar. No account registration is required.</CardDescription></CardHeader>
+          <CardContent className="space-y-4"><div><Label>Shared PIN</Label><Input type="password" inputMode="numeric" autoComplete="one-time-code" maxLength={5} value={accessPin} onChange={(event) => setAccessPin(event.target.value.replace(/\D/g, "").slice(0, 5))} onKeyDown={(event) => { if (event.key === "Enter" && accessPin.length === 5) pinLogin.mutate(); }} /></div><Button className={C.green} disabled={accessPin.length !== 5 || pinLogin.isPending} onClick={() => pinLogin.mutate()}>{pinLogin.isPending ? "Unlocking…" : "Open Sales Intelligence"}</Button><p className="text-xs text-[#5f5247]">One successful sign-in also unlocks the Meeting Calendar in this browser session.</p></CardContent>
         </Card>
       </div>
     );

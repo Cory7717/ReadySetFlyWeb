@@ -64,6 +64,7 @@ import { researchDemandEvents } from "../courtyardSalesDemandResearch";
 import { mergeDatScreenshotImports, parseDatScreenshot, parseDatWorkbook } from "../courtyardSalesDatImport";
 
 const DEFAULT_HOTEL_ID = "courtyard-austin-lakeline";
+const SHARED_SALES_PIN = "12833";
 const RECOVERY_MONTHS = 3;
 const GROUP_REPORT_TYPE = "marriott_mint_group_account_tracking";
 const SPECIAL_REPORT_TYPE = "marriott_mint_special_corp_government";
@@ -173,7 +174,7 @@ const admin = (user: any) =>
 async function auth(req: any, res: any, next: any) {
   try {
     const id = req.session?.tipsUserId;
-    if (!id && req.session?.opsReportUnlocked) {
+    if (!id && req.session?.salesIntelligenceUnlocked) {
       const hotels = await db.select().from(courtyardHotels).where(eq(courtyardHotels.id, DEFAULT_HOTEL_ID));
       if (!hotels.length) return res.status(503).json({ error: "The Sales Intelligence property is not configured." });
       req.salesUser = { id: null, email: "sultan@globiwest.com", employeeDisplayName: "Regional VP", role: "regional_viewer", toolAccessJson: { salesintelligence: true } };
@@ -190,6 +191,14 @@ async function auth(req: any, res: any, next: any) {
       .limit(1);
     if (!user || user.disabledAt || user.mustChangePassword)
       return res.status(401).json({ error: "Courtyard login is required." });
+    if (!allowed(user) && req.session?.salesIntelligenceUnlocked) {
+      const hotels = await db.select().from(courtyardHotels).where(eq(courtyardHotels.id, DEFAULT_HOTEL_ID));
+      if (!hotels.length) return res.status(503).json({ error: "The Sales Intelligence property is not configured." });
+      req.salesUser = { id: null, email: "shared-access@readysetfly.us", employeeDisplayName: "Shared PIN User", role: "shared_viewer", toolAccessJson: { salesintelligence: true } };
+      req.salesHotels = hotels;
+      req.salesPinAccess = true;
+      return next();
+    }
     if (!allowed(user))
       return res.status(403).json({
         error: "Sales Intelligence access is not enabled for this account.",
@@ -590,6 +599,14 @@ async function createAdvisorPdf(analysis: any, hotelName: string) {
 
 export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
   const publicRouter = express.Router();
+  publicRouter.post("/pin-login", (req: any, res) => {
+    const submittedPin = String(req.body?.pin || "");
+    const valid = submittedPin.length === SHARED_SALES_PIN.length
+      && crypto.timingSafeEqual(Buffer.from(submittedPin), Buffer.from(SHARED_SALES_PIN));
+    if (!valid) return res.status(401).json({ error: "Invalid PIN." });
+    req.session.salesIntelligenceUnlocked = true;
+    req.session.save(() => res.json({ unlocked: true }));
+  });
   publicRouter.get("/transition-share/:token", async (req, res, next) => {
     try {
       const [share] = await db.select().from(courtyardSalesTransitionShares).where(eq(courtyardSalesTransitionShares.tokenHash, transitionTokenHash(req.params.token))).limit(1);

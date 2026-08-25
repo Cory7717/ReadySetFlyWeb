@@ -21,6 +21,10 @@ import {
   courtyardSalesRawRows,
   courtyardSalesOpportunities,
   courtyardSalesWeeklyReports,
+  courtyardSalesTransitions,
+  courtyardSalesTransitionItems,
+  courtyardSalesTransitionDocuments,
+  courtyardSalesTransitionShares,
   tipsUsers,
 } from "@shared/schema";
 import {
@@ -139,6 +143,15 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: MAX_SALES_IMPORT_BYTES, files: 3 },
 });
+const transitionUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
+const transitionTokenHash = (token: string) => crypto.createHash("sha256").update(token).digest("hex");
+function safeTransitionUrl(value: unknown) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const parsed = new URL(raw);
+  if (!["http:", "https:"].includes(parsed.protocol)) throw new Error("Transition links must use http or https.");
+  return parsed.toString();
+}
 const accessMap = (user: any) =>
   user?.toolAccessJson && typeof user.toolAccessJson === "object"
     ? user.toolAccessJson
@@ -572,6 +585,31 @@ async function createAdvisorPdf(analysis: any, hotelName: string) {
 }
 
 export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
+  const publicRouter = express.Router();
+  publicRouter.get("/transition-share/:token", async (req, res, next) => {
+    try {
+      const [share] = await db.select().from(courtyardSalesTransitionShares).where(eq(courtyardSalesTransitionShares.tokenHash, transitionTokenHash(req.params.token))).limit(1);
+      if (!share || share.revokedAt || new Date(share.expiresAt) <= new Date()) return res.status(404).json({ error: "This transition link is invalid or expired." });
+      const [transition] = await db.select().from(courtyardSalesTransitions).where(eq(courtyardSalesTransitions.id, share.transitionId)).limit(1);
+      if (!transition) return res.status(404).json({ error: "Transition not found." });
+      const [items, documents] = await Promise.all([
+        db.select().from(courtyardSalesTransitionItems).where(and(eq(courtyardSalesTransitionItems.transitionId, transition.id), eq(courtyardSalesTransitionItems.confidential, false))).orderBy(asc(courtyardSalesTransitionItems.category), asc(courtyardSalesTransitionItems.title)),
+        db.select({ id: courtyardSalesTransitionDocuments.id, filename: courtyardSalesTransitionDocuments.filename, mimeType: courtyardSalesTransitionDocuments.mimeType, sizeBytes: courtyardSalesTransitionDocuments.sizeBytes, category: courtyardSalesTransitionDocuments.category, description: courtyardSalesTransitionDocuments.description, createdAt: courtyardSalesTransitionDocuments.createdAt }).from(courtyardSalesTransitionDocuments).where(and(eq(courtyardSalesTransitionDocuments.transitionId, transition.id), eq(courtyardSalesTransitionDocuments.confidential, false))),
+      ]);
+      await db.update(courtyardSalesTransitionShares).set({ lastAccessedAt: new Date(), accessCount: share.accessCount + 1 }).where(eq(courtyardSalesTransitionShares.id, share.id));
+      res.json({ transition, items: items.map((item) => ({ ...item, username: null, vaultUrl: null, mfaOwner: null, recoveryContact: null })), documents, allowDownloads: share.allowDownloads });
+    } catch (e) { next(e); }
+  });
+  publicRouter.get("/transition-share/:token/documents/:documentId", async (req, res, next) => {
+    try {
+      const [share] = await db.select().from(courtyardSalesTransitionShares).where(eq(courtyardSalesTransitionShares.tokenHash, transitionTokenHash(req.params.token))).limit(1);
+      if (!share || !share.allowDownloads || share.revokedAt || new Date(share.expiresAt) <= new Date()) return res.status(403).json({ error: "Document download is not available." });
+      const [document] = await db.select().from(courtyardSalesTransitionDocuments).where(and(eq(courtyardSalesTransitionDocuments.id, req.params.documentId), eq(courtyardSalesTransitionDocuments.transitionId, share.transitionId), eq(courtyardSalesTransitionDocuments.confidential, false))).limit(1);
+      if (!document) return res.status(404).json({ error: "Document not found." });
+      res.setHeader("Content-Type", document.mimeType); res.setHeader("Content-Disposition", `attachment; filename="${document.filename.replace(/[\r\n"]/g, "_")}"`); res.send(Buffer.from(document.contentBase64, "base64"));
+    } catch (e) { next(e); }
+  });
+  app.use("/api/courtyard/sales-intelligence", publicRouter);
   const router = express.Router();
   router.use(auth);
   router.get("/me", (req: any, res) =>
@@ -585,6 +623,45 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
       recoveryThresholdMonths: RECOVERY_MONTHS,
     }),
   );
+  router.get("/transitions", async (req: any, res, next) => {
+    try {
+      const hotelId = String(req.query.hotelId || ""); if (!hasHotel(req, hotelId)) return res.status(403).json({ error: "Property access required." });
+      const transitions = await db.select().from(courtyardSalesTransitions).where(eq(courtyardSalesTransitions.hotelId, hotelId)).orderBy(desc(courtyardSalesTransitions.createdAt));
+      if (!transitions.length) return res.json({ transitions: [], transition: null, items: [], documents: [], shares: [], progress: 0 });
+      const transition = transitions[0];
+      const [items, documents, shares] = await Promise.all([
+        db.select().from(courtyardSalesTransitionItems).where(eq(courtyardSalesTransitionItems.transitionId, transition.id)).orderBy(asc(courtyardSalesTransitionItems.category), asc(courtyardSalesTransitionItems.title)),
+        db.select({ id: courtyardSalesTransitionDocuments.id, filename: courtyardSalesTransitionDocuments.filename, mimeType: courtyardSalesTransitionDocuments.mimeType, sizeBytes: courtyardSalesTransitionDocuments.sizeBytes, category: courtyardSalesTransitionDocuments.category, description: courtyardSalesTransitionDocuments.description, confidential: courtyardSalesTransitionDocuments.confidential, createdAt: courtyardSalesTransitionDocuments.createdAt }).from(courtyardSalesTransitionDocuments).where(eq(courtyardSalesTransitionDocuments.transitionId, transition.id)).orderBy(desc(courtyardSalesTransitionDocuments.createdAt)),
+        db.select().from(courtyardSalesTransitionShares).where(eq(courtyardSalesTransitionShares.transitionId, transition.id)).orderBy(desc(courtyardSalesTransitionShares.createdAt)),
+      ]);
+      const progress = items.length ? Math.round(items.filter((item) => item.status === "complete").length / items.length * 100) : 0;
+      res.json({ transitions, transition, items, documents, shares, progress });
+    } catch (e) { next(e); }
+  });
+  router.post("/transitions", async (req: any, res, next) => {
+    try { const hotelId = String(req.body.hotelId || ""); if (!hasHotel(req, hotelId)) return res.status(403).json({ error: "Property access required." }); if (!String(req.body.title || "").trim()) return res.status(400).json({ error: "Title is required." }); const [transition] = await db.insert(courtyardSalesTransitions).values({ hotelId, title: String(req.body.title).trim(), departureDate: req.body.departureDate || null, departingUserName: req.body.departingUserName || null, summary: req.body.summary || null, createdByUserId: req.salesUser.id }).returning(); res.status(201).json({ transition }); } catch (e) { next(e); }
+  });
+  router.patch("/transitions/:id", async (req: any, res, next) => {
+    try { const [existing] = await db.select().from(courtyardSalesTransitions).where(eq(courtyardSalesTransitions.id, req.params.id)).limit(1); if (!existing || !hasHotel(req, existing.hotelId)) return res.status(404).json({ error: "Transition not found." }); const action = String(req.body.action || ""); const values: any = { updatedAt: new Date() }; if (action === "departing_signoff") values.departingSignedAt = new Date(); else if (action === "manager_accept") { if (!admin(req.salesUser)) return res.status(403).json({ error: "Manager access required." }); values.managerAcceptedAt = new Date(); values.status = "complete"; } else Object.assign(values, { title: req.body.title, departureDate: req.body.departureDate, summary: req.body.summary, status: req.body.status }); const [transition] = await db.update(courtyardSalesTransitions).set(values).where(eq(courtyardSalesTransitions.id, existing.id)).returning(); res.json({ transition }); } catch (e) { next(e); }
+  });
+  router.post("/transitions/:id/items", async (req: any, res, next) => {
+    try { const [transition] = await db.select().from(courtyardSalesTransitions).where(eq(courtyardSalesTransitions.id, req.params.id)).limit(1); if (!transition || !hasHotel(req, transition.hotelId)) return res.status(404).json({ error: "Transition not found." }); if (!String(req.body.title || "").trim()) return res.status(400).json({ error: "Item title is required." }); const [item] = await db.insert(courtyardSalesTransitionItems).values({ transitionId: transition.id, category: req.body.category || "knowledge", title: String(req.body.title).trim(), description: req.body.description || null, status: req.body.status || "not_started", dueDate: req.body.dueDate || null, ownerName: req.body.ownerName || null, url: safeTransitionUrl(req.body.url), username: req.body.username || null, vaultUrl: safeTransitionUrl(req.body.vaultUrl), mfaOwner: req.body.mfaOwner || null, recoveryContact: req.body.recoveryContact || null, accountKey: req.body.accountKey || null, opportunityId: req.body.opportunityId || null, frequency: req.body.frequency || null, confidential: Boolean(req.body.confidential), createdByUserId: req.salesUser.id }).returning(); res.status(201).json({ item }); } catch (e) { next(e); }
+  });
+  router.patch("/transitions/:transitionId/items/:id", async (req: any, res, next) => {
+    try { const [transition] = await db.select().from(courtyardSalesTransitions).where(eq(courtyardSalesTransitions.id, req.params.transitionId)).limit(1); if (!transition || !hasHotel(req, transition.hotelId)) return res.status(404).json({ error: "Transition not found." }); const [item] = await db.update(courtyardSalesTransitionItems).set({ status: req.body.status, ownerName: req.body.ownerName, updatedAt: new Date() }).where(and(eq(courtyardSalesTransitionItems.id, req.params.id), eq(courtyardSalesTransitionItems.transitionId, transition.id))).returning(); res.json({ item }); } catch (e) { next(e); }
+  });
+  router.post("/transitions/:id/documents", transitionUpload.single("file"), async (req: any, res, next) => {
+    try { const [transition] = await db.select().from(courtyardSalesTransitions).where(eq(courtyardSalesTransitions.id, req.params.id)).limit(1); if (!transition || !hasHotel(req, transition.hotelId)) return res.status(404).json({ error: "Transition not found." }); if (!req.file) return res.status(400).json({ error: "Choose a file." }); const [document] = await db.insert(courtyardSalesTransitionDocuments).values({ transitionId: transition.id, filename: req.file.originalname, mimeType: req.file.mimetype || "application/octet-stream", sizeBytes: req.file.size, category: req.body.category || "other", description: req.body.description || null, confidential: req.body.confidential === "true", contentBase64: req.file.buffer.toString("base64"), uploadedByUserId: req.salesUser.id }).returning(); res.status(201).json({ document: { ...document, contentBase64: undefined } }); } catch (e) { next(e); }
+  });
+  router.get("/transitions/:transitionId/documents/:id", async (req: any, res, next) => {
+    try { const [transition] = await db.select().from(courtyardSalesTransitions).where(eq(courtyardSalesTransitions.id, req.params.transitionId)).limit(1); if (!transition || !hasHotel(req, transition.hotelId)) return res.status(404).json({ error: "Transition not found." }); const [document] = await db.select().from(courtyardSalesTransitionDocuments).where(and(eq(courtyardSalesTransitionDocuments.id, req.params.id), eq(courtyardSalesTransitionDocuments.transitionId, transition.id))).limit(1); if (!document) return res.status(404).json({ error: "Document not found." }); res.setHeader("Content-Type", document.mimeType); res.setHeader("Content-Disposition", `attachment; filename="${document.filename.replace(/[\r\n"]/g, "_")}"`); res.send(Buffer.from(document.contentBase64, "base64")); } catch (e) { next(e); }
+  });
+  router.post("/transitions/:id/shares", async (req: any, res, next) => {
+    try { const [transition] = await db.select().from(courtyardSalesTransitions).where(eq(courtyardSalesTransitions.id, req.params.id)).limit(1); if (!transition || !hasHotel(req, transition.hotelId)) return res.status(404).json({ error: "Transition not found." }); const token = crypto.randomBytes(32).toString("base64url"); const days = Math.min(30, Math.max(1, Number(req.body.expiresInDays || 7))); const expiresAt = new Date(Date.now() + days * 86400000); const [share] = await db.insert(courtyardSalesTransitionShares).values({ transitionId: transition.id, tokenHash: transitionTokenHash(token), recipientName: req.body.recipientName || null, recipientEmail: req.body.recipientEmail || null, expiresAt, allowDownloads: Boolean(req.body.allowDownloads), createdByUserId: req.salesUser.id }).returning(); const base = (process.env.FRONTEND_BASE_URL || "https://readysetfly.us").replace(/\/$/, ""); res.status(201).json({ share, url: `${base}/courtyard/sales-transition/${token}` }); } catch (e) { next(e); }
+  });
+  router.patch("/transitions/:transitionId/shares/:id/revoke", async (req: any, res, next) => {
+    try { const [transition] = await db.select().from(courtyardSalesTransitions).where(eq(courtyardSalesTransitions.id, req.params.transitionId)).limit(1); if (!transition || !hasHotel(req, transition.hotelId)) return res.status(404).json({ error: "Transition not found." }); await db.update(courtyardSalesTransitionShares).set({ revokedAt: new Date() }).where(and(eq(courtyardSalesTransitionShares.id, req.params.id), eq(courtyardSalesTransitionShares.transitionId, transition.id))); res.status(204).end(); } catch (e) { next(e); }
+  });
   router.post("/preview", upload.single("file"), async (req: any, res, next) => {
     try {
       if (!req.file)

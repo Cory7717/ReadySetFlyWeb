@@ -2234,6 +2234,46 @@ export const courtyardSalesRegionalProspects = pgTable(
   ],
 );
 
+export const courtyardSalesTransitions = pgTable("courtyard_sales_transitions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  hotelId: varchar("hotel_id").notNull().references(() => courtyardHotels.id, { onDelete: "cascade" }),
+  title: text("title").notNull(), departureDate: date("departure_date"), status: text("status").notNull().default("in_progress"),
+  departingUserName: text("departing_user_name"), summary: text("summary"),
+  departingSignedAt: timestamp("departing_signed_at"), managerAcceptedAt: timestamp("manager_accepted_at"),
+  createdByUserId: varchar("created_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(), updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [index("idx_sales_transition_hotel").on(table.hotelId)]);
+
+export const courtyardSalesTransitionItems = pgTable("courtyard_sales_transition_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  transitionId: varchar("transition_id").notNull().references(() => courtyardSalesTransitions.id, { onDelete: "cascade" }),
+  category: text("category").notNull(), title: text("title").notNull(), description: text("description"),
+  status: text("status").notNull().default("not_started"), dueDate: date("due_date"), ownerName: text("owner_name"),
+  url: text("url"), username: text("username"), vaultUrl: text("vault_url"), mfaOwner: text("mfa_owner"), recoveryContact: text("recovery_contact"),
+  accountKey: text("account_key"), opportunityId: varchar("opportunity_id").references(() => courtyardSalesOpportunities.id, { onDelete: "set null" }),
+  frequency: text("frequency"), confidential: boolean("confidential").notNull().default(false), metadataJson: jsonb("metadata_json"),
+  createdByUserId: varchar("created_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(), updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [index("idx_sales_transition_items_transition").on(table.transitionId), index("idx_sales_transition_items_category").on(table.category)]);
+
+export const courtyardSalesTransitionDocuments = pgTable("courtyard_sales_transition_documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  transitionId: varchar("transition_id").notNull().references(() => courtyardSalesTransitions.id, { onDelete: "cascade" }),
+  filename: text("filename").notNull(), mimeType: text("mime_type").notNull(), sizeBytes: integer("size_bytes").notNull(),
+  category: text("category").notNull().default("other"), description: text("description"), confidential: boolean("confidential").notNull().default(false),
+  contentBase64: text("content_base64").notNull(), uploadedByUserId: varchar("uploaded_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [index("idx_sales_transition_documents_transition").on(table.transitionId)]);
+
+export const courtyardSalesTransitionShares = pgTable("courtyard_sales_transition_shares", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  transitionId: varchar("transition_id").notNull().references(() => courtyardSalesTransitions.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull().unique(), recipientName: text("recipient_name"), recipientEmail: text("recipient_email"),
+  expiresAt: timestamp("expires_at").notNull(), allowDownloads: boolean("allow_downloads").notNull().default(false), revokedAt: timestamp("revoked_at"),
+  lastAccessedAt: timestamp("last_accessed_at"), accessCount: integer("access_count").notNull().default(0),
+  createdByUserId: varchar("created_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }), createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [index("idx_sales_transition_shares_transition").on(table.transitionId)]);
+
 export const courtyardIncidentReports = pgTable(
   "courtyard_incident_reports",
   {

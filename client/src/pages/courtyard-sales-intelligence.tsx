@@ -140,6 +140,11 @@ export default function CourtyardSalesIntelligence() {
       ),
     enabled: !!selectedHotel,
   });
+  const meetingCalendarSummary = useQuery({
+    queryKey: ["sales-meeting-calendar-summary", selectedHotel],
+    queryFn: () => { const start = new Date(), end = new Date(); end.setDate(end.getDate() + 60); const dateKey = (d: Date) => d.toISOString().slice(0, 10); return json(`/api/courtyard/sales-intelligence/meeting-calendar?hotelId=${encodeURIComponent(selectedHotel)}&start=${dateKey(start)}&end=${dateKey(end)}`); },
+    enabled: !!selectedHotel,
+  });
   const previewMutation = useMutation({
     mutationFn: async () => {
       if (!files.length) throw new Error("Choose one or more report files.");
@@ -678,7 +683,14 @@ export default function CourtyardSalesIntelligence() {
             <FileClock className="mr-2 h-4 w-4" />
             Transition Hub
           </Button>
+          <Button asChild className={C.outline} variant="outline"><Link href="/courtyard/meeting-calendar"><Calendar className="mr-2 h-4 w-4"/>Meeting Space Calendar</Link></Button>
         </section>
+        {!!meetingCalendarSummary.data?.events?.length && (
+          <Card className={C.shell}>
+            <CardHeader className="pb-2"><div className="flex items-center justify-between gap-3"><div><CardTitle>Upcoming Meeting-Space Events</CardTitle><CardDescription>Next 60 days, including setup and breakdown occupancy.</CardDescription></div><Button asChild variant="outline" className={C.outline}><Link href="/courtyard/meeting-calendar"><Calendar className="mr-2 h-4 w-4"/>Open calendar</Link></Button></div></CardHeader>
+            <CardContent className="grid gap-2 md:grid-cols-2 lg:grid-cols-3">{meetingCalendarSummary.data.events.filter((x:any)=>!["cancelled","expired"].includes(x.status)).slice(0,6).map((x:any)=><div key={x.id} className="rounded-lg border border-[#deceba] bg-white p-3"><div className="font-semibold">{x.groupName} · {x.eventName}</div><div className="text-sm text-[#5f5247]">{x.eventDate} · occupied {x.setupStartTime.slice(0,5)}–{x.breakdownEndTime.slice(0,5)}</div><Badge variant="outline" className="mt-2">{x.status.replaceAll("_"," ")}</Badge></div>)}</CardContent>
+          </Card>
+        )}
         <Card className="!border-[#2f5f46] !bg-[#e7f0e9] !bg-none !text-[#173b2a]">
           <CardContent className="flex flex-col gap-1 p-4 sm:flex-row sm:items-center sm:justify-between">
             <div>

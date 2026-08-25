@@ -2274,6 +2274,36 @@ export const courtyardSalesTransitionShares = pgTable("courtyard_sales_transitio
   createdByUserId: varchar("created_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }), createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [index("idx_sales_transition_shares_transition").on(table.transitionId)]);
 
+export const courtyardMeetingSpaces = pgTable("courtyard_meeting_spaces", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`), hotelId: varchar("hotel_id").notNull().references(() => courtyardHotels.id, { onDelete: "cascade" }),
+  name: text("name").notNull(), squareFeet: integer("square_feet").notNull().default(2000), active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at").defaultNow(), updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [uniqueIndex("uniq_courtyard_meeting_space_name").on(table.hotelId, table.name)]);
+
+export const courtyardMeetingEvents = pgTable("courtyard_meeting_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`), hotelId: varchar("hotel_id").notNull().references(() => courtyardHotels.id, { onDelete: "cascade" }),
+  spaceId: varchar("space_id").notNull().references(() => courtyardMeetingSpaces.id, { onDelete: "restrict" }), groupName: text("group_name").notNull(), eventName: text("event_name").notNull(),
+  eventDate: date("event_date").notNull(), setupStartTime: time("setup_start_time").notNull(), guestStartTime: time("guest_start_time").notNull(), guestEndTime: time("guest_end_time").notNull(), breakdownEndTime: time("breakdown_end_time").notNull(),
+  status: text("status").notNull().default("inquiry"), holdExpiresAt: timestamp("hold_expires_at"), attendance: integer("attendance"), squareFeetRequired: integer("square_feet_required"), roomSetup: text("room_setup"),
+  salesOwner: text("sales_owner"), clientName: text("client_name"), clientEmail: text("client_email"), clientPhone: text("client_phone"), expectedRevenue: numeric("expected_revenue", { precision: 12, scale: 2 }), expectedRoomNights: integer("expected_room_nights"),
+  cateringNotes: text("catering_notes"), avNotes: text("av_notes"), accessibilityNotes: text("accessibility_notes"), internalNotes: text("internal_notes"),
+  accountKey: text("account_key"), opportunityId: varchar("opportunity_id").references(() => courtyardSalesOpportunities.id, { onDelete: "set null" }),
+  conflictOverrideReason: text("conflict_override_reason"), createdByUserId: varchar("created_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }), updatedByUserId: varchar("updated_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").defaultNow(), updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [index("idx_courtyard_meeting_events_date").on(table.hotelId, table.eventDate), index("idx_courtyard_meeting_events_space").on(table.spaceId, table.eventDate), index("idx_courtyard_meeting_events_status").on(table.status)]);
+
+export const courtyardMeetingEventDocuments = pgTable("courtyard_meeting_event_documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`), eventId: varchar("event_id").notNull().references(() => courtyardMeetingEvents.id, { onDelete: "cascade" }),
+  filename: text("filename").notNull(), mimeType: text("mime_type").notNull(), sizeBytes: integer("size_bytes").notNull(), category: text("category").notNull().default("other"), contentBase64: text("content_base64").notNull(),
+  uploadedByUserId: varchar("uploaded_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }), createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [index("idx_courtyard_meeting_documents_event").on(table.eventId)]);
+
+export const courtyardMeetingCalendarShares = pgTable("courtyard_meeting_calendar_shares", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`), hotelId: varchar("hotel_id").notNull().references(() => courtyardHotels.id, { onDelete: "cascade" }),
+  tokenHash: text("token_hash").notNull().unique(), recipientName: text("recipient_name"), rangeStart: date("range_start"), rangeEnd: date("range_end"), expiresAt: timestamp("expires_at").notNull(), revokedAt: timestamp("revoked_at"), accessCount: integer("access_count").notNull().default(0), lastAccessedAt: timestamp("last_accessed_at"),
+  createdByUserId: varchar("created_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }), createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [index("idx_courtyard_meeting_shares_hotel").on(table.hotelId)]);
+
 export const courtyardIncidentReports = pgTable(
   "courtyard_incident_reports",
   {

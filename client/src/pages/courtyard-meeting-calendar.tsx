@@ -154,9 +154,9 @@ export default function CourtyardMeetingCalendar() {
       toast({ title: "Meeting-space event saved" });
     },
     onError: (e: any) => {
-      if (e.code === "MEETING_SPACE_CONFLICT" && me.data?.user?.isAdmin) {
+      if (e.code === "MEETING_SPACE_CONFLICT" && cal.data?.user?.isAdmin) {
         const reason = prompt(
-          `${e.message}\n\nEnter the manager override reason:`,
+          `${e.message}\n\nEnter the override reason:`,
         );
         if (reason) save.mutate({ ...form, conflictOverrideReason: reason });
         return;

@@ -94,6 +94,7 @@ export default function CourtyardMeetingCalendar() {
   const [month, setMonth] = useState(new Date());
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<any>(empty);
+  const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [view, setView] = useState("month");
   const [accessPin, setAccessPin] = useState("");
   const me = useQuery({
@@ -345,8 +346,11 @@ export default function CourtyardMeetingCalendar() {
                     {rows.map((x: any) => (
                       <div
                         key={x.id}
-                        className={`mt-1 rounded p-1 text-xs ${colors[x.status] || colors.inquiry}`}
-                        onClick={(e) => e.stopPropagation()}
+                        className={`mt-1 cursor-pointer rounded p-1 text-xs hover:ring-2 hover:ring-[#8a6b3f] ${colors[x.status] || colors.inquiry}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedEvent(x);
+                        }}
                       >
                         <b>{x.guestStartTime.slice(0, 5)}</b> {x.groupName}
                         <div>{x.status.replaceAll("_", " ")}</div>
@@ -363,7 +367,13 @@ export default function CourtyardMeetingCalendar() {
               {events.map((x: any) => (
                 <div
                   key={x.id}
-                  className="flex flex-wrap justify-between gap-2 rounded border p-3"
+                  role="button"
+                  tabIndex={0}
+                  className="flex cursor-pointer flex-wrap justify-between gap-2 rounded border p-3 text-left hover:border-[#8a6b3f] hover:bg-[#fffaf2]"
+                  onClick={() => setSelectedEvent(x)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") setSelectedEvent(x);
+                  }}
                 >
                   <div>
                     <b>
@@ -563,6 +573,107 @@ export default function CourtyardMeetingCalendar() {
               {save.isPending ? "Saving…" : "Save event"}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={Boolean(selectedEvent)} onOpenChange={(isOpen) => { if (!isOpen) setSelectedEvent(null); }}>
+        <DialogContent className="max-h-[92dvh] max-w-3xl overflow-y-auto bg-white text-[#201814]">
+          {selectedEvent && (
+            <>
+              <DialogHeader>
+                <div className="flex flex-wrap items-start justify-between gap-3 pr-7">
+                  <div>
+                    <DialogTitle className="text-2xl">{selectedEvent.eventName}</DialogTitle>
+                    <p className="mt-1 text-base text-[#5f5247]">{selectedEvent.groupName}</p>
+                  </div>
+                  <Badge className={colors[selectedEvent.status] || colors.inquiry}>
+                    {selectedEvent.status.replaceAll("_", " ")}
+                  </Badge>
+                </div>
+              </DialogHeader>
+
+              <section className="rounded-xl border border-[#deceba] bg-[#fffaf2] p-4">
+                <div className="text-sm font-semibold uppercase tracking-[.14em] text-[#8a6b3f]">Event day</div>
+                <div className="mt-1 text-xl font-semibold">
+                  {new Date(`${selectedEvent.eventDate}T12:00:00`).toLocaleDateString("en-US", {
+                    weekday: "long",
+                    month: "long",
+                    day: "numeric",
+                    year: "numeric",
+                  })}
+                </div>
+                <div className="mt-1 text-sm text-[#5f5247]">
+                  {(cal.data?.spaces || []).find((space: any) => space.id === selectedEvent.spaceId)?.name || "Meeting Space"}
+                </div>
+              </section>
+
+              <section>
+                <h3 className="mb-2 font-semibold">Setup and breakdown timeline</h3>
+                <div className="grid gap-2 sm:grid-cols-4">
+                  {[
+                    ["Setup begins", selectedEvent.setupStartTime],
+                    ["Guests arrive", selectedEvent.guestStartTime],
+                    ["Event ends", selectedEvent.guestEndTime],
+                    ["Breakdown complete", selectedEvent.breakdownEndTime],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-lg border border-[#deceba] bg-white p-3">
+                      <div className="text-xs font-semibold uppercase text-[#8a6b3f]">{label}</div>
+                      <div className="mt-1 text-lg font-bold">{String(value || "").slice(0, 5)}</div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section className="grid gap-3 rounded-xl border border-[#deceba] p-4 sm:grid-cols-3">
+                <div><div className="text-xs font-semibold uppercase text-[#8a6b3f]">Room setup</div><div className="capitalize">{selectedEvent.roomSetup?.replaceAll("_", " ") || "Not specified"}</div></div>
+                <div><div className="text-xs font-semibold uppercase text-[#8a6b3f]">Attendance</div><div>{selectedEvent.attendance ?? "Not specified"}</div></div>
+                <div><div className="text-xs font-semibold uppercase text-[#8a6b3f]">Space required</div><div>{selectedEvent.squareFeetRequired ? `${selectedEvent.squareFeetRequired.toLocaleString()} sq. ft.` : "Not specified"}</div></div>
+              </section>
+
+              {(selectedEvent.salesOwner || selectedEvent.clientName || selectedEvent.clientEmail || selectedEvent.clientPhone) && (
+                <section>
+                  <h3 className="mb-2 font-semibold">Contacts</h3>
+                  <div className="grid gap-2 rounded-xl border border-[#deceba] p-4 sm:grid-cols-2">
+                    {selectedEvent.salesOwner && <div><span className="font-semibold">Sales owner:</span> {selectedEvent.salesOwner}</div>}
+                    {selectedEvent.clientName && <div><span className="font-semibold">Client:</span> {selectedEvent.clientName}</div>}
+                    {selectedEvent.clientEmail && <div><span className="font-semibold">Email:</span> <a className="text-blue-700 underline" href={`mailto:${selectedEvent.clientEmail}`}>{selectedEvent.clientEmail}</a></div>}
+                    {selectedEvent.clientPhone && <div><span className="font-semibold">Phone:</span> <a className="text-blue-700 underline" href={`tel:${selectedEvent.clientPhone}`}>{selectedEvent.clientPhone}</a></div>}
+                  </div>
+                </section>
+              )}
+
+              {(selectedEvent.cateringNotes || selectedEvent.avNotes || selectedEvent.accessibilityNotes || selectedEvent.internalNotes) && (
+                <section>
+                  <h3 className="mb-2 font-semibold">Operational notes</h3>
+                  <div className="space-y-2">
+                    {[["Catering", selectedEvent.cateringNotes], ["Audio / visual", selectedEvent.avNotes], ["Accessibility", selectedEvent.accessibilityNotes], ["Internal notes", selectedEvent.internalNotes]].filter(([, value]) => value).map(([label, value]) => (
+                      <div key={label} className="rounded-lg border border-[#deceba] bg-[#fffaf2] p-3">
+                        <div className="text-xs font-semibold uppercase text-[#8a6b3f]">{label}</div>
+                        <p className="mt-1 whitespace-pre-wrap text-sm">{value}</p>
+                      </div>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {(cal.data?.documents || []).some((document: any) => document.eventId === selectedEvent.id) && (
+                <section>
+                  <h3 className="mb-2 font-semibold">Event documents</h3>
+                  <div className="space-y-2">
+                    {(cal.data?.documents || []).filter((document: any) => document.eventId === selectedEvent.id).map((document: any) => (
+                      <a key={document.id} className="flex items-center justify-between rounded-lg border border-[#deceba] p-3 text-blue-700 hover:bg-[#fffaf2]" href={apiUrl(`/api/courtyard/sales-intelligence/meeting-calendar/events/${selectedEvent.id}/documents/${document.id}`)}>
+                        <span className="font-medium underline">{document.filename}</span>
+                        <span className="text-xs text-[#5f5247]">{document.category}</span>
+                      </a>
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              <div className="flex justify-end">
+                <Button variant="outline" onClick={() => setSelectedEvent(null)}>Close</Button>
+              </div>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </div>

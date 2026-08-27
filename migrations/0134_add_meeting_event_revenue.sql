@@ -1,0 +1,11 @@
+ALTER TABLE "courtyard_meeting_events" ADD COLUMN IF NOT EXISTS "meeting_room" text;
+ALTER TABLE "courtyard_meeting_events" ADD COLUMN IF NOT EXISTS "booking_series_id" varchar;
+ALTER TABLE "courtyard_meeting_events" ADD COLUMN IF NOT EXISTS "booking_start_date" date;
+ALTER TABLE "courtyard_meeting_events" ADD COLUMN IF NOT EXISTS "room_rental_revenue" numeric(12,2);
+ALTER TABLE "courtyard_meeting_events" ADD COLUMN IF NOT EXISTS "tax_amount" numeric(12,2);
+ALTER TABLE "courtyard_meeting_events" ADD COLUMN IF NOT EXISTS "service_fee_amount" numeric(12,2);
+ALTER TABLE "courtyard_meeting_events" ADD COLUMN IF NOT EXISTS "gratuity_amount" numeric(12,2);
+ALTER TABLE "courtyard_meeting_events" ADD COLUMN IF NOT EXISTS "av_revenue" numeric(12,2);
+ALTER TABLE "courtyard_meeting_events" ADD COLUMN IF NOT EXISTS "catering_revenue" numeric(12,2);
+ALTER TABLE "courtyard_meeting_events" ADD COLUMN IF NOT EXISTS "other_revenue" numeric(12,2);
+CREATE INDEX IF NOT EXISTS "idx_courtyard_meeting_events_series" ON "courtyard_meeting_events"("booking_series_id");

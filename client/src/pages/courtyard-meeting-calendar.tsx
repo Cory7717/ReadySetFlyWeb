@@ -49,6 +49,7 @@ async function request(url: string, init?: RequestInit) {
 }
 const key = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+const money = (value: unknown) => Number(value || 0).toLocaleString("en-US", { style: "currency", currency: "USD" });
 const colors: any = {
   inquiry: "bg-slate-100 text-slate-800",
   courtesy_hold: "bg-amber-100 text-amber-900",
@@ -73,12 +74,20 @@ const empty = {
   holdExpiresAt: "",
   attendance: "",
   squareFeetRequired: "2000",
+  meetingRoom: "full_room",
   roomSetup: "classroom",
   salesOwner: "",
   clientName: "",
   clientEmail: "",
   clientPhone: "",
   expectedRevenue: "",
+  roomRentalRevenue: "",
+  taxAmount: "",
+  serviceFeeAmount: "",
+  gratuityAmount: "",
+  avRevenue: "",
+  cateringRevenue: "",
+  otherRevenue: "",
   expectedRoomNights: "",
   cateringNotes: "",
   avNotes: "",
@@ -148,6 +157,13 @@ export default function CourtyardMeetingCalendar() {
           expectedRoomNights: body.expectedRoomNights
             ? Number(body.expectedRoomNights)
             : null,
+          roomRentalRevenue: Number(body.roomRentalRevenue || 0),
+          taxAmount: Number(body.taxAmount || 0),
+          serviceFeeAmount: Number(body.serviceFeeAmount || 0),
+          gratuityAmount: Number(body.gratuityAmount || 0),
+          avRevenue: Number(body.avRevenue || 0),
+          cateringRevenue: Number(body.cateringRevenue || 0),
+          otherRevenue: Number(body.otherRevenue || 0),
         }),
       }),
     onSuccess: (result: any) => {
@@ -220,6 +236,15 @@ export default function CourtyardMeetingCalendar() {
   if (me.error)
     return <div className="min-h-screen bg-[#f7f1e7] p-8 text-[#201814]">{(me.error as Error).message}</div>;
   const events = cal.data?.events || [];
+  const monthlyEvents = Array.from(new Map(
+    events
+      .filter((event: any) => {
+        const revenueDate = event.bookingStartDate || event.eventDate;
+        return revenueDate >= key(first) && revenueDate <= key(last) && !["cancelled", "expired"].includes(event.status);
+      })
+      .map((event: any) => [event.bookingSeriesId || event.id, event]),
+  ).values()) as any[];
+  const monthlyRevenue = monthlyEvents.reduce((sum, event) => sum + Number(event.expectedRevenue || 0), 0);
   const openNew = (date = "") => {
     setEditingEventId(null);
     setForm({
@@ -241,6 +266,13 @@ export default function CourtyardMeetingCalendar() {
       squareFeetRequired: event.squareFeetRequired ?? "",
       expectedRoomNights: event.expectedRoomNights ?? "",
       expectedRevenue: event.expectedRevenue ?? "",
+      roomRentalRevenue: event.roomRentalRevenue ?? "",
+      taxAmount: event.taxAmount ?? "",
+      serviceFeeAmount: event.serviceFeeAmount ?? "",
+      gratuityAmount: event.gratuityAmount ?? "",
+      avRevenue: event.avRevenue ?? "",
+      cateringRevenue: event.cateringRevenue ?? "",
+      otherRevenue: event.otherRevenue ?? "",
     });
     setOpen(true);
   };
@@ -347,6 +379,12 @@ export default function CourtyardMeetingCalendar() {
             </Button>
           </div>
         </div>
+        <Card className="border-[#cdbda8] bg-[#fffaf2]">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+            <div><div className="text-xs font-bold uppercase tracking-[.16em] text-[#8a6b3f]">Monthly event revenue</div><div className="text-sm text-[#5f5247]">Active bookings beginning in {month.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</div></div>
+            <div className="text-3xl font-bold text-[#2f5f46]">{money(monthlyRevenue)}</div>
+          </CardContent>
+        </Card>
         {view === "month" ? (
           <div className="overflow-hidden rounded-xl border border-[#cdbda8] bg-white">
             <div className="grid grid-cols-7 bg-[#eadfce] text-center text-sm font-semibold">
@@ -513,6 +551,17 @@ export default function CourtyardMeetingCalendar() {
               />
             </div>
             <div>
+              <Label>Meeting room</Label>
+              <Select value={form.meetingRoom} onValueChange={(meetingRoom) => setForm({ ...form, meetingRoom, squareFeetRequired: meetingRoom === "pecan" ? "560" : meetingRoom === "cedar" ? "1575" : "2135" })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="pecan">Pecan · 560 sq. ft.</SelectItem>
+                  <SelectItem value="cedar">Cedar · 1,575 sq. ft.</SelectItem>
+                  <SelectItem value="full_room">Full room · 2,135 sq. ft.</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
               <Label>Room setup</Label>
               <Select
                 value={form.roomSetup}
@@ -565,20 +614,18 @@ export default function CourtyardMeetingCalendar() {
             />
             <Input
               type="number"
-              placeholder="Expected meeting revenue"
-              value={form.expectedRevenue}
-              onChange={(e) =>
-                setForm({ ...form, expectedRevenue: e.target.value })
-              }
-            />
-            <Input
-              type="number"
               placeholder="Expected room nights"
               value={form.expectedRoomNights}
               onChange={(e) =>
                 setForm({ ...form, expectedRoomNights: e.target.value })
               }
             />
+            <div className="md:col-span-2 rounded-xl border border-[#deceba] bg-[#fffaf2] p-4">
+              <div className="mb-3 flex items-center justify-between gap-3"><div><h3 className="font-semibold">Event revenue</h3><p className="text-xs text-[#5f5247]">Enter dollar amounts. The total calculates automatically.</p></div><div className="text-2xl font-bold text-[#2f5f46]">{money(["roomRentalRevenue", "taxAmount", "serviceFeeAmount", "gratuityAmount", "avRevenue", "cateringRevenue", "otherRevenue"].reduce((sum, field) => sum + Number(form[field] || 0), 0))}</div></div>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {[["Room rental", "roomRentalRevenue"], ["Tax amount", "taxAmount"], ["Service fee", "serviceFeeAmount"], ["Gratuity", "gratuityAmount"], ["AV add-ons", "avRevenue"], ["In-house catering revenue", "cateringRevenue"], ["Other add-ons", "otherRevenue"]].map(([label, field]) => <div key={field}><Label>{label}</Label><Input type="number" min="0" step="0.01" value={form[field]} onChange={(event) => setForm({ ...form, [field]: event.target.value })} /></div>)}
+              </div>
+            </div>
             {form.status === "courtesy_hold" && (
               <div>
                 <Label>Hold expires</Label>
@@ -657,10 +704,18 @@ export default function CourtyardMeetingCalendar() {
                 </div>
               </section>
 
-              <section className="grid gap-3 rounded-xl border border-[#deceba] p-4 sm:grid-cols-3">
+              <section className="grid gap-3 rounded-xl border border-[#deceba] p-4 sm:grid-cols-4">
+                <div><div className="text-xs font-semibold uppercase text-[#8a6b3f]">Meeting room</div><div>{selectedEvent.meetingRoom === "pecan" ? "Pecan · 560 sq. ft." : selectedEvent.meetingRoom === "cedar" ? "Cedar · 1,575 sq. ft." : selectedEvent.meetingRoom === "full_room" ? "Full room · 2,135 sq. ft." : "Not specified"}</div></div>
                 <div><div className="text-xs font-semibold uppercase text-[#8a6b3f]">Room setup</div><div className="capitalize">{selectedEvent.roomSetup?.replaceAll("_", " ") || "Not specified"}</div></div>
                 <div><div className="text-xs font-semibold uppercase text-[#8a6b3f]">Attendance</div><div>{selectedEvent.attendance ?? "Not specified"}</div></div>
                 <div><div className="text-xs font-semibold uppercase text-[#8a6b3f]">Space required</div><div>{selectedEvent.squareFeetRequired ? `${selectedEvent.squareFeetRequired.toLocaleString()} sq. ft.` : "Not specified"}</div></div>
+              </section>
+
+              <section>
+                <div className="mb-2 flex items-center justify-between gap-3"><h3 className="font-semibold">Event revenue</h3><div className="text-2xl font-bold text-[#2f5f46]">{money(selectedEvent.expectedRevenue)}</div></div>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {[["Room rental", selectedEvent.roomRentalRevenue], ["Tax", selectedEvent.taxAmount], ["Service fee", selectedEvent.serviceFeeAmount], ["Gratuity", selectedEvent.gratuityAmount], ["AV add-ons", selectedEvent.avRevenue], ["In-house catering", selectedEvent.cateringRevenue], ["Other add-ons", selectedEvent.otherRevenue]].map(([label, value]) => <div key={label} className="flex justify-between rounded-lg border border-[#deceba] bg-[#fffaf2] p-3"><span className="text-sm text-[#5f5247]">{label}</span><strong>{money(value)}</strong></div>)}
+                </div>
               </section>
 
               {(selectedEvent.salesOwner || selectedEvent.clientName || selectedEvent.clientEmail || selectedEvent.clientPhone) && (

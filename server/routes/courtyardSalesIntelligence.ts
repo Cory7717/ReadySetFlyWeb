@@ -219,13 +219,25 @@ function meetingEventWriteValues(body: any, holdExpiresAt: Date | null) {
     eventEndDate: _eventEndDate,
     ...formValues
   } = body || {};
+  const revenueFields = ["roomRentalRevenue", "taxAmount", "serviceFeeAmount", "gratuityAmount", "avRevenue", "cateringRevenue", "otherRevenue"];
+  const revenue = Object.fromEntries(revenueFields.map((field) => [field, Number(body?.[field] || 0).toFixed(2)]));
+  const expectedRevenue = revenueFields.reduce((sum, field) => sum + Number(body?.[field] || 0), 0).toFixed(2);
   return {
     ...formValues,
+    ...revenue,
     holdExpiresAt,
     opportunityId: String(body?.opportunityId || "").trim() || null,
     accountKey: String(body?.accountKey || "").trim() || null,
-    expectedRevenue: body?.expectedRevenue ? String(body.expectedRevenue) : null,
+    expectedRevenue,
   };
+}
+function meetingRevenueValidationError(body: any) {
+  for (const field of ["roomRentalRevenue", "taxAmount", "serviceFeeAmount", "gratuityAmount", "avRevenue", "cateringRevenue", "otherRevenue"]) {
+    const value = Number(body?.[field] || 0);
+    if (!Number.isFinite(value) || value < 0 || value > 9999999999) return "Revenue amounts must be valid non-negative numbers.";
+  }
+  if (body?.meetingRoom && !["pecan", "cedar", "full_room"].includes(String(body.meetingRoom))) return "Choose a valid meeting room.";
+  return null;
 }
 async function auth(req: any, res: any, next: any) {
   try {
@@ -727,6 +739,8 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
       if (!hasHotel(req, hotelId)) return res.status(403).json({ error: "Property access required." });
       const required = ["spaceId", "groupName", "eventName", "eventDate", "setupStartTime", "guestStartTime", "guestEndTime", "breakdownEndTime"];
       if (required.some((field) => !String(req.body[field] || "").trim())) return res.status(400).json({ error: "Group, event, date, space, and all operational times are required." });
+      const revenueError = meetingRevenueValidationError(req.body);
+      if (revenueError) return res.status(400).json({ error: revenueError });
       if (!(req.body.setupStartTime <= req.body.guestStartTime && req.body.guestStartTime < req.body.guestEndTime && req.body.guestEndTime <= req.body.breakdownEndTime)) return res.status(400).json({ error: "Times must follow setup start, guest start, guest end, then breakdown end." });
       if (!validDateOnly(req.body.eventDate) || !validDateOnly(req.body.eventEndDate)) return res.status(400).json({ error: "Enter a valid event date range." });
       const startDate = String(req.body.eventDate);
@@ -743,7 +757,8 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
       if (conflict && (!canManageMeetingCalendar(req) || !String(req.body.conflictOverrideReason || "").trim())) return res.status(409).json({ error: `The space is occupied on ${conflict.eventDate} by ${conflict.groupName} from ${conflict.setupStartTime.slice(0, 5)} to ${conflict.breakdownEndTime.slice(0, 5)}. An override reason is required.`, code: "MEETING_SPACE_CONFLICT" });
       if (req.body.status === "definite" && !canManageMeetingCalendar(req)) return res.status(403).json({ error: "Calendar PIN access is required to mark an event definite." });
       const baseValues = meetingEventWriteValues(req.body, holdExpiresAt);
-      const events = await db.insert(courtyardMeetingEvents).values(dates.map((eventDate) => ({ ...baseValues, eventDate, createdByUserId: req.salesUser.id, updatedByUserId: req.salesUser.id }))).returning();
+      const bookingSeriesId = crypto.randomUUID();
+      const events = await db.insert(courtyardMeetingEvents).values(dates.map((eventDate) => ({ ...baseValues, eventDate, bookingSeriesId, bookingStartDate: dates[0], createdByUserId: req.salesUser.id, updatedByUserId: req.salesUser.id }))).returning();
       res.status(201).json({ event: events[0], events, count: events.length });
     } catch (error) { next(error); }
   });
@@ -753,6 +768,8 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
       if (!existing || !hasHotel(req, existing.hotelId)) return res.status(404).json({ error: "Event not found." });
       const required = ["spaceId", "groupName", "eventName", "eventDate", "setupStartTime", "guestStartTime", "guestEndTime", "breakdownEndTime"];
       if (required.some((field) => !String(req.body[field] || "").trim())) return res.status(400).json({ error: "Group, event, date, space, and all operational times are required." });
+      const revenueError = meetingRevenueValidationError(req.body);
+      if (revenueError) return res.status(400).json({ error: revenueError });
       if (!validDateOnly(req.body.eventDate) || !validDateOnly(req.body.eventEndDate)) return res.status(400).json({ error: "Enter a valid event date range." });
       const startDate = String(req.body.eventDate), endDate = String(req.body.eventEndDate || startDate);
       if (endDate < startDate) return res.status(400).json({ error: "The end date cannot be before the start date." });
@@ -769,7 +786,8 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
       const conflict = active.find((event) => req.body.setupStartTime < event.breakdownEndTime && event.setupStartTime < req.body.breakdownEndTime);
       if (conflict && (!canManageMeetingCalendar(req) || !String(req.body.conflictOverrideReason || "").trim())) return res.status(409).json({ error: `The space is occupied on ${conflict.eventDate} by ${conflict.groupName} from ${conflict.setupStartTime.slice(0, 5)} to ${conflict.breakdownEndTime.slice(0, 5)}. An override reason is required.`, code: "MEETING_SPACE_CONFLICT" });
       if (req.body.status === "definite" && !canManageMeetingCalendar(req)) return res.status(403).json({ error: "Calendar PIN access is required to mark an event definite." });
-      const baseValues = { ...meetingEventWriteValues(req.body, holdExpiresAt), hotelId: existing.hotelId, updatedByUserId: req.salesUser.id, updatedAt: new Date() };
+      const bookingSeriesId = existing.bookingSeriesId || existing.id;
+      const baseValues = { ...meetingEventWriteValues(req.body, holdExpiresAt), bookingSeriesId, bookingStartDate: dates[0], hotelId: existing.hotelId, updatedByUserId: req.salesUser.id, updatedAt: new Date() };
       const events = await db.transaction(async (tx) => {
         const [updated] = await tx.update(courtyardMeetingEvents).set({ ...baseValues, eventDate: dates[0] }).where(eq(courtyardMeetingEvents.id, existing.id)).returning();
         if (dates.length === 1) return [updated];

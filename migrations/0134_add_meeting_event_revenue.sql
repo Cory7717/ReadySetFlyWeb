@@ -2,10 +2,12 @@ ALTER TABLE "courtyard_meeting_events" ADD COLUMN IF NOT EXISTS "meeting_room" t
 ALTER TABLE "courtyard_meeting_events" ADD COLUMN IF NOT EXISTS "booking_series_id" varchar;
 ALTER TABLE "courtyard_meeting_events" ADD COLUMN IF NOT EXISTS "booking_start_date" date;
 ALTER TABLE "courtyard_meeting_events" ADD COLUMN IF NOT EXISTS "room_rental_revenue" numeric(12,2);
-ALTER TABLE "courtyard_meeting_events" ADD COLUMN IF NOT EXISTS "tax_amount" numeric(12,2);
+ALTER TABLE "courtyard_meeting_events" ADD COLUMN IF NOT EXISTS "tax_percent" numeric(6,3);
 ALTER TABLE "courtyard_meeting_events" ADD COLUMN IF NOT EXISTS "service_fee_percent" numeric(6,3);
 ALTER TABLE "courtyard_meeting_events" ADD COLUMN IF NOT EXISTS "gratuity_percent" numeric(6,3);
 ALTER TABLE "courtyard_meeting_events" ADD COLUMN IF NOT EXISTS "av_revenue" numeric(12,2);
 ALTER TABLE "courtyard_meeting_events" ADD COLUMN IF NOT EXISTS "catering_revenue" numeric(12,2);
+ALTER TABLE "courtyard_meeting_events" ADD COLUMN IF NOT EXISTS "breakfast_per_person" numeric(10,2);
+ALTER TABLE "courtyard_meeting_events" ADD COLUMN IF NOT EXISTS "lunch_dinner_per_person" numeric(10,2);
 ALTER TABLE "courtyard_meeting_events" ADD COLUMN IF NOT EXISTS "other_revenue" numeric(12,2);
 CREATE INDEX IF NOT EXISTS "idx_courtyard_meeting_events_series" ON "courtyard_meeting_events"("booking_series_id");

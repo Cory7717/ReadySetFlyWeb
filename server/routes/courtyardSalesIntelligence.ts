@@ -209,7 +209,7 @@ const admin = (user: any) =>
   user?.role === "super_admin" || user?.role === "manager";
 const canManageMeetingCalendar = (req: any) =>
   admin(req.salesUser) || Boolean(req.session?.salesIntelligenceUnlocked);
-function meetingEventWriteValues(body: any, holdExpiresAt: Date | null) {
+function meetingEventWriteValues(body: any, holdExpiresAt: Date | null, eventDays = 1) {
   const {
     id: _id,
     createdAt: _createdAt,
@@ -219,17 +219,25 @@ function meetingEventWriteValues(body: any, holdExpiresAt: Date | null) {
     eventEndDate: _eventEndDate,
     ...formValues
   } = body || {};
-  const revenueFields = ["roomRentalRevenue", "taxAmount", "avRevenue", "cateringRevenue", "otherRevenue"];
+  const revenueFields = ["roomRentalRevenue", "avRevenue", "otherRevenue"];
   const revenue = Object.fromEntries(revenueFields.map((field) => [field, Number(body?.[field] || 0).toFixed(2)]));
+  const breakfastPerPerson = Number(body?.breakfastPerPerson || 0);
+  const lunchDinnerPerPerson = Number(body?.lunchDinnerPerPerson || 0);
+  const cateringRevenue = Number(body?.attendance || 0) * eventDays * (breakfastPerPerson + lunchDinnerPerPerson);
   const serviceFeePercent = Number(body?.serviceFeePercent || 0);
   const gratuityPercent = Number(body?.gratuityPercent || 0);
-  const revenueSubtotal = ["roomRentalRevenue", "avRevenue", "cateringRevenue", "otherRevenue"].reduce((sum, field) => sum + Number(body?.[field] || 0), 0);
-  const expectedRevenue = (revenueSubtotal + Number(body?.taxAmount || 0) + (revenueSubtotal * serviceFeePercent / 100) + (revenueSubtotal * gratuityPercent / 100)).toFixed(2);
+  const taxPercent = Number(body?.taxPercent || 0);
+  const revenueSubtotal = ["roomRentalRevenue", "avRevenue", "otherRevenue"].reduce((sum, field) => sum + Number(body?.[field] || 0), 0) + cateringRevenue;
+  const expectedRevenue = (revenueSubtotal + (revenueSubtotal * taxPercent / 100) + (revenueSubtotal * serviceFeePercent / 100) + (revenueSubtotal * gratuityPercent / 100)).toFixed(2);
   return {
     ...formValues,
     ...revenue,
+    cateringRevenue: cateringRevenue.toFixed(2),
+    breakfastPerPerson: breakfastPerPerson.toFixed(2),
+    lunchDinnerPerPerson: lunchDinnerPerPerson.toFixed(2),
     serviceFeePercent: serviceFeePercent.toFixed(3),
     gratuityPercent: gratuityPercent.toFixed(3),
+    taxPercent: taxPercent.toFixed(3),
     holdExpiresAt,
     opportunityId: String(body?.opportunityId || "").trim() || null,
     accountKey: String(body?.accountKey || "").trim() || null,
@@ -237,13 +245,13 @@ function meetingEventWriteValues(body: any, holdExpiresAt: Date | null) {
   };
 }
 function meetingRevenueValidationError(body: any) {
-  for (const field of ["roomRentalRevenue", "taxAmount", "avRevenue", "cateringRevenue", "otherRevenue"]) {
+  for (const field of ["roomRentalRevenue", "avRevenue", "otherRevenue", "breakfastPerPerson", "lunchDinnerPerPerson"]) {
     const value = Number(body?.[field] || 0);
     if (!Number.isFinite(value) || value < 0 || value > 9999999999) return "Revenue amounts must be valid non-negative numbers.";
   }
-  for (const field of ["serviceFeePercent", "gratuityPercent"]) {
+  for (const field of ["taxPercent", "serviceFeePercent", "gratuityPercent"]) {
     const value = Number(body?.[field] || 0);
-    if (!Number.isFinite(value) || value < 0 || value > 100) return "Service fee and gratuity percentages must be between 0 and 100.";
+    if (!Number.isFinite(value) || value < 0 || value > 100) return "Tax, service fee, and gratuity percentages must be between 0 and 100.";
   }
   if (body?.meetingRoom && !["pecan", "cedar", "full_room"].includes(String(body.meetingRoom))) return "Choose a valid meeting room.";
   return null;
@@ -765,7 +773,7 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
       const conflict = active.find((event) => req.body.setupStartTime < event.breakdownEndTime && event.setupStartTime < req.body.breakdownEndTime);
       if (conflict && (!canManageMeetingCalendar(req) || !String(req.body.conflictOverrideReason || "").trim())) return res.status(409).json({ error: `The space is occupied on ${conflict.eventDate} by ${conflict.groupName} from ${conflict.setupStartTime.slice(0, 5)} to ${conflict.breakdownEndTime.slice(0, 5)}. An override reason is required.`, code: "MEETING_SPACE_CONFLICT" });
       if (req.body.status === "definite" && !canManageMeetingCalendar(req)) return res.status(403).json({ error: "Calendar PIN access is required to mark an event definite." });
-      const baseValues = meetingEventWriteValues(req.body, holdExpiresAt);
+      const baseValues = meetingEventWriteValues(req.body, holdExpiresAt, dates.length);
       const bookingSeriesId = crypto.randomUUID();
       const events = await db.insert(courtyardMeetingEvents).values(dates.map((eventDate) => ({ ...baseValues, eventDate, bookingSeriesId, bookingStartDate: dates[0], createdByUserId: req.salesUser.id, updatedByUserId: req.salesUser.id }))).returning();
       res.status(201).json({ event: events[0], events, count: events.length });
@@ -796,7 +804,7 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
       if (conflict && (!canManageMeetingCalendar(req) || !String(req.body.conflictOverrideReason || "").trim())) return res.status(409).json({ error: `The space is occupied on ${conflict.eventDate} by ${conflict.groupName} from ${conflict.setupStartTime.slice(0, 5)} to ${conflict.breakdownEndTime.slice(0, 5)}. An override reason is required.`, code: "MEETING_SPACE_CONFLICT" });
       if (req.body.status === "definite" && !canManageMeetingCalendar(req)) return res.status(403).json({ error: "Calendar PIN access is required to mark an event definite." });
       const bookingSeriesId = existing.bookingSeriesId || existing.id;
-      const baseValues = { ...meetingEventWriteValues(req.body, holdExpiresAt), bookingSeriesId, bookingStartDate: dates[0], hotelId: existing.hotelId, updatedByUserId: req.salesUser.id, updatedAt: new Date() };
+      const baseValues = { ...meetingEventWriteValues(req.body, holdExpiresAt, dates.length), bookingSeriesId, bookingStartDate: dates[0], hotelId: existing.hotelId, updatedByUserId: req.salesUser.id, updatedAt: new Date() };
       const events = await db.transaction(async (tx) => {
         const [updated] = await tx.update(courtyardMeetingEvents).set({ ...baseValues, eventDate: dates[0] }).where(eq(courtyardMeetingEvents.id, existing.id)).returning();
         if (dates.length === 1) return [updated];

@@ -271,12 +271,17 @@ export default function CourtyardMeetingCalendar() {
     setOpen(true);
   };
   const openEdit = (event: any) => {
+    const seriesEvents = event.bookingSeriesId
+      ? events.filter((candidate: any) => candidate.bookingSeriesId === event.bookingSeriesId)
+      : [event];
+    const seriesDates = seriesEvents.map((candidate: any) => candidate.eventDate).sort();
     setSelectedEvent(null);
     setEditingEventId(event.id);
     setForm({
       ...empty,
       ...event,
-      eventEndDate: "",
+      eventDate: seriesDates[0] || event.eventDate,
+      eventEndDate: seriesDates.length > 1 ? seriesDates[seriesDates.length - 1] : "",
       holdExpiresAt: event.holdExpiresAt ? new Date(event.holdExpiresAt).toISOString().slice(0, 16) : "",
       attendance: event.attendance ?? "",
       squareFeetRequired: event.squareFeetRequired ?? "",

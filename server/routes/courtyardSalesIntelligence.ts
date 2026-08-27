@@ -799,17 +799,26 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
       if (!space) return res.status(400).json({ error: "The selected meeting space is not available for this property." });
       const holdExpiresAt = req.body.holdExpiresAt ? new Date(req.body.holdExpiresAt) : null;
       if (holdExpiresAt && Number.isNaN(holdExpiresAt.getTime())) return res.status(400).json({ error: "Enter a valid courtesy-hold expiration date and time." });
-      const active = (await db.select().from(courtyardMeetingEvents).where(and(eq(courtyardMeetingEvents.spaceId, req.body.spaceId), inArray(courtyardMeetingEvents.eventDate, dates)))).filter((event) => event.id !== existing.id && !["cancelled", "completed", "expired"].includes(event.status));
+      const seriesEvents = existing.bookingSeriesId
+        ? await db.select().from(courtyardMeetingEvents).where(eq(courtyardMeetingEvents.bookingSeriesId, existing.bookingSeriesId))
+        : [existing];
+      const effectiveDates = Array.from(new Set([...seriesEvents.map((event) => event.eventDate), ...dates])).sort();
+      const seriesIds = new Set(seriesEvents.map((event) => event.id));
+      const active = (await db.select().from(courtyardMeetingEvents).where(and(eq(courtyardMeetingEvents.spaceId, req.body.spaceId), inArray(courtyardMeetingEvents.eventDate, effectiveDates)))).filter((event) => !seriesIds.has(event.id) && !["cancelled", "completed", "expired"].includes(event.status));
       const conflict = active.find((event) => req.body.setupStartTime < event.breakdownEndTime && event.setupStartTime < req.body.breakdownEndTime);
       if (conflict && (!canManageMeetingCalendar(req) || !String(req.body.conflictOverrideReason || "").trim())) return res.status(409).json({ error: `The space is occupied on ${conflict.eventDate} by ${conflict.groupName} from ${conflict.setupStartTime.slice(0, 5)} to ${conflict.breakdownEndTime.slice(0, 5)}. An override reason is required.`, code: "MEETING_SPACE_CONFLICT" });
       if (req.body.status === "definite" && !canManageMeetingCalendar(req)) return res.status(403).json({ error: "Calendar PIN access is required to mark an event definite." });
       const bookingSeriesId = existing.bookingSeriesId || existing.id;
-      const baseValues = { ...meetingEventWriteValues(req.body, holdExpiresAt, dates.length), bookingSeriesId, bookingStartDate: dates[0], hotelId: existing.hotelId, updatedByUserId: req.salesUser.id, updatedAt: new Date() };
+      const baseValues = { ...meetingEventWriteValues(req.body, holdExpiresAt, effectiveDates.length), bookingSeriesId, bookingStartDate: effectiveDates[0], hotelId: existing.hotelId, updatedByUserId: req.salesUser.id, updatedAt: new Date() };
       const events = await db.transaction(async (tx) => {
-        const [updated] = await tx.update(courtyardMeetingEvents).set({ ...baseValues, eventDate: dates[0] }).where(eq(courtyardMeetingEvents.id, existing.id)).returning();
-        if (dates.length === 1) return [updated];
-        const added = await tx.insert(courtyardMeetingEvents).values(dates.slice(1).map((eventDate) => ({ ...baseValues, eventDate, createdByUserId: req.salesUser.id }))).returning();
-        return [updated, ...added];
+        const { eventDate: _eventDate, ...sharedValues } = baseValues;
+        const updated = await tx.update(courtyardMeetingEvents).set(sharedValues).where(inArray(courtyardMeetingEvents.id, seriesEvents.map((event) => event.id))).returning();
+        const existingDates = new Set(seriesEvents.map((event) => event.eventDate));
+        const missingDates = effectiveDates.filter((eventDate) => !existingDates.has(eventDate));
+        const added = missingDates.length
+          ? await tx.insert(courtyardMeetingEvents).values(missingDates.map((eventDate) => ({ ...baseValues, eventDate, createdByUserId: req.salesUser.id }))).returning()
+          : [];
+        return [...updated, ...added].sort((a, b) => a.eventDate.localeCompare(b.eventDate));
       });
       res.json({ event: events[0], events, count: events.length });
     } catch (error) { next(error); }

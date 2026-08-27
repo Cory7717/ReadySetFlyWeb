@@ -383,8 +383,8 @@ export default function CourtyardMeetingCalendar() {
             </Button>
           </div>
         </div>
-        <Card className="border-[#cdbda8] bg-[#fffaf2]">
-          <CardContent className="flex flex-wrap items-center justify-between gap-3 p-4">
+        <Card className="border-[#cdbda8] bg-[#fffaf2] text-[#201814] dark:border-[#cdbda8] dark:bg-[#fffaf2] dark:text-[#201814]">
+          <CardContent className="flex flex-wrap items-center justify-between gap-3 bg-[#fffaf2] p-4 text-[#201814] dark:bg-[#fffaf2] dark:text-[#201814]">
             <div><div className="text-xs font-bold uppercase tracking-[.16em] text-[#8a6b3f]">Monthly event revenue</div><div className="text-sm text-[#5f5247]">Active bookings beginning in {month.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</div></div>
             <div className="text-3xl font-bold text-[#2f5f46]">{money(monthlyRevenue)}</div>
           </CardContent>

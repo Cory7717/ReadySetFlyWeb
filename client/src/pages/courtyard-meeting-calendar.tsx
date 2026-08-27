@@ -158,7 +158,7 @@ export default function CourtyardMeetingCalendar() {
       setForm({ ...empty, spaceId: cal.data?.spaces?.[0]?.id || "" });
       qc.invalidateQueries({ queryKey: ["meeting-calendar"] });
       toast({
-        title: wasEditing ? "Meeting-space event updated" : result?.count > 1 ? `${result.count} meeting-space dates saved` : "Meeting-space event saved",
+        title: result?.count > 1 ? `${result.count} meeting-space dates saved` : wasEditing ? "Meeting-space event updated" : "Meeting-space event saved",
         description: result?.count > 1 ? "The event was added to every date in the selected range." : undefined,
       });
     },
@@ -453,7 +453,7 @@ export default function CourtyardMeetingCalendar() {
                 }
               />
             </div>
-            {!editingEventId && <div>
+            <div>
               <Label>End date <span className="font-normal text-[#5f5247]">(optional)</span></Label>
               <Input
                 type="date"
@@ -462,7 +462,7 @@ export default function CourtyardMeetingCalendar() {
                 onChange={(e) => setForm({ ...form, eventEndDate: e.target.value })}
               />
               <p className="mt-1 text-xs text-[#5f5247]">Use for consecutive multi-day events. Leave blank for one day.</p>
-            </div>}
+            </div>
             <div>
               <Label>Status</Label>
               <Select

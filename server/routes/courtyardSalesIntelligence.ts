@@ -753,18 +753,30 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
       if (!existing || !hasHotel(req, existing.hotelId)) return res.status(404).json({ error: "Event not found." });
       const required = ["spaceId", "groupName", "eventName", "eventDate", "setupStartTime", "guestStartTime", "guestEndTime", "breakdownEndTime"];
       if (required.some((field) => !String(req.body[field] || "").trim())) return res.status(400).json({ error: "Group, event, date, space, and all operational times are required." });
-      if (!validDateOnly(req.body.eventDate)) return res.status(400).json({ error: "Enter a valid event date." });
+      if (!validDateOnly(req.body.eventDate) || !validDateOnly(req.body.eventEndDate)) return res.status(400).json({ error: "Enter a valid event date range." });
+      const startDate = String(req.body.eventDate), endDate = String(req.body.eventEndDate || startDate);
+      if (endDate < startDate) return res.status(400).json({ error: "The end date cannot be before the start date." });
+      const dates: string[] = [];
+      const cursor = new Date(`${startDate}T12:00:00Z`), rangeEnd = new Date(`${endDate}T12:00:00Z`);
+      while (cursor <= rangeEnd && dates.length <= 31) { dates.push(cursor.toISOString().slice(0, 10)); cursor.setUTCDate(cursor.getUTCDate() + 1); }
+      if (dates.length > 31 || cursor <= rangeEnd) return res.status(400).json({ error: "A meeting-space booking may span no more than 31 consecutive days." });
       if (!(req.body.setupStartTime <= req.body.guestStartTime && req.body.guestStartTime < req.body.guestEndTime && req.body.guestEndTime <= req.body.breakdownEndTime)) return res.status(400).json({ error: "Times must follow setup start, guest start, guest end, then breakdown end." });
       const [space] = await db.select({ id: courtyardMeetingSpaces.id }).from(courtyardMeetingSpaces).where(and(eq(courtyardMeetingSpaces.id, req.body.spaceId), eq(courtyardMeetingSpaces.hotelId, existing.hotelId))).limit(1);
       if (!space) return res.status(400).json({ error: "The selected meeting space is not available for this property." });
       const holdExpiresAt = req.body.holdExpiresAt ? new Date(req.body.holdExpiresAt) : null;
       if (holdExpiresAt && Number.isNaN(holdExpiresAt.getTime())) return res.status(400).json({ error: "Enter a valid courtesy-hold expiration date and time." });
-      const active = (await db.select().from(courtyardMeetingEvents).where(and(eq(courtyardMeetingEvents.spaceId, req.body.spaceId), eq(courtyardMeetingEvents.eventDate, req.body.eventDate)))).filter((event) => event.id !== existing.id && !["cancelled", "completed", "expired"].includes(event.status));
+      const active = (await db.select().from(courtyardMeetingEvents).where(and(eq(courtyardMeetingEvents.spaceId, req.body.spaceId), inArray(courtyardMeetingEvents.eventDate, dates)))).filter((event) => event.id !== existing.id && !["cancelled", "completed", "expired"].includes(event.status));
       const conflict = active.find((event) => req.body.setupStartTime < event.breakdownEndTime && event.setupStartTime < req.body.breakdownEndTime);
-      if (conflict && (!canManageMeetingCalendar(req) || !String(req.body.conflictOverrideReason || "").trim())) return res.status(409).json({ error: `The space is occupied by ${conflict.groupName} from ${conflict.setupStartTime.slice(0, 5)} to ${conflict.breakdownEndTime.slice(0, 5)}. An override reason is required.`, code: "MEETING_SPACE_CONFLICT" });
+      if (conflict && (!canManageMeetingCalendar(req) || !String(req.body.conflictOverrideReason || "").trim())) return res.status(409).json({ error: `The space is occupied on ${conflict.eventDate} by ${conflict.groupName} from ${conflict.setupStartTime.slice(0, 5)} to ${conflict.breakdownEndTime.slice(0, 5)}. An override reason is required.`, code: "MEETING_SPACE_CONFLICT" });
       if (req.body.status === "definite" && !canManageMeetingCalendar(req)) return res.status(403).json({ error: "Calendar PIN access is required to mark an event definite." });
-      const [event] = await db.update(courtyardMeetingEvents).set({ ...meetingEventWriteValues(req.body, holdExpiresAt), hotelId: existing.hotelId, updatedByUserId: req.salesUser.id, updatedAt: new Date() }).where(eq(courtyardMeetingEvents.id, existing.id)).returning();
-      res.json({ event });
+      const baseValues = { ...meetingEventWriteValues(req.body, holdExpiresAt), hotelId: existing.hotelId, updatedByUserId: req.salesUser.id, updatedAt: new Date() };
+      const events = await db.transaction(async (tx) => {
+        const [updated] = await tx.update(courtyardMeetingEvents).set({ ...baseValues, eventDate: dates[0] }).where(eq(courtyardMeetingEvents.id, existing.id)).returning();
+        if (dates.length === 1) return [updated];
+        const added = await tx.insert(courtyardMeetingEvents).values(dates.slice(1).map((eventDate) => ({ ...baseValues, eventDate, createdByUserId: req.salesUser.id }))).returning();
+        return [updated, ...added];
+      });
+      res.json({ event: events[0], events, count: events.length });
     } catch (error) { next(error); }
   });
   router.post("/meeting-calendar/events/:id/documents",transitionUpload.single("file"),async(req:any,res,next)=>{try{const [event]=await db.select().from(courtyardMeetingEvents).where(eq(courtyardMeetingEvents.id,req.params.id)).limit(1);if(!event||!hasHotel(req,event.hotelId))return res.status(404).json({error:"Event not found."});if(!req.file)return res.status(400).json({error:"Choose a file."});const [document]=await db.insert(courtyardMeetingEventDocuments).values({eventId:event.id,filename:req.file.originalname,mimeType:req.file.mimetype||"application/octet-stream",sizeBytes:req.file.size,category:req.body.category||"other",contentBase64:req.file.buffer.toString("base64"),uploadedByUserId:req.salesUser.id}).returning();res.status(201).json({document:{...document,contentBase64:undefined}});}catch(e){next(e);}});

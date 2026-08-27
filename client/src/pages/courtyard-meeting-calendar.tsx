@@ -64,6 +64,7 @@ const empty = {
   groupName: "",
   eventName: "",
   eventDate: "",
+  eventEndDate: "",
   setupStartTime: "08:00",
   guestStartTime: "09:00",
   guestEndTime: "17:00",
@@ -148,11 +149,14 @@ export default function CourtyardMeetingCalendar() {
             : null,
         }),
       }),
-    onSuccess: () => {
+    onSuccess: (result: any) => {
       setOpen(false);
       setForm({ ...empty, spaceId: cal.data?.spaces?.[0]?.id || "" });
       qc.invalidateQueries({ queryKey: ["meeting-calendar"] });
-      toast({ title: "Meeting-space event saved" });
+      toast({
+        title: result?.count > 1 ? `${result.count} meeting-space dates saved` : "Meeting-space event saved",
+        description: result?.count > 1 ? "The event was added to every date in the selected range." : undefined,
+      });
     },
     onError: (e: any) => {
       if (e.code === "MEETING_SPACE_CONFLICT" && cal.data?.user?.isAdmin) {
@@ -420,7 +424,7 @@ export default function CourtyardMeetingCalendar() {
               />
             </div>
             <div>
-              <Label>Date</Label>
+              <Label>Start date</Label>
               <Input
                 type="date"
                 value={form.eventDate}
@@ -428,6 +432,16 @@ export default function CourtyardMeetingCalendar() {
                   setForm({ ...form, eventDate: e.target.value })
                 }
               />
+            </div>
+            <div>
+              <Label>End date <span className="font-normal text-[#5f5247]">(optional)</span></Label>
+              <Input
+                type="date"
+                min={form.eventDate || undefined}
+                value={form.eventEndDate}
+                onChange={(e) => setForm({ ...form, eventEndDate: e.target.value })}
+              />
+              <p className="mt-1 text-xs text-[#5f5247]">Use for consecutive multi-day events. Leave blank for one day.</p>
             </div>
             <div>
               <Label>Status</Label>

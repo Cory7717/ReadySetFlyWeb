@@ -224,20 +224,20 @@ function meetingEventWriteValues(body: any, holdExpiresAt: Date | null, eventDay
   const breakfastPerPerson = Number(body?.breakfastPerPerson || 0);
   const lunchDinnerPerPerson = Number(body?.lunchDinnerPerPerson || 0);
   const cateringRevenue = Number(body?.attendance || 0) * eventDays * (breakfastPerPerson + lunchDinnerPerPerson);
-  const serviceFeePercent = Number(body?.serviceFeePercent || 0);
-  const gratuityPercent = Number(body?.gratuityPercent || 0);
-  const taxPercent = Number(body?.taxPercent || 0);
-  const revenueSubtotal = ["roomRentalRevenue", "avRevenue", "otherRevenue"].reduce((sum, field) => sum + Number(body?.[field] || 0), 0) + cateringRevenue;
-  const expectedRevenue = (revenueSubtotal + (revenueSubtotal * taxPercent / 100) + (revenueSubtotal * serviceFeePercent / 100) + (revenueSubtotal * gratuityPercent / 100)).toFixed(2);
+  const roomTaxPercent = 6, roomServiceFeePercent = 21, fbTaxPercent = 8.25, fbGratuityPercent = 18;
+  const roomRental = Number(body?.roomRentalRevenue || 0);
+  const fbSubtotal = cateringRevenue + Number(body?.otherRevenue || 0);
+  const expectedRevenue = (roomRental + (roomRental * roomTaxPercent / 100) + (roomRental * roomServiceFeePercent / 100) + fbSubtotal + (fbSubtotal * fbTaxPercent / 100) + (fbSubtotal * fbGratuityPercent / 100) + Number(body?.avRevenue || 0)).toFixed(2);
   return {
     ...formValues,
     ...revenue,
     cateringRevenue: cateringRevenue.toFixed(2),
     breakfastPerPerson: breakfastPerPerson.toFixed(2),
     lunchDinnerPerPerson: lunchDinnerPerPerson.toFixed(2),
-    serviceFeePercent: serviceFeePercent.toFixed(3),
-    gratuityPercent: gratuityPercent.toFixed(3),
-    taxPercent: taxPercent.toFixed(3),
+    roomTaxPercent: roomTaxPercent.toFixed(3),
+    roomServiceFeePercent: roomServiceFeePercent.toFixed(3),
+    fbTaxPercent: fbTaxPercent.toFixed(3),
+    fbGratuityPercent: fbGratuityPercent.toFixed(3),
     holdExpiresAt,
     opportunityId: String(body?.opportunityId || "").trim() || null,
     accountKey: String(body?.accountKey || "").trim() || null,
@@ -248,10 +248,6 @@ function meetingRevenueValidationError(body: any) {
   for (const field of ["roomRentalRevenue", "avRevenue", "otherRevenue", "breakfastPerPerson", "lunchDinnerPerPerson"]) {
     const value = Number(body?.[field] || 0);
     if (!Number.isFinite(value) || value < 0 || value > 9999999999) return "Revenue amounts must be valid non-negative numbers.";
-  }
-  for (const field of ["taxPercent", "serviceFeePercent", "gratuityPercent"]) {
-    const value = Number(body?.[field] || 0);
-    if (!Number.isFinite(value) || value < 0 || value > 100) return "Tax, service fee, and gratuity percentages must be between 0 and 100.";
   }
   if (body?.meetingRoom && !["pecan", "cedar", "full_room"].includes(String(body.meetingRoom))) return "Choose a valid meeting room.";
   return null;
@@ -682,6 +678,58 @@ async function createAdvisorPdf(analysis: any, hotelName: string) {
   return pdf.save();
 }
 
+async function createMeetingBeoPdf(event: any, seriesEvents: any[], spaceName: string) {
+  const pdf = await PDFDocument.create();
+  const regular = await pdf.embedFont(StandardFonts.Helvetica);
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const gold = rgb(0.85, 0.55, 0.05), ink = rgb(0.14, 0.14, 0.14), muted = rgb(0.38, 0.36, 0.34), pale = rgb(0.97, 0.96, 0.93), white = rgb(1, 1, 1);
+  const dates = seriesEvents.map((item) => item.eventDate).sort();
+  const money = (value: any) => `$${Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  const roomRental = Number(event.roomRentalRevenue || 0), fbSubtotal = Number(event.cateringRevenue || 0) + Number(event.otherRevenue || 0);
+  const roomTax = roomRental * 0.06, roomService = roomRental * 0.21, fbTax = fbSubtotal * 0.0825, fbGratuity = fbSubtotal * 0.18;
+  const dateLabel = dates.length > 1 ? `${dates[0]} through ${dates[dates.length - 1]}` : dates[0];
+  let page: any, y = 0;
+  const addPage = () => {
+    page = pdf.addPage([612, 792]); y = 730;
+    page.drawText("COURTYARD", { x: 205, y: 746, size: 25, font: bold, color: gold, characterSpacing: 4 });
+    page.drawText("BY MARRIOTT", { x: 268, y: 730, size: 8, font: bold, color: gold, characterSpacing: 2 });
+    page.drawLine({ start: { x: 46, y: 716 }, end: { x: 566, y: 716 }, thickness: 1.2, color: gold });
+    return page;
+  };
+  const ensure = (height: number) => { if (y - height < 58) addPage(); };
+  const section = (title: string) => { ensure(30); page.drawText(title.toUpperCase(), { x: 46, y, size: 12, font: bold, color: gold }); y -= 7; page.drawLine({ start: { x: 46, y }, end: { x: 566, y }, thickness: 1, color: gold }); y -= 18; };
+  const row = (label: string, value: any, height = 22) => { ensure(height); page.drawRectangle({ x: 46, y: y - height + 6, width: 520, height, color: pale, borderColor: rgb(0.84, 0.82, 0.78), borderWidth: 0.5 }); page.drawText(label, { x: 54, y: y - 8, size: 8.5, font: bold, color: ink }); const text = String(value ?? "Not specified"); const clipped = text.length > 74 ? `${text.slice(0, 71)}...` : text; page.drawText(clipped, { x: 210, y: y - 8, size: 8.5, font: regular, color: ink }); y -= height; };
+  const note = (label: string, value: any) => { if (!value) return; const text = String(value); const lines: string[] = []; let current = ""; for (const word of text.split(/\s+/)) { if (`${current} ${word}`.trim().length > 92) { lines.push(current); current = word; } else current = `${current} ${word}`.trim(); } if (current) lines.push(current); ensure(28 + lines.length * 11); page.drawText(label, { x: 52, y, size: 9, font: bold, color: ink }); y -= 13; for (const line of lines) { page.drawText(line, { x: 52, y, size: 8.5, font: regular, color: muted }); y -= 11; } y -= 7; };
+  addPage();
+  page.drawText("BANQUET EVENT ORDER", { x: 46, y: 690, size: 20, font: bold, color: ink });
+  page.drawText(`${event.groupName}  |  ${dateLabel}`, { x: 46, y: 671, size: 11, font: bold, color: gold });
+  page.drawText(`Status: ${String(event.status || "inquiry").replaceAll("_", " ").toUpperCase()}  |  BEO generated ${new Date().toLocaleDateString("en-US")}`, { x: 46, y: 653, size: 8, font: regular, color: muted });
+  y = 624;
+  section("Event overview");
+  row("Event / Project", event.eventName);
+  row("Meeting dates", `${dateLabel} (${dates.length} day${dates.length === 1 ? "" : "s"})`);
+  row("Meeting room", event.meetingRoom === "pecan" ? "Pecan - 560 sq. ft." : event.meetingRoom === "cedar" ? "Cedar - 1,575 sq. ft." : event.meetingRoom === "full_room" ? "Full Room - 2,135 sq. ft." : spaceName);
+  row("Setup / Attendance", `${String(event.roomSetup || "Not specified").replaceAll("_", " ")} / ${event.attendance ?? "Not specified"} attendees per day`);
+  section("Operational timeline");
+  row("Setup begins", String(event.setupStartTime || "").slice(0, 5)); row("Guest arrival", String(event.guestStartTime || "").slice(0, 5)); row("Guest event ends", String(event.guestEndTime || "").slice(0, 5)); row("Breakdown complete", String(event.breakdownEndTime || "").slice(0, 5));
+  section("Catering and services");
+  row("Breakfast", `${money(event.breakfastPerPerson)} per person x ${event.attendance || 0} x ${dates.length} day(s)`);
+  row("Lunch / Dinner", `${money(event.lunchDinnerPerPerson)} per person x ${event.attendance || 0} x ${dates.length} day(s)`);
+  row("Calculated in-house catering", money(event.cateringRevenue)); row("A/V add-ons", money(event.avRevenue)); row("Drink / coffee / incidentals", money(event.otherRevenue));
+  note("Catering and incidental details", event.cateringNotes);
+  section("Contacts");
+  row("Sales owner", event.salesOwner || "Not assigned"); row("Client contact", event.clientName || "Not provided"); row("Email / Phone", [event.clientEmail, event.clientPhone].filter(Boolean).join("  |  ") || "Not provided");
+  section("Revenue summary");
+  row("Meeting room rental", money(event.roomRentalRevenue)); row("In-house catering", money(event.cateringRevenue)); row("A/V and incidentals", money(Number(event.avRevenue || 0) + Number(event.otherRevenue || 0)));
+  row("Meeting room tax (6%)", money(roomTax)); row("Room service fee (21%)", money(roomService)); row("F&B tax (8.25%)", money(fbTax)); row("F&B gratuity (18%)", money(fbGratuity));
+  ensure(32); page.drawRectangle({ x: 46, y: y - 24, width: 520, height: 30, color: ink }); page.drawText("TOTAL EVENT REVENUE", { x: 54, y: y - 13, size: 10, font: bold, color: white }); page.drawText(money(event.expectedRevenue), { x: 470, y: y - 13, size: 11, font: bold, color: gold }); y -= 43;
+  section("Operational notes");
+  note("Internal / setup notes", event.internalNotes); note("Audio / visual", event.avNotes); note("Accessibility", event.accessibilityNotes);
+  ensure(90); page.drawText("TEAM CONFIRMATION", { x: 46, y, size: 10, font: bold, color: gold }); y -= 28; page.drawText("Setup completed by: ______________________________   Time: __________", { x: 52, y, size: 9, font: regular, color: ink }); y -= 25; page.drawText("Breakdown completed by: __________________________   Time: __________", { x: 52, y, size: 9, font: regular, color: ink });
+  pdf.getPages().forEach((item, index) => { item.drawText("Courtyard by Marriott Austin Northwest/Lakeline  |  12833 Ranch Road 620 N  |  Austin, TX 78750", { x: 46, y: 28, size: 7.5, font: regular, color: muted }); item.drawText(`Page ${index + 1}`, { x: 530, y: 28, size: 8, font: regular, color: muted }); });
+  return pdf.save();
+}
+
 export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
   const publicRouter = express.Router();
   publicRouter.post("/pin-login", (req: any, res) => {
@@ -749,6 +797,21 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
   });
   router.get("/meeting-calendar", async (req: any, res, next) => {
     try { const hotelId=String(req.query.hotelId||""); if(!hasHotel(req,hotelId)) return res.status(403).json({error:"Property access required."}); await db.update(courtyardMeetingEvents).set({status:"expired",updatedAt:new Date()}).where(and(eq(courtyardMeetingEvents.hotelId,hotelId),eq(courtyardMeetingEvents.status,"courtesy_hold"),lt(courtyardMeetingEvents.holdExpiresAt,new Date()))); let spaces=await db.select().from(courtyardMeetingSpaces).where(and(eq(courtyardMeetingSpaces.hotelId,hotelId),eq(courtyardMeetingSpaces.active,true))); if(!spaces.length){spaces=await db.insert(courtyardMeetingSpaces).values({hotelId,name:"Meeting Space",squareFeet:2000}).returning();} const start=String(req.query.start||"0001-01-01"),end=String(req.query.end||"9999-12-31"); const events=(await db.select().from(courtyardMeetingEvents).where(eq(courtyardMeetingEvents.hotelId,hotelId)).orderBy(asc(courtyardMeetingEvents.eventDate),asc(courtyardMeetingEvents.setupStartTime))).filter(x=>x.eventDate>=start&&x.eventDate<=end); const ids=events.map(x=>x.id); const documents=ids.length?await db.select({id:courtyardMeetingEventDocuments.id,eventId:courtyardMeetingEventDocuments.eventId,filename:courtyardMeetingEventDocuments.filename,category:courtyardMeetingEventDocuments.category,sizeBytes:courtyardMeetingEventDocuments.sizeBytes}).from(courtyardMeetingEventDocuments).where(inArray(courtyardMeetingEventDocuments.eventId,ids)):[]; const calendarManager=canManageMeetingCalendar(req); const shares=calendarManager?await db.select().from(courtyardMeetingCalendarShares).where(eq(courtyardMeetingCalendarShares.hotelId,hotelId)).orderBy(desc(courtyardMeetingCalendarShares.createdAt)):[]; res.json({spaces,events,documents,shares,user:{isAdmin:calendarManager}}); }catch(e){next(e);}
+  });
+  router.get("/meeting-calendar/events/:id/beo.pdf", async (req: any, res, next) => {
+    try {
+      const [event] = await db.select().from(courtyardMeetingEvents).where(eq(courtyardMeetingEvents.id, req.params.id)).limit(1);
+      if (!event || !hasHotel(req, event.hotelId)) return res.status(404).json({ error: "Event not found." });
+      const seriesEvents = event.bookingSeriesId
+        ? await db.select().from(courtyardMeetingEvents).where(eq(courtyardMeetingEvents.bookingSeriesId, event.bookingSeriesId)).orderBy(asc(courtyardMeetingEvents.eventDate))
+        : [event];
+      const [space] = await db.select().from(courtyardMeetingSpaces).where(eq(courtyardMeetingSpaces.id, event.spaceId)).limit(1);
+      const bytes = await createMeetingBeoPdf(event, seriesEvents, space?.name || "Meeting Space");
+      const safeName = String(event.groupName || "event").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").slice(0, 60) || "event";
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `inline; filename="${safeName}-BEO.pdf"`);
+      res.send(Buffer.from(bytes));
+    } catch (error) { next(error); }
   });
   router.post("/meeting-calendar/events", async (req: any, res, next) => {
     try {

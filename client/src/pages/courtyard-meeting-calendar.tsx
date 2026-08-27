@@ -96,6 +96,7 @@ export default function CourtyardMeetingCalendar() {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState<any>(empty);
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
+  const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [view, setView] = useState("month");
   const [accessPin, setAccessPin] = useState("");
   const me = useQuery({
@@ -134,8 +135,8 @@ export default function CourtyardMeetingCalendar() {
   });
   const save = useMutation({
     mutationFn: (body: any) =>
-      request("/api/courtyard/sales-intelligence/meeting-calendar/events", {
-        method: "POST",
+      request(editingEventId ? `/api/courtyard/sales-intelligence/meeting-calendar/events/${editingEventId}` : "/api/courtyard/sales-intelligence/meeting-calendar/events", {
+        method: editingEventId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           hotelId,
@@ -151,10 +152,13 @@ export default function CourtyardMeetingCalendar() {
       }),
     onSuccess: (result: any) => {
       setOpen(false);
+      const wasEditing = Boolean(editingEventId);
+      setEditingEventId(null);
+      setSelectedEvent(null);
       setForm({ ...empty, spaceId: cal.data?.spaces?.[0]?.id || "" });
       qc.invalidateQueries({ queryKey: ["meeting-calendar"] });
       toast({
-        title: result?.count > 1 ? `${result.count} meeting-space dates saved` : "Meeting-space event saved",
+        title: wasEditing ? "Meeting-space event updated" : result?.count > 1 ? `${result.count} meeting-space dates saved` : "Meeting-space event saved",
         description: result?.count > 1 ? "The event was added to every date in the selected range." : undefined,
       });
     },
@@ -217,10 +221,26 @@ export default function CourtyardMeetingCalendar() {
     return <div className="min-h-screen bg-[#f7f1e7] p-8 text-[#201814]">{(me.error as Error).message}</div>;
   const events = cal.data?.events || [];
   const openNew = (date = "") => {
+    setEditingEventId(null);
     setForm({
       ...empty,
       spaceId: cal.data?.spaces?.[0]?.id || "",
       eventDate: date,
+    });
+    setOpen(true);
+  };
+  const openEdit = (event: any) => {
+    setSelectedEvent(null);
+    setEditingEventId(event.id);
+    setForm({
+      ...empty,
+      ...event,
+      eventEndDate: "",
+      holdExpiresAt: event.holdExpiresAt ? new Date(event.holdExpiresAt).toISOString().slice(0, 16) : "",
+      attendance: event.attendance ?? "",
+      squareFeetRequired: event.squareFeetRequired ?? "",
+      expectedRoomNights: event.expectedRoomNights ?? "",
+      expectedRevenue: event.expectedRevenue ?? "",
     });
     setOpen(true);
   };
@@ -399,10 +419,10 @@ export default function CourtyardMeetingCalendar() {
           </Card>
         )}
       </main>
-      <Dialog open={open} onOpenChange={setOpen}>
+      <Dialog open={open} onOpenChange={(isOpen) => { setOpen(isOpen); if (!isOpen) setEditingEventId(null); }}>
         <DialogContent className="max-h-[92dvh] max-w-3xl overflow-y-auto bg-white text-[#201814]">
           <DialogHeader>
-            <DialogTitle>New meeting-space event</DialogTitle>
+            <DialogTitle>{editingEventId ? "Edit meeting-space event" : "New meeting-space event"}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-3 md:grid-cols-2">
             <div>
@@ -433,7 +453,7 @@ export default function CourtyardMeetingCalendar() {
                 }
               />
             </div>
-            <div>
+            {!editingEventId && <div>
               <Label>End date <span className="font-normal text-[#5f5247]">(optional)</span></Label>
               <Input
                 type="date"
@@ -442,7 +462,7 @@ export default function CourtyardMeetingCalendar() {
                 onChange={(e) => setForm({ ...form, eventEndDate: e.target.value })}
               />
               <p className="mt-1 text-xs text-[#5f5247]">Use for consecutive multi-day events. Leave blank for one day.</p>
-            </div>
+            </div>}
             <div>
               <Label>Status</Label>
               <Select
@@ -584,7 +604,7 @@ export default function CourtyardMeetingCalendar() {
               disabled={save.isPending}
               onClick={() => save.mutate(form)}
             >
-              {save.isPending ? "Saving…" : "Save event"}
+              {save.isPending ? "Saving…" : editingEventId ? "Save changes" : "Save event"}
             </Button>
           </div>
         </DialogContent>
@@ -683,8 +703,9 @@ export default function CourtyardMeetingCalendar() {
                 </section>
               )}
 
-              <div className="flex justify-end">
+              <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => setSelectedEvent(null)}>Close</Button>
+                <Button className="bg-[#2f5f46] text-white hover:bg-[#244b37]" onClick={() => openEdit(selectedEvent)}>Edit event</Button>
               </div>
             </>
           )}

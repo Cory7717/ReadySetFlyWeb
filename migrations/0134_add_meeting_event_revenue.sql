@@ -3,8 +3,8 @@ ALTER TABLE "courtyard_meeting_events" ADD COLUMN IF NOT EXISTS "booking_series_
 ALTER TABLE "courtyard_meeting_events" ADD COLUMN IF NOT EXISTS "booking_start_date" date;
 ALTER TABLE "courtyard_meeting_events" ADD COLUMN IF NOT EXISTS "room_rental_revenue" numeric(12,2);
 ALTER TABLE "courtyard_meeting_events" ADD COLUMN IF NOT EXISTS "tax_amount" numeric(12,2);
-ALTER TABLE "courtyard_meeting_events" ADD COLUMN IF NOT EXISTS "service_fee_amount" numeric(12,2);
-ALTER TABLE "courtyard_meeting_events" ADD COLUMN IF NOT EXISTS "gratuity_amount" numeric(12,2);
+ALTER TABLE "courtyard_meeting_events" ADD COLUMN IF NOT EXISTS "service_fee_percent" numeric(6,3);
+ALTER TABLE "courtyard_meeting_events" ADD COLUMN IF NOT EXISTS "gratuity_percent" numeric(6,3);
 ALTER TABLE "courtyard_meeting_events" ADD COLUMN IF NOT EXISTS "av_revenue" numeric(12,2);
 ALTER TABLE "courtyard_meeting_events" ADD COLUMN IF NOT EXISTS "catering_revenue" numeric(12,2);
 ALTER TABLE "courtyard_meeting_events" ADD COLUMN IF NOT EXISTS "other_revenue" numeric(12,2);

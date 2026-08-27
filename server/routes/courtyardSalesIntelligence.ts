@@ -219,12 +219,17 @@ function meetingEventWriteValues(body: any, holdExpiresAt: Date | null) {
     eventEndDate: _eventEndDate,
     ...formValues
   } = body || {};
-  const revenueFields = ["roomRentalRevenue", "taxAmount", "serviceFeeAmount", "gratuityAmount", "avRevenue", "cateringRevenue", "otherRevenue"];
+  const revenueFields = ["roomRentalRevenue", "taxAmount", "avRevenue", "cateringRevenue", "otherRevenue"];
   const revenue = Object.fromEntries(revenueFields.map((field) => [field, Number(body?.[field] || 0).toFixed(2)]));
-  const expectedRevenue = revenueFields.reduce((sum, field) => sum + Number(body?.[field] || 0), 0).toFixed(2);
+  const serviceFeePercent = Number(body?.serviceFeePercent || 0);
+  const gratuityPercent = Number(body?.gratuityPercent || 0);
+  const revenueSubtotal = ["roomRentalRevenue", "avRevenue", "cateringRevenue", "otherRevenue"].reduce((sum, field) => sum + Number(body?.[field] || 0), 0);
+  const expectedRevenue = (revenueSubtotal + Number(body?.taxAmount || 0) + (revenueSubtotal * serviceFeePercent / 100) + (revenueSubtotal * gratuityPercent / 100)).toFixed(2);
   return {
     ...formValues,
     ...revenue,
+    serviceFeePercent: serviceFeePercent.toFixed(3),
+    gratuityPercent: gratuityPercent.toFixed(3),
     holdExpiresAt,
     opportunityId: String(body?.opportunityId || "").trim() || null,
     accountKey: String(body?.accountKey || "").trim() || null,
@@ -232,9 +237,13 @@ function meetingEventWriteValues(body: any, holdExpiresAt: Date | null) {
   };
 }
 function meetingRevenueValidationError(body: any) {
-  for (const field of ["roomRentalRevenue", "taxAmount", "serviceFeeAmount", "gratuityAmount", "avRevenue", "cateringRevenue", "otherRevenue"]) {
+  for (const field of ["roomRentalRevenue", "taxAmount", "avRevenue", "cateringRevenue", "otherRevenue"]) {
     const value = Number(body?.[field] || 0);
     if (!Number.isFinite(value) || value < 0 || value > 9999999999) return "Revenue amounts must be valid non-negative numbers.";
+  }
+  for (const field of ["serviceFeePercent", "gratuityPercent"]) {
+    const value = Number(body?.[field] || 0);
+    if (!Number.isFinite(value) || value < 0 || value > 100) return "Service fee and gratuity percentages must be between 0 and 100.";
   }
   if (body?.meetingRoom && !["pecan", "cedar", "full_room"].includes(String(body.meetingRoom))) return "Choose a valid meeting room.";
   return null;

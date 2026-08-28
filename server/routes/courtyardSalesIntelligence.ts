@@ -862,9 +862,26 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
       if (!space) return res.status(400).json({ error: "The selected meeting space is not available for this property." });
       const holdExpiresAt = req.body.holdExpiresAt ? new Date(req.body.holdExpiresAt) : null;
       if (holdExpiresAt && Number.isNaN(holdExpiresAt.getTime())) return res.status(400).json({ error: "Enter a valid courtesy-hold expiration date and time." });
-      const seriesEvents = existing.bookingSeriesId
+      let seriesEvents = existing.bookingSeriesId
         ? await db.select().from(courtyardMeetingEvents).where(eq(courtyardMeetingEvents.bookingSeriesId, existing.bookingSeriesId))
-        : [existing];
+        : [];
+      if (!seriesEvents.length) {
+        const legacyMatches = await db.select().from(courtyardMeetingEvents).where(and(
+          eq(courtyardMeetingEvents.hotelId, existing.hotelId),
+          eq(courtyardMeetingEvents.spaceId, existing.spaceId),
+          eq(courtyardMeetingEvents.groupName, existing.groupName),
+          eq(courtyardMeetingEvents.eventName, existing.eventName),
+        )).orderBy(asc(courtyardMeetingEvents.eventDate));
+        const existingIndex = legacyMatches.findIndex((event) => event.id === existing.id);
+        if (existingIndex >= 0) {
+          let firstIndex = existingIndex, lastIndex = existingIndex;
+          const dayGap = (left: string, right: string) => Math.round((new Date(`${right}T12:00:00Z`).getTime() - new Date(`${left}T12:00:00Z`).getTime()) / 86400000);
+          while (firstIndex > 0 && dayGap(legacyMatches[firstIndex - 1].eventDate, legacyMatches[firstIndex].eventDate) <= 1) firstIndex -= 1;
+          while (lastIndex < legacyMatches.length - 1 && dayGap(legacyMatches[lastIndex].eventDate, legacyMatches[lastIndex + 1].eventDate) <= 1) lastIndex += 1;
+          seriesEvents = legacyMatches.slice(firstIndex, lastIndex + 1);
+        }
+      }
+      if (!seriesEvents.length) seriesEvents = [existing];
       const effectiveDates = Array.from(new Set([...seriesEvents.map((event) => event.eventDate), ...dates])).sort();
       const seriesIds = new Set(seriesEvents.map((event) => event.id));
       const active = (await db.select().from(courtyardMeetingEvents).where(and(eq(courtyardMeetingEvents.spaceId, req.body.spaceId), inArray(courtyardMeetingEvents.eventDate, effectiveDates)))).filter((event) => !seriesIds.has(event.id) && !["cancelled", "completed", "expired"].includes(event.status));

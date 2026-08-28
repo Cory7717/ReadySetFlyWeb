@@ -267,9 +267,18 @@ export default function CourtyardMeetingCalendar() {
     setOpen(true);
   };
   const openEdit = (event: any) => {
-    const seriesEvents = event.bookingSeriesId
+    let seriesEvents = event.bookingSeriesId
       ? events.filter((candidate: any) => candidate.bookingSeriesId === event.bookingSeriesId)
-      : [event];
+      : events.filter((candidate: any) => candidate.spaceId === event.spaceId && candidate.groupName === event.groupName && candidate.eventName === event.eventName).sort((a: any, b: any) => a.eventDate.localeCompare(b.eventDate));
+    if (!event.bookingSeriesId && seriesEvents.length > 1) {
+      const selectedIndex = seriesEvents.findIndex((candidate: any) => candidate.id === event.id);
+      let firstIndex = selectedIndex, lastIndex = selectedIndex;
+      const dayGap = (left: string, right: string) => Math.round((new Date(`${right}T12:00:00Z`).getTime() - new Date(`${left}T12:00:00Z`).getTime()) / 86400000);
+      while (firstIndex > 0 && dayGap(seriesEvents[firstIndex - 1].eventDate, seriesEvents[firstIndex].eventDate) <= 1) firstIndex -= 1;
+      while (lastIndex < seriesEvents.length - 1 && dayGap(seriesEvents[lastIndex].eventDate, seriesEvents[lastIndex + 1].eventDate) <= 1) lastIndex += 1;
+      seriesEvents = seriesEvents.slice(firstIndex, lastIndex + 1);
+    }
+    if (!seriesEvents.length) seriesEvents = [event];
     const seriesDates = seriesEvents.map((candidate: any) => candidate.eventDate).sort();
     setSelectedEvent(null);
     setEditingEventId(event.id);

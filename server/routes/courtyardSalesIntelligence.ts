@@ -298,8 +298,44 @@ export async function contractText(file: Express.Multer.File) {
   throw new Error("Upload a DOCX or PDF contract.");
 }
 function firstMatch(text: string, pattern: RegExp) { return text.match(pattern)?.[1]?.trim() || ""; }
+function legacyTime(value: string) {
+  const match = value.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!match) return "";
+  let hour = Number(match[1]);
+  if (match[3].toUpperCase() === "PM" && hour !== 12) hour += 12;
+  if (match[3].toUpperCase() === "AM" && hour === 12) hour = 0;
+  return `${String(hour).padStart(2, "0")}:${match[2]}`;
+}
+function parseLegacyGroupContract(normalized: string) {
+  const groupName = firstMatch(normalized, /(?:^|\n)Group:\s*([^\n]+)/i).replace(/\s*\(Copy\)\s*$/i, "");
+  const programDates = firstMatch(normalized, /Official Program Dates:\s*([^\n]+)/i);
+  const dateParts = programDates.match(/(.+?)\s+-\s+(.+)/);
+  const arrivalDate = dateParts ? isoContractDate(dateParts[1]) : "", departureDate = dateParts ? isoContractDate(dateParts[2]) : "";
+  const commitment = normalized.match(/responsible for utilizing\s+(\d+)\s+room nights/i);
+  const totalRoomNights = commitment ? Number(commitment[1]) : null;
+  const roomPatternRows = Array.from(normalized.matchAll(/(\d+)\s*@\s*\$([\d,.]+)/g));
+  const rateMatch = roomPatternRows[0] || null;
+  const peakRooms = rateMatch ? Number(rateMatch[1]) : null, groupRate = rateMatch ? Number(rateMatch[2].replace(/,/g, "")) : null;
+  const roomTypeMix = firstMatch(normalized, /(?:^|\n)(Standard (?:King|Double Queen)[^\n]*)/i).replace(/\s*\d+\s*@.*$/, "");
+  const cutoffSection = normalized.match(/CUT-OFF DATE:([\s\S]{0,400})/i)?.[1] || "";
+  const cutoffRaw = firstMatch(cutoffSection, /(\d{1,2}\/\d{1,2}\/\d{2,4})/) || firstMatch(cutoffSection, /((?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),?\s+[A-Za-z]+\s+\d{1,2},\s+20\d{2})/i);
+  const bookingMethod = /Option A:\s*Rooming List/i.test(normalized) ? "rooming_list" : /Option B:\s*Individual Reservations/i.test(normalized) ? "reservation_link" : "other";
+  const billingInstructions = /\[\s*X\s*\]\s*All charges to Group's Master Account/i.test(normalized) ? "All charges to Group Master Account" : /\[\s*X\s*\]\s*Individual to pay all charges/i.test(normalized) ? "Individual guests pay room, tax, and incidentals" : "Review billing arrangement in the contract";
+  const agenda = normalized.match(/Setup\s*\n(\d{1,2}\/\d{1,2}\/\d{4})\s*\n(\d{1,2}:\d{2}\s*(?:AM|PM))\s*\n(\d{1,2}:\d{2}\s*(?:AM|PM))\s*\n([^\n]+)\s*\n([^\n]+)\s*\n(\d+)\s*\n([^\n]+)/i);
+  const meetingDate = agenda ? isoContractDate(agenda[1]) : "";
+  const meetingRoomRaw = agenda?.[4]?.trim() || "";
+  const functionCharge = Number(firstMatch(normalized, /function space charges will be\s*\$\[?([\d,.]+)/i).replace(/,/g, "")) || 0;
+  const warnings: string[] = [];
+  if (!groupName || !arrivalDate || !departureDate) warnings.push("Confirm the group name and official program dates.");
+  if (peakRooms && arrivalDate && departureDate && totalRoomNights && peakRooms * Math.max(0, Math.round((new Date(`${departureDate}T12:00:00Z`).getTime() - new Date(`${arrivalDate}T12:00:00Z`).getTime()) / 86400000)) !== totalRoomNights) warnings.push("The daily room pattern does not match the stated total room-night commitment; verify the contract values.");
+  if (totalRoomNights && roomPatternRows.length && roomPatternRows.reduce((sum, row) => sum + Number(row[1]), 0) !== totalRoomNights) warnings.push("The room-pattern table does not add up to the stated total room nights; the stated commitment is shown for review.");
+  if (!cutoffRaw || /null/i.test(cutoffSection.slice(0, 100))) warnings.push("The reservation cutoff date is missing or unclear.");
+  if (/NO FUNCTION SPACE/i.test(normalized)) warnings.push("This is a rooms-only agreement; no meeting-space event will be created.");
+  return { profile: "courtyard_legacy_group_agreement_v1", warnings, groupRoom: { groupName, projectName: firstMatch(normalized, /Name of Event:\s*([^\n]+)/i).replace(/\s*\(Copy\)\s*$/i, "") || groupName, arrivalDate, departureDate, status: "definite", peakRooms, totalRoomNights, roomTypeMix, groupRate, bookingMethod, cutoffDate: cutoffRaw ? isoContractDate(cutoffRaw) : "", primaryContactName: firstMatch(normalized, /Contact Name\/Third Party Planner:\s*([^\n]+)/i), primaryContactEmail: firstMatch(normalized, /E-Mail Address:\s*([^\n]+)/i), salesOwner: firstMatch(normalized, /Sales Person:\s*([^\n]+)/i), billingInstructions, internalNotes: "Imported from legacy group agreement; review all extracted fields against the original contract." }, meeting: agenda ? { groupName, eventName: agenda[5].trim() || `${groupName} Meeting`, eventDate: meetingDate, eventEndDate: meetingDate, status: "definite", meetingRoom: /pecan/i.test(meetingRoomRaw) && /cedar/i.test(meetingRoomRaw) ? "full_room" : /pecan/i.test(meetingRoomRaw) ? "pecan" : "cedar", roomSetup: agenda[7].trim().toLowerCase().replace(/-/g, "_").replace(/\s+/g, "_"), setupStartTime: legacyTime(agenda[2]), guestStartTime: legacyTime(agenda[2]), guestEndTime: legacyTime(agenda[3]), breakdownEndTime: legacyTime(agenda[3]), attendance: Number(agenda[6]), roomRentalRevenue: functionCharge, breakfastPerPerson: 0, lunchDinnerPerPerson: 0, otherRevenue: 0, avRevenue: 0, clientName: firstMatch(normalized, /Contact Name\/Third Party Planner:\s*([^\n]+)/i), clientEmail: firstMatch(normalized, /E-Mail Address:\s*([^\n]+)/i), salesOwner: firstMatch(normalized, /Sales Person:\s*([^\n]+)/i) } : null };
+}
 export function parseGroupContract(text: string) {
   const normalized = text.replace(/\u00a0/g, " ").replace(/[ \t]+/g, " ");
+  if (/GUEST ROOMS ONLY AGREEMENT|GROUP SALES AGREEMENT/i.test(normalized)) return parseLegacyGroupContract(normalized);
   const groupName = firstMatch(normalized, /(?:^|\n)Group(?! Rooms)\s*([^\n]+)/i) || firstMatch(normalized, /between[^\n]+and\s+([^\n(]+)\s*\("Group"\)/i);
   const arrivalDate = isoContractDate(firstMatch(normalized, /Guest Arrival\s*([^\n]+)/i));
   const departureDate = isoContractDate(firstMatch(normalized, /Guest Departure\s*([^\n]+)/i));
@@ -910,7 +946,22 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
       try { draft = JSON.parse(String(req.body.draft || "{}")); } catch { return res.status(400).json({ error: "The reviewed import data is invalid." }); }
       const groupError = groupRoomValidationError(draft.groupRoom);
       if (groupError) return res.status(400).json({ error: groupError });
-      if (!draft.meeting) return res.status(400).json({ error: "A linked meeting-space draft is required for this contract." });
+      if (!draft.meeting) {
+        const normalizedGroup = String(draft.groupRoom.groupName || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+        const roomBlockCandidates = await db.select().from(courtyardGroupRoomBlocks).where(eq(courtyardGroupRoomBlocks.hotelId, hotelId));
+        const matchingRoomBlock = roomBlockCandidates.find((block) => String(block.groupName).trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() === normalizedGroup && block.arrivalDate <= draft.groupRoom.departureDate && block.departureDate >= draft.groupRoom.arrivalDate);
+        const mergeExisting = String(req.body.mergeExisting || "") === "true";
+        if (matchingRoomBlock && !mergeExisting) return res.status(409).json({ error: `A manually entered ${draft.groupRoom.groupName} room block already covers these dates. You can merge the contract into it instead of creating a duplicate.`, code: "MATCHING_GROUP_EXISTS" });
+        const result = await db.transaction(async (tx) => {
+          const [booking] = await tx.insert(courtyardGroupBookings).values({ hotelId, groupName: draft.groupRoom.groupName, projectName: draft.groupRoom.projectName || null, sourceFormat: req.file!.originalname.toLowerCase().endsWith(".docx") ? "docx" : "pdf", importProfile: draft.profile || "contract_import", createdByUserId: req.salesUser.id }).returning();
+          await tx.insert(courtyardGroupBookingDocuments).values({ groupBookingId: booking.id, filename: req.file!.originalname, mimeType: req.file!.mimetype || "application/octet-stream", sizeBytes: req.file!.size, contentBase64: req.file!.buffer.toString("base64") });
+          const [roomBlock] = matchingRoomBlock && mergeExisting
+            ? await tx.update(courtyardGroupRoomBlocks).set({ groupBookingId: booking.id, ...groupRoomWriteValues(draft.groupRoom), updatedByUserId: req.salesUser.id, updatedAt: new Date() }).where(eq(courtyardGroupRoomBlocks.id, matchingRoomBlock.id)).returning()
+            : await tx.insert(courtyardGroupRoomBlocks).values({ hotelId, groupBookingId: booking.id, ...groupRoomWriteValues(draft.groupRoom), createdByUserId: req.salesUser.id, updatedByUserId: req.salesUser.id }).returning();
+          return { booking, roomBlock, event: null, count: 0 };
+        });
+        return res.status(201).json(result);
+      }
       const [space] = await db.select().from(courtyardMeetingSpaces).where(and(eq(courtyardMeetingSpaces.hotelId, hotelId), eq(courtyardMeetingSpaces.active, true))).limit(1);
       if (!space) return res.status(400).json({ error: "Configure a meeting space before importing this contract." });
       const meeting = { ...draft.meeting, hotelId, spaceId: space.id, attendance: draft.meeting.attendance || draft.groupRoom.peakRooms || null, squareFeetRequired: draft.meeting.meetingRoom === "pecan" ? 560 : draft.meeting.meetingRoom === "cedar" ? 1575 : 2135 };

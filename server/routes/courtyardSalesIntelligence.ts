@@ -1075,6 +1075,29 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
       res.json({ block });
     } catch (e) { next(e); }
   });
+  router.post("/meeting-calendar/group-rooms/:id/link-matching", async (req: any, res, next) => {
+    try {
+      const [block] = await db.select().from(courtyardGroupRoomBlocks).where(eq(courtyardGroupRoomBlocks.id, req.params.id)).limit(1);
+      if (!block || !hasHotel(req, block.hotelId)) return res.status(404).json({ error: "Group room block not found." });
+      const normalizedName = String(block.groupName).trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      const hotelEvents = await db.select().from(courtyardMeetingEvents).where(eq(courtyardMeetingEvents.hotelId, block.hotelId));
+      const matchingEvents = hotelEvents.filter((event) => !["cancelled", "expired"].includes(event.status) && String(event.groupName).trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() === normalizedName && event.eventDate >= block.arrivalDate && event.eventDate <= block.departureDate);
+      if (!matchingEvents.length) return res.status(404).json({ error: `No meeting-space entries named ${block.groupName} were found during this stay.` });
+      const eventBookingIds = Array.from(new Set(matchingEvents.map((event) => event.groupBookingId).filter(Boolean)));
+      if (eventBookingIds.length > 1 || (block.groupBookingId && eventBookingIds.length && eventBookingIds[0] !== block.groupBookingId)) return res.status(409).json({ error: "These entries are already connected to different group bookings. Review them before linking." });
+      const result = await db.transaction(async (tx) => {
+        let bookingId = block.groupBookingId || eventBookingIds[0] || null;
+        if (!bookingId) {
+          const [booking] = await tx.insert(courtyardGroupBookings).values({ hotelId: block.hotelId, groupName: block.groupName, projectName: block.projectName || null, sourceFormat: "manual", importProfile: "manual_link", createdByUserId: req.salesUser.id }).returning();
+          bookingId = booking.id;
+        }
+        await tx.update(courtyardGroupRoomBlocks).set({ groupBookingId: bookingId, updatedByUserId: req.salesUser.id, updatedAt: new Date() }).where(eq(courtyardGroupRoomBlocks.id, block.id));
+        await tx.update(courtyardMeetingEvents).set({ groupBookingId: bookingId, updatedByUserId: req.salesUser.id, updatedAt: new Date() }).where(inArray(courtyardMeetingEvents.id, matchingEvents.map((event) => event.id)));
+        return { bookingId, count: matchingEvents.length };
+      });
+      res.json(result);
+    } catch (error) { next(error); }
+  });
   router.delete("/meeting-calendar/group-rooms/:id", async (req: any, res, next) => {
     try {
       const [existing] = await db.select().from(courtyardGroupRoomBlocks).where(eq(courtyardGroupRoomBlocks.id, req.params.id)).limit(1);

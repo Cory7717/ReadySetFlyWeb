@@ -10,6 +10,7 @@ import {
   Plus,
   Printer,
   Share2,
+  Trash2,
   Upload,
 } from "lucide-react";
 import { apiUrl } from "@/lib/api";
@@ -42,7 +43,7 @@ import {
 
 async function request(url: string, init?: RequestInit) {
   const r = await fetch(apiUrl(url), { credentials: "include", ...init });
-  const b = await r.json();
+  const b = r.status === 204 ? {} : await r.json();
   if (!r.ok)
     throw Object.assign(new Error(b.error || "Request failed"), {
       code: b.code,
@@ -237,10 +238,15 @@ export default function CourtyardMeetingCalendar() {
     onSuccess: (result: any) => setContractPreview(result),
     onError: (error: Error) => toast({ title: "Could not read contract", description: error.message, variant: "destructive" }),
   });
-  const importContract = useMutation({
-    mutationFn: async () => { const data = new FormData(); data.append("hotelId", hotelId); data.append("file", contractFile!); data.append("draft", JSON.stringify(contractPreview.draft)); return request("/api/courtyard/sales-intelligence/meeting-calendar/contracts/import", { method: "POST", body: data }); },
-    onSuccess: (result: any) => { setContractOpen(false); setContractFile(null); setContractPreview(null); qc.invalidateQueries({ queryKey: ["meeting-calendar"] }); toast({ title: "Linked group booking imported", description: `Created the room block and ${result.count} meeting-space dates.` }); },
-    onError: (error: Error) => toast({ title: "Could not import contract", description: error.message, variant: "destructive" }),
+  const importContract = useMutation<any, any, boolean>({
+    mutationFn: async (mergeExisting) => { const data = new FormData(); data.append("hotelId", hotelId); data.append("file", contractFile!); data.append("draft", JSON.stringify(contractPreview.draft)); data.append("mergeExisting", String(mergeExisting)); return request("/api/courtyard/sales-intelligence/meeting-calendar/contracts/import", { method: "POST", body: data }); },
+    onSuccess: (result: any) => { setContractOpen(false); setContractFile(null); setContractPreview(null); qc.invalidateQueries({ queryKey: ["meeting-calendar"] }); toast({ title: "Linked group booking imported", description: `Saved the room block and ${result.count} meeting-space dates.` }); },
+    onError: (error: any) => { if (error.code === "MATCHING_GROUP_EXISTS") { if (window.confirm(`${error.message}\n\nMerge the uploaded contract into the existing group and meeting-space entries?`)) importContract.mutate(true); return; } toast({ title: "Could not import contract", description: error.message, variant: "destructive" }); },
+  });
+  const deleteGroupRoom = useMutation({
+    mutationFn: (block: any) => request(`/api/courtyard/sales-intelligence/meeting-calendar/group-rooms/${block.id}`, { method: "DELETE" }),
+    onSuccess: () => { setSelectedGroupRoom(null); qc.invalidateQueries({ queryKey: ["meeting-calendar"] }); toast({ title: "Group removed from the calendar" }); },
+    onError: (error: Error) => toast({ title: "Could not delete group", description: error.message, variant: "destructive" }),
   });
   const days = useMemo(
     () =>
@@ -898,7 +904,7 @@ export default function CourtyardMeetingCalendar() {
             {selectedGroupRoom.groupBookingId && events.some((event: any) => event.groupBookingId === selectedGroupRoom.groupBookingId) && <section className="rounded-xl border border-[#b9d0c2] bg-[#f3f8f4] p-4"><div className="text-xs font-bold uppercase text-[#2f5f46]">Linked meeting space</div>{Array.from(new Map(events.filter((event: any) => event.groupBookingId === selectedGroupRoom.groupBookingId).map((event: any) => [event.bookingSeriesId || event.id, event])).values()).map((event: any) => <button key={event.id} className="mt-2 w-full rounded-lg border bg-white p-3 text-left hover:border-[#2f5f46]" onClick={() => { setSelectedGroupRoom(null); setSelectedEvent(event); }}><b>{event.eventName}</b><div className="text-sm">Beginning {event.bookingStartDate || event.eventDate} · {event.meetingRoom?.replaceAll('_',' ')}</div></button>)}</section>}
             {selectedGroupRoom.groupBookingId && (cal.data?.groupBookingDocuments || []).some((document: any) => document.groupBookingId === selectedGroupRoom.groupBookingId) && <section><h3 className="mb-2 font-semibold">Original contract</h3>{(cal.data?.groupBookingDocuments || []).filter((document: any) => document.groupBookingId === selectedGroupRoom.groupBookingId).map((document: any) => <a key={document.id} className="block rounded-lg border p-3 text-blue-700 underline hover:bg-[#f4f8fb]" href={apiUrl(`/api/courtyard/sales-intelligence/meeting-calendar/group-bookings/${selectedGroupRoom.groupBookingId}/documents/${document.id}`)}>{document.filename}</a>)}</section>}
             <section><h3 className="mb-2 font-semibold">Operational preparation</h3><div className="space-y-2">{[["Arrival",selectedGroupRoom.arrivalNotes],["VIP / accommodations",selectedGroupRoom.vipNotes],["Transportation",selectedGroupRoom.transportationNotes],["Breakfast",selectedGroupRoom.breakfastNotes],["Front desk",selectedGroupRoom.frontDeskNotes],["Housekeeping",selectedGroupRoom.housekeepingNotes],["Billing",selectedGroupRoom.billingInstructions],["Internal",selectedGroupRoom.internalNotes]].filter(([,value]) => value).map(([label,value]) => <div key={String(label)} className="rounded-lg border bg-[#f4f8fb] p-3"><div className="text-xs font-bold uppercase text-[#315f86]">{label}</div><p className="whitespace-pre-wrap text-sm">{value}</p></div>)}</div></section>
-            <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setSelectedGroupRoom(null)}>Close</Button><Button className="bg-[#315f86] text-white" onClick={() => openEditGroupRoom(selectedGroupRoom)}>Edit group</Button></div>
+            <div className="flex flex-wrap justify-between gap-2"><Button variant="outline" className="border-red-300 text-red-700 hover:bg-red-50 hover:text-red-800" disabled={deleteGroupRoom.isPending} onClick={() => { const linked = Boolean(selectedGroupRoom.groupBookingId); const message = linked ? `Delete ${selectedGroupRoom.groupName}, its linked meeting-space dates, and its stored contract? This cannot be undone.` : `Delete ${selectedGroupRoom.groupName} and matching meeting-space dates during this stay? This cannot be undone.`; if (window.confirm(message)) deleteGroupRoom.mutate(selectedGroupRoom); }}><Trash2 className="mr-2 h-4 w-4" />{deleteGroupRoom.isPending ? "Deleting…" : "Delete group"}</Button><div className="flex gap-2"><Button variant="outline" onClick={() => setSelectedGroupRoom(null)}>Close</Button><Button className="bg-[#315f86] text-white" onClick={() => openEditGroupRoom(selectedGroupRoom)}>Edit group</Button></div></div>
           </>}
         </DialogContent>
       </Dialog>
@@ -917,7 +923,7 @@ export default function CourtyardMeetingCalendar() {
               <div><Label>Setup style</Label><Select value={contractPreview.draft.meeting.roomSetup} onValueChange={(roomSetup) => setContractPreview({ ...contractPreview, draft: { ...contractPreview.draft, meeting: { ...contractPreview.draft.meeting, roomSetup } } })}><SelectTrigger className="border-[#cdbda8] bg-white text-[#201814] dark:bg-white dark:text-[#201814]"><SelectValue /></SelectTrigger><SelectContent className="border-[#cdbda8] bg-white text-[#201814] dark:bg-white dark:text-[#201814]">{['classroom','theater','u_shape','conference','banquet','reception','custom'].map((setup) => <SelectItem key={setup} value={setup}>{setup.replaceAll('_',' ')}</SelectItem>)}</SelectContent></Select></div>
             </div></section>}
             <div className="rounded-lg border bg-[#fffaf2] p-3 text-sm"><b>Revenue allocation:</b> The lodging rate is kept separate from breakfast and meeting-space revenue so a packaged rate is not counted twice.</div>
-            <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setContractPreview(null)}>Choose another file</Button><Button className="bg-[#315f86] text-white" disabled={importContract.isPending} onClick={() => importContract.mutate()}>{importContract.isPending ? "Creating linked booking…" : "Confirm and create linked booking"}</Button></div>
+            <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setContractPreview(null)}>Choose another file</Button><Button className="bg-[#315f86] text-white" disabled={importContract.isPending} onClick={() => importContract.mutate(false)}>{importContract.isPending ? "Creating linked booking…" : "Confirm and create linked booking"}</Button></div>
           </div>}
         </DialogContent>
       </Dialog>

@@ -920,14 +920,34 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
       const dates: string[] = [], cursor = new Date(`${meeting.eventDate}T12:00:00Z`), rangeEnd = new Date(`${meeting.eventEndDate}T12:00:00Z`);
       while (cursor <= rangeEnd && dates.length <= 31) { dates.push(cursor.toISOString().slice(0, 10)); cursor.setUTCDate(cursor.getUTCDate() + 1); }
       const conflicts = await db.select().from(courtyardMeetingEvents).where(and(eq(courtyardMeetingEvents.spaceId, space.id), inArray(courtyardMeetingEvents.eventDate, dates)));
-      const conflict = conflicts.find((event) => !["cancelled", "completed", "expired"].includes(event.status) && meeting.setupStartTime < event.breakdownEndTime && event.setupStartTime < meeting.breakdownEndTime);
-      if (conflict) return res.status(409).json({ error: `Meeting space conflicts with ${conflict.groupName} on ${conflict.eventDate}. Review the calendar before importing.`, code: "MEETING_SPACE_CONFLICT" });
+      const normalizedGroup = (value: unknown) => String(value || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      const activeConflicts = conflicts.filter((event) => !["cancelled", "completed", "expired"].includes(event.status) && meeting.setupStartTime < event.breakdownEndTime && event.setupStartTime < meeting.breakdownEndTime);
+      const matchingEvents = conflicts.filter((event) => !["cancelled", "completed", "expired"].includes(event.status) && normalizedGroup(event.groupName) === normalizedGroup(draft.groupRoom.groupName));
+      const conflictingOtherGroup = activeConflicts.find((event) => normalizedGroup(event.groupName) !== normalizedGroup(draft.groupRoom.groupName));
+      if (conflictingOtherGroup) return res.status(409).json({ error: `Meeting space conflicts with ${conflictingOtherGroup.groupName} on ${conflictingOtherGroup.eventDate}. Review the calendar before importing.`, code: "MEETING_SPACE_CONFLICT" });
+      const roomBlockCandidates = await db.select().from(courtyardGroupRoomBlocks).where(eq(courtyardGroupRoomBlocks.hotelId, hotelId));
+      const matchingRoomBlock = roomBlockCandidates.find((block) => normalizedGroup(block.groupName) === normalizedGroup(draft.groupRoom.groupName) && block.arrivalDate <= draft.groupRoom.departureDate && block.departureDate >= draft.groupRoom.arrivalDate);
+      const mergeExisting = String(req.body.mergeExisting || "") === "true";
+      if ((matchingEvents.length || matchingRoomBlock) && !mergeExisting) return res.status(409).json({ error: `A manually entered ${draft.groupRoom.groupName} booking already covers these dates. You can merge the contract into that booking instead of creating a duplicate.`, code: "MATCHING_GROUP_EXISTS" });
       const result = await db.transaction(async (tx) => {
         const [booking] = await tx.insert(courtyardGroupBookings).values({ hotelId, groupName: draft.groupRoom.groupName, projectName: draft.groupRoom.projectName || null, sourceFormat: req.file!.originalname.toLowerCase().endsWith(".docx") ? "docx" : "pdf", importProfile: draft.profile || "contract_import", createdByUserId: req.salesUser.id }).returning();
         await tx.insert(courtyardGroupBookingDocuments).values({ groupBookingId: booking.id, filename: req.file!.originalname, mimeType: req.file!.mimetype || "application/octet-stream", sizeBytes: req.file!.size, contentBase64: req.file!.buffer.toString("base64") });
-        const [roomBlock] = await tx.insert(courtyardGroupRoomBlocks).values({ hotelId, groupBookingId: booking.id, ...groupRoomWriteValues(draft.groupRoom), createdByUserId: req.salesUser.id, updatedByUserId: req.salesUser.id }).returning();
+        const [roomBlock] = matchingRoomBlock && mergeExisting
+          ? await tx.update(courtyardGroupRoomBlocks).set({ groupBookingId: booking.id, ...groupRoomWriteValues(draft.groupRoom), updatedByUserId: req.salesUser.id, updatedAt: new Date() }).where(eq(courtyardGroupRoomBlocks.id, matchingRoomBlock.id)).returning()
+          : await tx.insert(courtyardGroupRoomBlocks).values({ hotelId, groupBookingId: booking.id, ...groupRoomWriteValues(draft.groupRoom), createdByUserId: req.salesUser.id, updatedByUserId: req.salesUser.id }).returning();
         const bookingSeriesId = crypto.randomUUID(), baseValues = meetingEventWriteValues(meeting, null, dates.length);
-        const events = await tx.insert(courtyardMeetingEvents).values(dates.map((eventDate) => ({ ...baseValues, hotelId, spaceId: space.id, groupBookingId: booking.id, eventDate, bookingSeriesId, bookingStartDate: dates[0], createdByUserId: req.salesUser.id, updatedByUserId: req.salesUser.id }))).returning();
+        let events: any[] = [];
+        if (matchingEvents.length && mergeExisting) {
+          const effectiveSeriesId = matchingEvents[0].bookingSeriesId || bookingSeriesId;
+          const { eventDate: _eventDate, ...sharedValues } = baseValues;
+          const updated = await tx.update(courtyardMeetingEvents).set({ ...sharedValues, hotelId, spaceId: space.id, groupBookingId: booking.id, bookingSeriesId: effectiveSeriesId, bookingStartDate: dates[0], updatedByUserId: req.salesUser.id, updatedAt: new Date() }).where(inArray(courtyardMeetingEvents.id, matchingEvents.map((event) => event.id))).returning();
+          const existingDates = new Set(matchingEvents.map((event) => event.eventDate));
+          const missingDates = dates.filter((eventDate) => !existingDates.has(eventDate));
+          const added = missingDates.length ? await tx.insert(courtyardMeetingEvents).values(missingDates.map((eventDate) => ({ ...baseValues, hotelId, spaceId: space.id, groupBookingId: booking.id, eventDate, bookingSeriesId: effectiveSeriesId, bookingStartDate: dates[0], createdByUserId: req.salesUser.id, updatedByUserId: req.salesUser.id }))).returning() : [];
+          events = [...updated, ...added];
+        } else {
+          events = await tx.insert(courtyardMeetingEvents).values(dates.map((eventDate) => ({ ...baseValues, hotelId, spaceId: space.id, groupBookingId: booking.id, eventDate, bookingSeriesId, bookingStartDate: dates[0], createdByUserId: req.salesUser.id, updatedByUserId: req.salesUser.id }))).returning();
+        }
         return { booking, roomBlock, event: events[0], count: events.length };
       });
       res.status(201).json(result);
@@ -1054,6 +1074,26 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
       const [block] = await db.update(courtyardGroupRoomBlocks).set({ ...groupRoomWriteValues(req.body), updatedByUserId: req.salesUser.id, updatedAt: new Date() }).where(eq(courtyardGroupRoomBlocks.id, existing.id)).returning();
       res.json({ block });
     } catch (e) { next(e); }
+  });
+  router.delete("/meeting-calendar/group-rooms/:id", async (req: any, res, next) => {
+    try {
+      const [existing] = await db.select().from(courtyardGroupRoomBlocks).where(eq(courtyardGroupRoomBlocks.id, req.params.id)).limit(1);
+      if (!existing || !hasHotel(req, existing.hotelId)) return res.status(404).json({ error: "Group room block not found." });
+      await db.transaction(async (tx) => {
+        if (existing.groupBookingId) {
+          await tx.delete(courtyardMeetingEvents).where(eq(courtyardMeetingEvents.groupBookingId, existing.groupBookingId));
+          await tx.delete(courtyardGroupRoomBlocks).where(eq(courtyardGroupRoomBlocks.groupBookingId, existing.groupBookingId));
+          await tx.delete(courtyardGroupBookings).where(eq(courtyardGroupBookings.id, existing.groupBookingId));
+        } else {
+          const hotelEvents = await tx.select().from(courtyardMeetingEvents).where(eq(courtyardMeetingEvents.hotelId, existing.hotelId));
+          const normalizedName = String(existing.groupName).trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+          const matchingEventIds = hotelEvents.filter((event) => String(event.groupName).trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim() === normalizedName && event.eventDate >= existing.arrivalDate && event.eventDate <= existing.departureDate).map((event) => event.id);
+          if (matchingEventIds.length) await tx.delete(courtyardMeetingEvents).where(inArray(courtyardMeetingEvents.id, matchingEventIds));
+          await tx.delete(courtyardGroupRoomBlocks).where(eq(courtyardGroupRoomBlocks.id, existing.id));
+        }
+      });
+      res.status(204).end();
+    } catch (error) { next(error); }
   });
   router.post("/transitions", async (req: any, res, next) => {
     try { const hotelId = String(req.body.hotelId || ""); if (!hasHotel(req, hotelId)) return res.status(403).json({ error: "Property access required." }); if (!String(req.body.title || "").trim()) return res.status(400).json({ error: "Title is required." }); if (!validDateOnly(req.body.departureDate)) return res.status(400).json({ error: "Enter a valid departure date." }); const [transition] = await db.insert(courtyardSalesTransitions).values({ hotelId, title: String(req.body.title).trim(), departureDate: req.body.departureDate || null, departingUserName: req.body.departingUserName || null, summary: req.body.summary || null, createdByUserId: req.salesUser.id }).returning(); res.status(201).json({ transition }); } catch (e) { next(e); }

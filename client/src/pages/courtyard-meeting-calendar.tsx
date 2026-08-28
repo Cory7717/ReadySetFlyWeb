@@ -341,6 +341,8 @@ export default function CourtyardMeetingCalendar() {
       .map((event: any) => [event.bookingSeriesId || event.id, event]),
   ).values()) as any[];
   const monthlyRevenue = monthlyEvents.reduce((sum, event) => sum + Number(event.expectedRevenue || 0), 0);
+  const monthlyGroupRoomRevenue = groupRoomBlocks.filter((block: any) => block.arrivalDate >= key(first) && block.arrivalDate <= key(last) && block.status !== "cancelled").reduce((sum: number, block: any) => sum + (Number(block.estimatedRoomRevenue || 0) || allocationRevenue(block)), 0);
+  const combinedMonthlyRevenue = monthlyRevenue + monthlyGroupRoomRevenue;
   const openNew = (date = "") => {
     setEditingEventId(null);
     setForm({
@@ -499,9 +501,13 @@ export default function CourtyardMeetingCalendar() {
         <div className="hidden rounded-lg border border-[#d8cbb9] bg-white px-3 py-2 text-[#201814] dark:border-[#d8cbb9] dark:bg-white dark:text-[#201814] md:block"><div className="mb-1 text-[10px] font-bold uppercase tracking-[.14em] text-[#8a6b3f]">Calendar legend</div><CalendarLegend /></div>
         <details className="rounded-lg border border-[#d8cbb9] bg-white px-3 py-2 text-[#201814] dark:border-[#d8cbb9] dark:bg-white dark:text-[#201814] md:hidden"><summary className="cursor-pointer text-xs font-bold uppercase tracking-[.14em] text-[#8a6b3f]">Calendar legend</summary><div className="mt-3"><CalendarLegend /></div></details>
         <Card className="border-[#cdbda8] bg-[#fffaf2] text-[#201814] dark:border-[#cdbda8] dark:bg-[#fffaf2] dark:text-[#201814]">
-          <CardContent className="flex flex-wrap items-center justify-between gap-3 bg-[#fffaf2] p-4 text-[#201814] dark:bg-[#fffaf2] dark:text-[#201814]">
-            <div><div className="text-xs font-bold uppercase tracking-[.16em] text-[#8a6b3f]">Monthly event revenue</div><div className="text-sm text-[#5f5247]">Active bookings beginning in {month.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</div></div>
-            <div className="text-3xl font-bold text-[#2f5f46]">{money(monthlyRevenue)}</div>
+          <CardContent className="bg-[#fffaf2] p-0 text-[#201814] dark:bg-[#fffaf2] dark:text-[#201814]">
+            <div className="border-b border-[#deceba] px-4 py-3"><div className="text-xs font-bold uppercase tracking-[.16em] text-[#8a6b3f]">Monthly booking revenue</div><div className="text-sm text-[#5f5247]">Active bookings arriving or beginning in {month.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</div></div>
+            <div className="grid sm:grid-cols-3">
+              <div className="border-b border-[#deceba] p-4 sm:border-b-0 sm:border-r"><div className="text-xs font-bold uppercase tracking-[.12em] text-[#8a6b3f]">Meeting / event revenue</div><div className="mt-1 text-2xl font-bold text-[#2f5f46]">{money(monthlyRevenue)}</div></div>
+              <div className="border-b border-[#deceba] p-4 sm:border-b-0 sm:border-r"><div className="text-xs font-bold uppercase tracking-[.12em] text-[#315f86]">Group Room revenue</div><div className="mt-1 text-2xl font-bold text-[#315f86]">{money(monthlyGroupRoomRevenue)}</div></div>
+              <div className="bg-[#f1e6d4] p-4 dark:bg-[#f1e6d4]"><div className="text-xs font-bold uppercase tracking-[.12em] text-[#5d4529]">Combined monthly revenue</div><div className="mt-1 text-3xl font-bold text-[#201814]">{money(combinedMonthlyRevenue)}</div></div>
+            </div>
           </CardContent>
         </Card>
         <Card className="border-[#bfd0df] bg-white text-[#201814]">

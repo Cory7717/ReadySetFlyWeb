@@ -391,13 +391,13 @@ export default function CourtyardMeetingCalendar() {
             <div className="text-xs font-bold uppercase tracking-[.2em] text-[#8a6b3f]">
               Courtyard Austin Lakeline
             </div>
-            <h1 className="text-3xl font-semibold">Meeting Space Calendar</h1>
+            <h1 className="text-2xl font-semibold sm:text-3xl">Meeting Space Calendar</h1>
             <p className="text-[#5f5247]">
               Operational availability for the hotel’s 2,000 sq. ft. meeting
               space.
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="grid w-full grid-cols-2 gap-2 sm:flex sm:w-auto">
             <Button asChild variant="outline">
               <Link href="/courtyard/sales-intelligence">
                 <ArrowLeft className="mr-2 h-4 w-4" />
@@ -418,9 +418,9 @@ export default function CourtyardMeetingCalendar() {
           </div>
         </div>
       </header>
-      <main className="mx-auto max-w-7xl space-y-4 p-4">
+      <main className="mx-auto max-w-7xl space-y-3 p-2 sm:space-y-4 sm:p-4">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
+          <div className="flex w-full items-center gap-2 sm:w-auto">
             <Button
               size="icon"
               variant="outline"
@@ -430,7 +430,7 @@ export default function CourtyardMeetingCalendar() {
             >
               <ChevronLeft />
             </Button>
-            <h2 className="min-w-48 text-center text-xl font-semibold">
+            <h2 className="min-w-0 flex-1 text-center text-lg font-semibold sm:min-w-48 sm:flex-none sm:text-xl">
               {month.toLocaleDateString("en-US", {
                 month: "long",
                 year: "numeric",
@@ -446,9 +446,9 @@ export default function CourtyardMeetingCalendar() {
               <ChevronRight />
             </Button>
           </div>
-          <div className="flex gap-2">
+          <div className="flex w-full flex-wrap gap-2 sm:w-auto">
             <Select value={calendarLayer} onValueChange={setCalendarLayer}>
-              <SelectTrigger className="w-[175px] bg-white"><SelectValue /></SelectTrigger>
+              <SelectTrigger className="min-w-[165px] flex-1 bg-white sm:w-[175px] sm:flex-none"><SelectValue /></SelectTrigger>
               <SelectContent><SelectItem value="all">All calendar items</SelectItem><SelectItem value="meetings">Meeting space only</SelectItem><SelectItem value="groups">Group rooms only</SelectItem></SelectContent>
             </Select>
             <Button
@@ -503,13 +503,13 @@ export default function CourtyardMeetingCalendar() {
           </CardContent>
         </Card>
         <Card className="border-[#bfd0df] bg-white text-[#201814]">
-          <CardHeader className="pb-2"><div className="flex items-center justify-between gap-3"><div><CardTitle className="flex items-center gap-2 text-lg"><BedDouble className="h-5 w-5 text-[#315f86]" />Upcoming Groups</CardTitle><CardDescription>Next five active room blocks for front desk and operations.</CardDescription></div><Button size="sm" variant="outline" onClick={() => openNewGroupRoom()}><Plus className="mr-1 h-4 w-4" />Add group</Button></div></CardHeader>
+          <CardHeader className="pb-2"><div className="flex flex-wrap items-center justify-between gap-3"><div><CardTitle className="flex items-center gap-2 text-lg"><BedDouble className="h-5 w-5 text-[#315f86]" />Upcoming Groups</CardTitle><CardDescription>Next five active room blocks for front desk and operations.</CardDescription></div><Button size="sm" variant="outline" onClick={() => openNewGroupRoom()}><Plus className="mr-1 h-4 w-4" />Add group</Button></div></CardHeader>
           <CardContent>
-            {upcomingGroups.length ? <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-5">{upcomingGroups.map((block: any) => <button key={block.id} className="rounded-lg border border-[#bfd0df] bg-[#f4f8fb] p-3 text-left hover:border-[#315f86]" onClick={() => setSelectedGroupRoom(block)}><div className="flex items-center gap-1.5"><div className="min-w-0 flex-1 truncate font-semibold">{block.groupName}</div><BookingTypeBadge type={groupBookingType(block)} /></div><div className="text-xs text-[#4c6478]">{block.arrivalDate} – {block.departureDate}</div><div className="mt-1 text-sm">{block.peakRooms || 0} peak rooms · {block.totalRoomNights || 0} nights</div></button>)}</div> : <p className="text-sm text-[#5f5247]">No upcoming group room blocks in this calendar range.</p>}
+            {upcomingGroups.length ? <div className="flex snap-x gap-2 overflow-x-auto pb-1 md:grid md:grid-cols-2 md:overflow-visible lg:grid-cols-5">{upcomingGroups.map((block: any) => <button key={block.id} className="min-w-[235px] snap-start rounded-lg border border-[#bfd0df] bg-[#f4f8fb] p-3 text-left hover:border-[#315f86] md:min-w-0" onClick={() => setSelectedGroupRoom(block)}><div className="flex items-center gap-1.5"><div className="min-w-0 flex-1 truncate font-semibold">{block.groupName}</div><BookingTypeBadge type={groupBookingType(block)} /></div><div className="text-xs text-[#4c6478]">{block.arrivalDate} – {block.departureDate}</div><div className="mt-1 text-sm">{block.peakRooms || 0} peak rooms · {block.totalRoomNights || 0} nights</div></button>)}</div> : <p className="text-sm text-[#5f5247]">No upcoming group room blocks in this calendar range.</p>}
           </CardContent>
         </Card>
         {view === "month" ? (
-          <div className="overflow-hidden rounded-xl border border-[#cdbda8] bg-white">
+          <><div className="hidden overflow-hidden rounded-xl border border-[#cdbda8] bg-white md:block">
             <div className="grid grid-cols-7 bg-[#eadfce] text-center text-sm font-semibold">
               {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((x) => (
                 <div className="p-2" key={x}>
@@ -551,6 +551,19 @@ export default function CourtyardMeetingCalendar() {
               })}
             </div>
           </div>
+          <div className="space-y-2 md:hidden">
+            {days.filter((day) => {
+              if (day.getMonth() !== month.getMonth()) return false;
+              const date = key(day);
+              const hasEvents = calendarLayer !== "groups" && events.some((event: any) => event.eventDate === date);
+              const hasGroups = calendarLayer !== "meetings" && groupRoomBlocks.some((block: any) => block.arrivalDate <= date && block.departureDate >= date && block.status !== "cancelled");
+              return hasEvents || hasGroups;
+            }).map((day) => {
+              const date = key(day), mobileEvents = calendarLayer === "groups" ? [] : events.filter((event: any) => event.eventDate === date), mobileGroups = calendarLayer === "meetings" ? [] : groupRoomBlocks.filter((block: any) => block.arrivalDate <= date && block.departureDate >= date && block.status !== "cancelled");
+              return <section key={date} className="overflow-hidden rounded-xl border border-[#cdbda8] bg-white text-[#201814]"><button className="flex w-full items-center justify-between bg-[#eadfce] px-3 py-2 text-left" onClick={() => openNew(date)}><span className="font-semibold">{day.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}</span><Plus className="h-4 w-4" /></button><div className="space-y-2 p-2">{mobileEvents.map((event: any) => <button key={event.id} className={`w-full rounded-lg p-3 text-left ${colors[event.status] || colors.inquiry}`} onClick={() => setSelectedEvent(event)}><div className="flex items-start gap-2"><div className="min-w-0 flex-1"><div className="truncate font-semibold">{event.groupName} · {event.eventName}</div><div className="text-xs">{event.guestStartTime.slice(0, 5)}–{event.guestEndTime.slice(0, 5)} · {event.status.replaceAll("_", " ")}</div></div><BookingTypeBadge type={meetingBookingType(event)} /></div></button>)}{mobileGroups.map((block: any) => { const marker = date === block.arrivalDate ? "ARRIVAL" : date === block.departureDate ? "DEPARTURE" : "IN HOUSE"; return <button key={block.id} className={`w-full rounded-lg border border-blue-200 p-3 text-left ${groupStatusColors[block.status] || groupStatusColors.prospect}`} onClick={() => setSelectedGroupRoom(block)}><div className="flex items-start gap-2"><div className="min-w-0 flex-1"><div className="truncate font-semibold">{marker} · {block.groupName}</div><div className="text-xs">{date === block.departureDate ? "Checks out" : `${block.peakRooms || 0} rooms`} · {block.status.replaceAll("_", " ")}</div></div><BookingTypeBadge type={groupBookingType(block)} /></div></button>; })}</div></section>;
+            })}
+            {!days.some((day) => { const date = key(day); return day.getMonth() === month.getMonth() && ((calendarLayer !== "groups" && events.some((event: any) => event.eventDate === date)) || (calendarLayer !== "meetings" && groupRoomBlocks.some((block: any) => block.arrivalDate <= date && block.departureDate >= date && block.status !== "cancelled"))); }) && <div className="rounded-xl border border-dashed border-[#cdbda8] bg-white p-6 text-center text-sm text-[#5f5247]">No calendar entries this month.</div>}
+          </div></>
         ) : (
           <Card>
             <CardContent className="space-y-2 p-4">

@@ -4,7 +4,7 @@ import express from "express";
 import multer from "multer";
 import crypto from "crypto";
 import AdmZip from "adm-zip";
-import pdfParse from "pdf-parse";
+import pdfParse from "pdf-parse/lib/pdf-parse.js";
 import { and, asc, desc, eq, gte, inArray, lt } from "drizzle-orm";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { db } from "../db";

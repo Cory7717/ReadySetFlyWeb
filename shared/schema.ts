@@ -2323,7 +2323,7 @@ export const courtyardGroupRoomBlocks = pgTable("courtyard_group_room_blocks", {
   groupName: text("group_name").notNull(), projectName: text("project_name"),
   arrivalDate: date("arrival_date").notNull(), departureDate: date("departure_date").notNull(),
   status: text("status").notNull().default("prospect"), peakRooms: integer("peak_rooms"), totalRoomNights: integer("total_room_nights"),
-  roomTypeMix: text("room_type_mix"), groupRate: numeric("group_rate", { precision: 12, scale: 2 }), estimatedRoomRevenue: numeric("estimated_room_revenue", { precision: 12, scale: 2 }),
+  roomTypeMix: text("room_type_mix"), roomAllocationsJson: text("room_allocations_json"), groupRate: numeric("group_rate", { precision: 12, scale: 2 }), estimatedRoomRevenue: numeric("estimated_room_revenue", { precision: 12, scale: 2 }),
   bookingMethod: text("booking_method"), cutoffDate: date("cutoff_date"), groupCode: text("group_code"), taxExempt: boolean("tax_exempt").notNull().default(false),
   primaryContactName: text("primary_contact_name"), primaryContactEmail: text("primary_contact_email"), primaryContactPhone: text("primary_contact_phone"), salesOwner: text("sales_owner"),
   billingInstructions: text("billing_instructions"), depositDueDate: date("deposit_due_date"), depositAmount: numeric("deposit_amount", { precision: 12, scale: 2 }),

@@ -263,11 +263,15 @@ function groupRoomWriteValues(body: any) {
   const totalRoomNights = body?.totalRoomNights === "" || body?.totalRoomNights == null ? null : Number(body.totalRoomNights);
   const groupRate = body?.groupRate === "" || body?.groupRate == null ? null : Number(body.groupRate);
   const depositAmount = body?.depositAmount === "" || body?.depositAmount == null ? null : Number(body.depositAmount);
+  let roomAllocations: any[] = [];
+  try { roomAllocations = Array.isArray(body?.roomAllocations) ? body.roomAllocations : body?.roomAllocationsJson ? JSON.parse(body.roomAllocationsJson) : []; } catch { roomAllocations = []; }
+  roomAllocations = roomAllocations.filter((item) => item && String(item.roomType || "").trim()).map((item) => ({ roomType: String(item.roomType).trim(), roomsPerNight: Number(item.roomsPerNight || 0), roomNights: Number(item.roomNights || 0), rate: Number(item.rate || 0), revenue: Number(item.roomNights || 0) * Number(item.rate || 0) }));
+  const allocationRevenue = roomAllocations.reduce((sum, item) => sum + item.revenue, 0);
   return {
     groupName: String(body?.groupName || "").trim(), projectName: String(body?.projectName || "").trim() || null,
     arrivalDate: body.arrivalDate, departureDate: body.departureDate, status: String(body?.status || "prospect"),
-    peakRooms, totalRoomNights, roomTypeMix: String(body?.roomTypeMix || "").trim() || null,
-    groupRate: groupRate == null ? null : groupRate.toFixed(2), estimatedRoomRevenue: groupRate == null || totalRoomNights == null ? null : (groupRate * totalRoomNights).toFixed(2),
+    peakRooms, totalRoomNights, roomTypeMix: String(body?.roomTypeMix || "").trim() || null, roomAllocationsJson: roomAllocations.length ? JSON.stringify(roomAllocations) : null,
+    groupRate: groupRate == null ? null : groupRate.toFixed(2), estimatedRoomRevenue: roomAllocations.length ? allocationRevenue.toFixed(2) : groupRate == null || totalRoomNights == null ? null : (groupRate * totalRoomNights).toFixed(2),
     bookingMethod: String(body?.bookingMethod || "").trim() || null, cutoffDate: body?.cutoffDate || null, groupCode: String(body?.groupCode || "").trim() || null, taxExempt: Boolean(body?.taxExempt),
     primaryContactName: String(body?.primaryContactName || "").trim() || null, primaryContactEmail: String(body?.primaryContactEmail || "").trim() || null, primaryContactPhone: String(body?.primaryContactPhone || "").trim() || null, salesOwner: String(body?.salesOwner || "").trim() || null,
     billingInstructions: String(body?.billingInstructions || "").trim() || null, depositDueDate: body?.depositDueDate || null, depositAmount: depositAmount == null ? null : depositAmount.toFixed(2),
@@ -282,6 +286,7 @@ function groupRoomValidationError(body: any) {
   if (!GROUP_ROOM_STATUSES.includes(String(body?.status || ""))) return "Choose a valid group status.";
   for (const field of ["peakRooms", "totalRoomNights"]) { const value = body?.[field]; if (value !== "" && value != null && (!Number.isInteger(Number(value)) || Number(value) < 0)) return "Room counts must be non-negative whole numbers."; }
   for (const field of ["groupRate", "depositAmount"]) { const value = body?.[field]; if (value !== "" && value != null && (!Number.isFinite(Number(value)) || Number(value) < 0)) return "Rates and deposits must be valid non-negative amounts."; }
+  if (Array.isArray(body?.roomAllocations)) for (const allocation of body.roomAllocations) if (!String(allocation?.roomType || "").trim() || !Number.isFinite(Number(allocation?.rate)) || Number(allocation.rate) < 0 || !Number.isInteger(Number(allocation?.roomNights)) || Number(allocation.roomNights) < 0) return "Each room allocation needs a room type, valid rate, and whole-number room-night total.";
   return null;
 }
 function isoContractDate(value: string) {
@@ -305,6 +310,27 @@ function legacyTime(value: string) {
   if (match[3].toUpperCase() === "PM" && hour !== 12) hour += 12;
   if (match[3].toUpperCase() === "AM" && hour === 12) hour = 0;
   return `${String(hour).padStart(2, "0")}:${match[2]}`;
+}
+function parseModernRoomsContract(normalized: string) {
+  const groupName = firstMatch(normalized, /(?:^|\n)Group Name\s*\n?([^\n]+)/i) || firstMatch(normalized, /between[^\n]+and\s+([^\n(]+)\s*\("Group"\)/i);
+  const arrivalDate = isoContractDate(firstMatch(normalized, /(?:^|\n)Arrival\s*\n?([^\n]+)/i));
+  const departureDate = isoContractDate(firstMatch(normalized, /(?:^|\n)Departure\s*\n?([^\n]+)/i));
+  const totalRoomNights = Number(firstMatch(normalized, /Total Room Nights\s*\n?(\d+)/i)) || null;
+  const peakRooms = Number(firstMatch(normalized, /Rooms Per Night\s*\n?(\d+)/i)) || null;
+  const blockSection = normalized.match(/3\.\s*GUEST ROOM BLOCK([\s\S]*?)(?:4\.\s*ESTIMATED CONTRACT VALUE)/i)?.[1] || "";
+  const roomAllocations: any[] = [];
+  for (const match of blockSection.matchAll(/(Standard[^\n]+)\s*\n(\d+)\s*\n(\d+)\s*\n\$([\d,.]+)/gi)) {
+    const nightlyCounts = [Number(match[2]), Number(match[3])], rate = Number(match[4].replace(/,/g, ""));
+    roomAllocations.push({ roomType: match[1].trim(), roomsPerNight: Math.max(...nightlyCounts), roomNights: nightlyCounts.reduce((sum, count) => sum + count, 0), rate, revenue: nightlyCounts.reduce((sum, count) => sum + count, 0) * rate });
+  }
+  const roomTypeMix = roomAllocations.map((item) => `${item.roomsPerNight} ${item.roomType} @ $${item.rate.toFixed(2)}`).join("; ");
+  const cutoffDate = isoContractDate(firstMatch(normalized, /(?:^|\n)Cut-Off Date\s*\n([^\n]+)/i));
+  const warnings: string[] = [];
+  if (!groupName || !arrivalDate || !departureDate) warnings.push("Confirm the group name, arrival date, and departure date.");
+  if (!roomAllocations.length) warnings.push("No detailed room-type allocations were found; enter each room type and rate before importing.");
+  if (totalRoomNights && roomAllocations.length && roomAllocations.reduce((sum, item) => sum + item.roomNights, 0) !== totalRoomNights) warnings.push("Room-type allocations do not add up to the stated total room nights.");
+  if (/\[\s*\]\s*Individual guests pay/i.test(normalized)) warnings.push("No billing arrangement is selected in the contract.");
+  return { profile: "courtyard_group_rooms_agreement_v2", warnings, groupRoom: { groupName, projectName: groupName, arrivalDate, departureDate, status: "tentative", peakRooms, totalRoomNights, roomTypeMix, roomAllocations, groupRate: roomAllocations.length === 1 ? roomAllocations[0].rate : null, bookingMethod: "other", cutoffDate, primaryContactName: firstMatch(normalized, /Primary Contact\s*\n?([^\n]+)/i), primaryContactEmail: firstMatch(normalized, /(?:^|\n)Email\s*\n?([^\n]+)/i), primaryContactPhone: firstMatch(normalized, /(?:^|\n)Phone\s*\n?([^\n]+)/i).replace(/^Not provided$/i, ""), salesOwner: firstMatch(normalized, /Hotel Sales Contact\s*\n?([^,\n]+)/i), billingInstructions: "Review and select the billing arrangement before finalizing.", internalNotes: "Imported from the current Group Rooms Agreement format." }, meeting: null };
 }
 function parseLegacyGroupContract(normalized: string) {
   const groupName = firstMatch(normalized, /(?:^|\n)Group:\s*([^\n]+)/i).replace(/\s*\(Copy\)\s*$/i, "");
@@ -335,6 +361,7 @@ function parseLegacyGroupContract(normalized: string) {
 }
 export function parseGroupContract(text: string) {
   const normalized = text.replace(/\u00a0/g, " ").replace(/[ \t]+/g, " ");
+  if (/GROUP ROOMS AGREEMENT/i.test(normalized) && /Rooms Per Night/i.test(normalized)) return parseModernRoomsContract(normalized);
   if (/GUEST ROOMS ONLY AGREEMENT|GROUP SALES AGREEMENT/i.test(normalized)) return parseLegacyGroupContract(normalized);
   const groupName = firstMatch(normalized, /(?:^|\n)Group(?! Rooms)\s*([^\n]+)/i) || firstMatch(normalized, /between[^\n]+and\s+([^\n(]+)\s*\("Group"\)/i);
   const arrivalDate = isoContractDate(firstMatch(normalized, /Guest Arrival\s*([^\n]+)/i));

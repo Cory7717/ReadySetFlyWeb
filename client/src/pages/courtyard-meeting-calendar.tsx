@@ -71,10 +71,11 @@ const eventRevenueTotal = (value: any) => Number(value?.roomRentalRevenue || 0) 
 const colors: any = {
   inquiry: "bg-slate-100 text-slate-800",
   courtesy_hold: "bg-amber-100 text-amber-900",
-  tentative: "bg-orange-100 text-orange-900",
+  tentative: "bg-[#eadfce] text-[#4a3828]",
   contract_sent: "bg-blue-100 text-blue-900",
   definite: "bg-emerald-100 text-emerald-900",
-  completed: "bg-gray-200 text-gray-800",
+  in_house: "bg-violet-100 text-violet-900",
+  completed: "bg-slate-200 text-slate-800",
   cancelled: "bg-red-100 text-red-900",
   expired: "bg-red-50 text-red-700",
 };
@@ -121,11 +122,19 @@ const emptyGroupRoom = {
   billingInstructions: "", depositDueDate: "", depositAmount: "", arrivalNotes: "", vipNotes: "", transportationNotes: "", breakfastNotes: "",
   frontDeskNotes: "", housekeepingNotes: "", internalNotes: "",
 };
-const groupStatusColors: any = { prospect: "bg-slate-100 text-slate-800", tentative: "bg-sky-100 text-sky-900", definite: "bg-blue-700 text-white", in_house: "bg-violet-700 text-white", completed: "bg-gray-200 text-gray-800", cancelled: "bg-red-100 text-red-900" };
+const groupStatusColors: any = { prospect: "bg-slate-100 text-slate-800", tentative: "bg-[#eadfce] text-[#4a3828]", definite: "bg-emerald-100 text-emerald-900", in_house: "bg-violet-100 text-violet-900", completed: "bg-slate-200 text-slate-800", cancelled: "bg-red-100 text-red-900" };
+const statusLegend = [
+  ["Inquiry / prospect", "bg-slate-100 border-slate-300"], ["Tentative", "bg-[#eadfce] border-[#cdbda8]"], ["Courtesy hold", "bg-amber-100 border-amber-300"],
+  ["Contract sent", "bg-blue-100 border-blue-300"], ["Definite", "bg-emerald-100 border-emerald-300"], ["In house", "bg-violet-100 border-violet-300"],
+  ["Completed", "bg-slate-200 border-slate-400"], ["Cancelled / expired", "bg-red-100 border-red-300"],
+];
 const groupNights = (block: any) => block?.arrivalDate && block?.departureDate ? Math.max(0, Math.round((new Date(`${block.departureDate}T12:00:00Z`).getTime() - new Date(`${block.arrivalDate}T12:00:00Z`).getTime()) / 86400000)) : 0;
 function BookingTypeBadge({ type }: { type: "rooms" | "event" | "both" }) {
   const styles = type === "both" ? "border-violet-300 bg-violet-100 text-violet-900" : type === "rooms" ? "border-blue-300 bg-blue-100 text-blue-900" : "border-emerald-300 bg-emerald-100 text-emerald-900";
   return <span className={`inline-flex shrink-0 items-center rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${styles}`}>{type}</span>;
+}
+function CalendarLegend() {
+  return <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-[#4f443b]">{statusLegend.map(([label, swatch]) => <span key={label} className="inline-flex items-center gap-1.5"><span className={`h-3 w-3 rounded-sm border ${swatch}`} />{label}</span>)}<span className="mx-1 hidden h-4 border-l border-[#cdbda8] lg:block" /><BookingTypeBadge type="rooms" /><BookingTypeBadge type="event" /><BookingTypeBadge type="both" /></div>;
 }
 
 export default function CourtyardMeetingCalendar() {
@@ -485,6 +494,8 @@ export default function CourtyardMeetingCalendar() {
             </Button>
           </div>
         </div>
+        <div className="hidden rounded-lg border border-[#d8cbb9] bg-white px-3 py-2 text-[#201814] dark:border-[#d8cbb9] dark:bg-white dark:text-[#201814] md:block"><div className="mb-1 text-[10px] font-bold uppercase tracking-[.14em] text-[#8a6b3f]">Calendar legend</div><CalendarLegend /></div>
+        <details className="rounded-lg border border-[#d8cbb9] bg-white px-3 py-2 text-[#201814] dark:border-[#d8cbb9] dark:bg-white dark:text-[#201814] md:hidden"><summary className="cursor-pointer text-xs font-bold uppercase tracking-[.14em] text-[#8a6b3f]">Calendar legend</summary><div className="mt-3"><CalendarLegend /></div></details>
         <Card className="border-[#cdbda8] bg-[#fffaf2] text-[#201814] dark:border-[#cdbda8] dark:bg-[#fffaf2] dark:text-[#201814]">
           <CardContent className="flex flex-wrap items-center justify-between gap-3 bg-[#fffaf2] p-4 text-[#201814] dark:bg-[#fffaf2] dark:text-[#201814]">
             <div><div className="text-xs font-bold uppercase tracking-[.16em] text-[#8a6b3f]">Monthly event revenue</div><div className="text-sm text-[#5f5247]">Active bookings beginning in {month.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</div></div>

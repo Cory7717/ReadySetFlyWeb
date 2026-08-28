@@ -234,6 +234,14 @@ export default function CourtyardMeetingCalendar() {
     onSuccess: () => { setGroupRoomOpen(false); setSelectedGroupRoom(null); setEditingGroupRoomId(null); setGroupRoomForm(emptyGroupRoom); qc.invalidateQueries({ queryKey: ["meeting-calendar"] }); toast({ title: editingGroupRoomId ? "Group room block updated" : "Group room block added" }); },
     onError: (error: Error) => toast({ title: "Could not save group room block", description: error.message, variant: "destructive" }),
   });
+  const deleteMeetingEvent = useMutation({
+    mutationFn: (event: any) => request(`/api/courtyard/sales-intelligence/meeting-calendar/events/${event.id}`, { method: "DELETE" }),
+    onSuccess: () => { setSelectedEvent(null); setOpen(false); setEditingEventId(null); qc.invalidateQueries({ queryKey: ["meeting-calendar"] }); toast({ title: "Meeting-space event removed", description: "The associated Group Rooms booking was left unchanged." }); },
+    onError: (error: Error) => toast({ title: "Could not delete meeting-space event", description: error.message, variant: "destructive" }),
+  });
+  const confirmDeleteMeetingEvent = (event: any) => {
+    if (window.confirm(`Delete ${event.eventName || "this meeting-space event"} from every date in its series? Group Rooms and the stored contract will not be deleted.`)) deleteMeetingEvent.mutate(event);
+  };
   const previewContract = useMutation({
     mutationFn: async () => { const data = new FormData(); data.append("hotelId", hotelId); data.append("file", contractFile!); return request("/api/courtyard/sales-intelligence/meeting-calendar/contracts/preview", { method: "POST", body: data }); },
     onSuccess: (result: any) => { setContractMergeMessage(""); setContractPreview(result); },
@@ -755,13 +763,7 @@ export default function CourtyardMeetingCalendar() {
                 setForm({ ...form, internalNotes: e.target.value })
               }
             />
-            <Button
-              className="bg-[#2f5f46] text-white md:col-span-2"
-              disabled={save.isPending}
-              onClick={() => save.mutate(form)}
-            >
-              {save.isPending ? "Saving…" : editingEventId ? "Save changes" : "Save event"}
-            </Button>
+            <div className="flex flex-wrap justify-between gap-2 md:col-span-2">{editingEventId ? <Button variant="outline" className="border-red-300 text-red-700 hover:bg-red-50 hover:text-red-800" disabled={deleteMeetingEvent.isPending} onClick={() => confirmDeleteMeetingEvent({ ...form, id: editingEventId })}><Trash2 className="mr-2 h-4 w-4" />{deleteMeetingEvent.isPending ? "Deleting…" : "Delete event"}</Button> : <span />}<Button className="min-w-48 bg-[#2f5f46] text-white" disabled={save.isPending} onClick={() => save.mutate(form)}>{save.isPending ? "Saving…" : editingEventId ? "Save changes" : "Save event"}</Button></div>
           </div>
         </DialogContent>
       </Dialog>
@@ -779,6 +781,7 @@ export default function CourtyardMeetingCalendar() {
                     {selectedEvent.status.replaceAll("_", " ")}
                   </Badge>
                 </div>
+                <div className="flex pt-2"><Button size="sm" variant="outline" className="border-red-300 text-red-700 hover:bg-red-50 hover:text-red-800" disabled={deleteMeetingEvent.isPending} onClick={() => confirmDeleteMeetingEvent(selectedEvent)}><Trash2 className="mr-2 h-4 w-4" />{deleteMeetingEvent.isPending ? "Deleting…" : "Delete event"}</Button></div>
               </DialogHeader>
 
               <section className="rounded-xl border border-[#deceba] bg-[#fffaf2] p-4">

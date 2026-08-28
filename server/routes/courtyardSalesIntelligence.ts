@@ -1052,6 +1052,27 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
       res.json({ event: events[0], events, count: events.length });
     } catch (error) { next(error); }
   });
+  router.delete("/meeting-calendar/events/:id", async (req: any, res, next) => {
+    try {
+      const [existing] = await db.select().from(courtyardMeetingEvents).where(eq(courtyardMeetingEvents.id, req.params.id)).limit(1);
+      if (!existing || !hasHotel(req, existing.hotelId)) return res.status(404).json({ error: "Meeting-space event not found." });
+      let eventIds: string[] = [];
+      if (existing.bookingSeriesId) {
+        const series = await db.select({ id: courtyardMeetingEvents.id }).from(courtyardMeetingEvents).where(eq(courtyardMeetingEvents.bookingSeriesId, existing.bookingSeriesId));
+        eventIds = series.map((event) => event.id);
+      } else {
+        const matches = await db.select().from(courtyardMeetingEvents).where(and(eq(courtyardMeetingEvents.hotelId, existing.hotelId), eq(courtyardMeetingEvents.spaceId, existing.spaceId), eq(courtyardMeetingEvents.groupName, existing.groupName), eq(courtyardMeetingEvents.eventName, existing.eventName))).orderBy(asc(courtyardMeetingEvents.eventDate));
+        const selectedIndex = matches.findIndex((event) => event.id === existing.id);
+        let firstIndex = selectedIndex, lastIndex = selectedIndex;
+        const dayGap = (left: string, right: string) => Math.round((new Date(`${right}T12:00:00Z`).getTime() - new Date(`${left}T12:00:00Z`).getTime()) / 86400000);
+        while (firstIndex > 0 && dayGap(matches[firstIndex - 1].eventDate, matches[firstIndex].eventDate) <= 1) firstIndex -= 1;
+        while (lastIndex >= 0 && lastIndex < matches.length - 1 && dayGap(matches[lastIndex].eventDate, matches[lastIndex + 1].eventDate) <= 1) lastIndex += 1;
+        eventIds = selectedIndex >= 0 ? matches.slice(firstIndex, lastIndex + 1).map((event) => event.id) : [existing.id];
+      }
+      await db.delete(courtyardMeetingEvents).where(inArray(courtyardMeetingEvents.id, eventIds));
+      res.status(204).end();
+    } catch (error) { next(error); }
+  });
   router.post("/meeting-calendar/events/:id/documents",transitionUpload.single("file"),async(req:any,res,next)=>{try{const [event]=await db.select().from(courtyardMeetingEvents).where(eq(courtyardMeetingEvents.id,req.params.id)).limit(1);if(!event||!hasHotel(req,event.hotelId))return res.status(404).json({error:"Event not found."});if(!req.file)return res.status(400).json({error:"Choose a file."});const [document]=await db.insert(courtyardMeetingEventDocuments).values({eventId:event.id,filename:req.file.originalname,mimeType:req.file.mimetype||"application/octet-stream",sizeBytes:req.file.size,category:req.body.category||"other",contentBase64:req.file.buffer.toString("base64"),uploadedByUserId:req.salesUser.id}).returning();res.status(201).json({document:{...document,contentBase64:undefined}});}catch(e){next(e);}});
   router.get("/meeting-calendar/events/:eventId/documents/:id",async(req:any,res,next)=>{try{const [event]=await db.select().from(courtyardMeetingEvents).where(eq(courtyardMeetingEvents.id,req.params.eventId)).limit(1);if(!event||!hasHotel(req,event.hotelId))return res.status(404).json({error:"Event not found."});const [doc]=await db.select().from(courtyardMeetingEventDocuments).where(and(eq(courtyardMeetingEventDocuments.id,req.params.id),eq(courtyardMeetingEventDocuments.eventId,event.id))).limit(1);if(!doc)return res.status(404).json({error:"Document not found."});res.setHeader("Content-Type",doc.mimeType);res.setHeader("Content-Disposition",`attachment; filename="${doc.filename.replace(/[\r\n"]/g,"_")}"`);res.send(Buffer.from(doc.contentBase64,"base64"));}catch(e){next(e);}});
   router.post("/meeting-calendar/shares",async(req:any,res,next)=>{try{const hotelId=String(req.body.hotelId||"");if(!hasHotel(req,hotelId))return res.status(403).json({error:"Property access required."});const token=crypto.randomBytes(32).toString("base64url"),days=Math.min(30,Math.max(1,Number(req.body.expiresInDays||7))),expiresAt=new Date(Date.now()+days*86400000);const [share]=await db.insert(courtyardMeetingCalendarShares).values({hotelId,tokenHash:transitionTokenHash(token),recipientName:req.body.recipientName||null,rangeStart:req.body.rangeStart||null,rangeEnd:req.body.rangeEnd||null,expiresAt,createdByUserId:req.salesUser.id}).returning();const base=(process.env.FRONTEND_BASE_URL||"https://readysetfly.us").replace(/\/$/,"");res.status(201).json({share,url:`${base}/courtyard/meeting-calendar/share/${token}`});}catch(e){next(e);}});

@@ -130,7 +130,7 @@ const statusLegend = [
 ];
 const groupNights = (block: any) => block?.arrivalDate && block?.departureDate ? Math.max(0, Math.round((new Date(`${block.departureDate}T12:00:00Z`).getTime() - new Date(`${block.arrivalDate}T12:00:00Z`).getTime()) / 86400000)) : 0;
 function BookingTypeBadge({ type }: { type: "rooms" | "event" | "both" }) {
-  const styles = type === "both" ? "border-violet-300 bg-violet-100 text-violet-900" : type === "rooms" ? "border-blue-300 bg-blue-100 text-blue-900" : "border-emerald-300 bg-emerald-100 text-emerald-900";
+  const styles = type === "both" ? "border-violet-300 bg-violet-100 text-violet-900" : type === "rooms" ? "border-blue-300 bg-blue-100 text-blue-900" : "border-[#343a40] bg-[#343a40] text-white";
   return <span className={`inline-flex shrink-0 items-center rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${styles}`}>{type}</span>;
 }
 function CalendarLegend() {

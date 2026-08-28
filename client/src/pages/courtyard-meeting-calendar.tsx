@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import {
   ArrowLeft,
+  BedDouble,
   CalendarDays,
   ChevronLeft,
   ChevronRight,
@@ -111,6 +112,15 @@ const empty = {
   opportunityId: "",
   conflictOverrideReason: "",
 };
+const emptyGroupRoom = {
+  groupName: "", projectName: "", arrivalDate: "", departureDate: "", status: "prospect",
+  peakRooms: "", totalRoomNights: "", roomTypeMix: "", groupRate: "", bookingMethod: "reservation_link",
+  cutoffDate: "", groupCode: "", taxExempt: false, primaryContactName: "", primaryContactEmail: "", primaryContactPhone: "", salesOwner: "",
+  billingInstructions: "", depositDueDate: "", depositAmount: "", arrivalNotes: "", vipNotes: "", transportationNotes: "", breakfastNotes: "",
+  frontDeskNotes: "", housekeepingNotes: "", internalNotes: "",
+};
+const groupStatusColors: any = { prospect: "bg-slate-100 text-slate-800", tentative: "bg-sky-100 text-sky-900", definite: "bg-blue-700 text-white", in_house: "bg-violet-700 text-white", completed: "bg-gray-200 text-gray-800", cancelled: "bg-red-100 text-red-900" };
+const groupNights = (block: any) => block?.arrivalDate && block?.departureDate ? Math.max(0, Math.round((new Date(`${block.departureDate}T12:00:00Z`).getTime() - new Date(`${block.arrivalDate}T12:00:00Z`).getTime()) / 86400000)) : 0;
 
 export default function CourtyardMeetingCalendar() {
   const { toast } = useToast(),
@@ -122,6 +132,11 @@ export default function CourtyardMeetingCalendar() {
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [view, setView] = useState("month");
   const [accessPin, setAccessPin] = useState("");
+  const [calendarLayer, setCalendarLayer] = useState("all");
+  const [groupRoomOpen, setGroupRoomOpen] = useState(false);
+  const [groupRoomForm, setGroupRoomForm] = useState<any>(emptyGroupRoom);
+  const [editingGroupRoomId, setEditingGroupRoomId] = useState<string | null>(null);
+  const [selectedGroupRoom, setSelectedGroupRoom] = useState<any>(null);
   const me = useQuery({
     queryKey: ["sales-meeting-me"],
     queryFn: () => request("/api/courtyard/sales-intelligence/me"),
@@ -205,6 +220,14 @@ export default function CourtyardMeetingCalendar() {
       });
     },
   });
+  const saveGroupRoom = useMutation({
+    mutationFn: (body: any) => request(editingGroupRoomId ? `/api/courtyard/sales-intelligence/meeting-calendar/group-rooms/${editingGroupRoomId}` : "/api/courtyard/sales-intelligence/meeting-calendar/group-rooms", {
+      method: editingGroupRoomId ? "PATCH" : "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hotelId, ...body, peakRooms: body.peakRooms === "" ? null : Number(body.peakRooms), totalRoomNights: body.totalRoomNights === "" ? null : Number(body.totalRoomNights), groupRate: body.groupRate === "" ? null : Number(body.groupRate), depositAmount: body.depositAmount === "" ? null : Number(body.depositAmount) }),
+    }),
+    onSuccess: () => { setGroupRoomOpen(false); setSelectedGroupRoom(null); setEditingGroupRoomId(null); setGroupRoomForm(emptyGroupRoom); qc.invalidateQueries({ queryKey: ["meeting-calendar"] }); toast({ title: editingGroupRoomId ? "Group room block updated" : "Group room block added" }); },
+    onError: (error: Error) => toast({ title: "Could not save group room block", description: error.message, variant: "destructive" }),
+  });
   const days = useMemo(
     () =>
       Array.from(
@@ -248,6 +271,11 @@ export default function CourtyardMeetingCalendar() {
   if (me.error)
     return <div className="min-h-screen bg-[#f7f1e7] p-8 text-[#201814]">{(me.error as Error).message}</div>;
   const events = cal.data?.events || [];
+  const groupRoomBlocks = cal.data?.groupRoomBlocks || [];
+  const openNewGroupRoom = (arrivalDate = "") => { setEditingGroupRoomId(null); setGroupRoomForm({ ...emptyGroupRoom, arrivalDate }); setGroupRoomOpen(true); };
+  const openEditGroupRoom = (block: any) => { setSelectedGroupRoom(null); setEditingGroupRoomId(block.id); setGroupRoomForm({ ...emptyGroupRoom, ...block, peakRooms: block.peakRooms ?? "", totalRoomNights: block.totalRoomNights ?? "", groupRate: block.groupRate ?? "", depositAmount: block.depositAmount ?? "" }); setGroupRoomOpen(true); };
+  const todayKey = key(new Date());
+  const upcomingGroups = groupRoomBlocks.filter((block: any) => block.departureDate >= todayKey && !["completed", "cancelled"].includes(block.status)).sort((a: any, b: any) => a.arrivalDate.localeCompare(b.arrivalDate)).slice(0, 5);
   const monthlyEvents = Array.from(new Map(
     events
       .filter((event: any) => {
@@ -329,6 +357,9 @@ export default function CourtyardMeetingCalendar() {
               <Plus className="mr-2 h-4 w-4" />
               New event
             </Button>
+            <Button className="bg-[#315f86] text-white hover:bg-[#244966]" onClick={() => openNewGroupRoom()}>
+              <BedDouble className="mr-2 h-4 w-4" />Add group rooms
+            </Button>
           </div>
         </div>
       </header>
@@ -361,6 +392,10 @@ export default function CourtyardMeetingCalendar() {
             </Button>
           </div>
           <div className="flex gap-2">
+            <Select value={calendarLayer} onValueChange={setCalendarLayer}>
+              <SelectTrigger className="w-[175px] bg-white"><SelectValue /></SelectTrigger>
+              <SelectContent><SelectItem value="all">All calendar items</SelectItem><SelectItem value="meetings">Meeting space only</SelectItem><SelectItem value="groups">Group rooms only</SelectItem></SelectContent>
+            </Select>
             <Button
               variant={view === "month" ? "default" : "outline"}
               onClick={() => setView("month")}
@@ -410,6 +445,12 @@ export default function CourtyardMeetingCalendar() {
             <div className="text-3xl font-bold text-[#2f5f46]">{money(monthlyRevenue)}</div>
           </CardContent>
         </Card>
+        <Card className="border-[#bfd0df] bg-white text-[#201814]">
+          <CardHeader className="pb-2"><div className="flex items-center justify-between gap-3"><div><CardTitle className="flex items-center gap-2 text-lg"><BedDouble className="h-5 w-5 text-[#315f86]" />Upcoming Groups</CardTitle><CardDescription>Next five active room blocks for front desk and operations.</CardDescription></div><Button size="sm" variant="outline" onClick={() => openNewGroupRoom()}><Plus className="mr-1 h-4 w-4" />Add group</Button></div></CardHeader>
+          <CardContent>
+            {upcomingGroups.length ? <div className="grid gap-2 md:grid-cols-2 lg:grid-cols-5">{upcomingGroups.map((block: any) => <button key={block.id} className="rounded-lg border border-[#bfd0df] bg-[#f4f8fb] p-3 text-left hover:border-[#315f86]" onClick={() => setSelectedGroupRoom(block)}><div className="truncate font-semibold">{block.groupName}</div><div className="text-xs text-[#4c6478]">{block.arrivalDate} – {block.departureDate}</div><div className="mt-1 text-sm">{block.peakRooms || 0} peak rooms · {block.totalRoomNights || 0} nights</div></button>)}</div> : <p className="text-sm text-[#5f5247]">No upcoming group room blocks in this calendar range.</p>}
+          </CardContent>
+        </Card>
         {view === "month" ? (
           <div className="overflow-hidden rounded-xl border border-[#cdbda8] bg-white">
             <div className="grid grid-cols-7 bg-[#eadfce] text-center text-sm font-semibold">
@@ -422,7 +463,8 @@ export default function CourtyardMeetingCalendar() {
             <div className="grid grid-cols-7">
               {days.map((d) => {
                 const date = key(d),
-                  rows = events.filter((x: any) => x.eventDate === date);
+                  rows = calendarLayer === "groups" ? [] : events.filter((x: any) => x.eventDate === date),
+                  groupRows = calendarLayer === "meetings" ? [] : groupRoomBlocks.filter((x: any) => x.arrivalDate <= date && x.departureDate >= date && x.status !== "cancelled");
                 return (
                   <button
                     key={date}
@@ -443,6 +485,10 @@ export default function CourtyardMeetingCalendar() {
                         <div>{x.status.replaceAll("_", " ")}</div>
                       </div>
                     ))}
+                    {groupRows.map((block: any) => {
+                      const marker = date === block.arrivalDate ? "ARRIVAL" : date === block.departureDate ? "DEPARTURE" : "IN HOUSE";
+                      return <div key={block.id} className={`mt-1 cursor-pointer rounded border border-blue-200 p-1 text-xs hover:ring-2 hover:ring-[#315f86] ${groupStatusColors[block.status] || groupStatusColors.prospect}`} onClick={(event) => { event.stopPropagation(); setSelectedGroupRoom(block); }}><b>{marker}</b> · {block.groupName}<div>{date === block.departureDate ? "Checks out" : `${block.peakRooms || 0} rooms`}</div></div>;
+                    })}
                   </button>
                 );
               })}
@@ -451,7 +497,7 @@ export default function CourtyardMeetingCalendar() {
         ) : (
           <Card>
             <CardContent className="space-y-2 p-4">
-              {events.map((x: any) => (
+              {calendarLayer !== "groups" && events.map((x: any) => (
                 <div
                   key={x.id}
                   role="button"
@@ -478,6 +524,7 @@ export default function CourtyardMeetingCalendar() {
                   </Badge>
                 </div>
               ))}
+              {calendarLayer !== "meetings" && groupRoomBlocks.map((block: any) => <div key={block.id} role="button" tabIndex={0} className="flex cursor-pointer flex-wrap justify-between gap-2 rounded border border-blue-200 bg-[#f4f8fb] p-3 text-left hover:border-[#315f86]" onClick={() => setSelectedGroupRoom(block)}><div><b>{block.arrivalDate}–{block.departureDate} · {block.groupName}</b><div className="text-sm">{groupNights(block)} nights · {block.peakRooms || 0} peak rooms · {block.totalRoomNights || 0} total room nights</div></div><Badge className={groupStatusColors[block.status]}>{block.status.replaceAll("_", " ")}</Badge></div>)}
             </CardContent>
           </Card>
         )}
@@ -795,6 +842,46 @@ export default function CourtyardMeetingCalendar() {
               </div>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={groupRoomOpen} onOpenChange={(isOpen) => { setGroupRoomOpen(isOpen); if (!isOpen) setEditingGroupRoomId(null); }}>
+        <DialogContent className="max-h-[92dvh] max-w-4xl overflow-y-auto bg-white text-[#201814]">
+          <DialogHeader><DialogTitle>{editingGroupRoomId ? "Edit group room block" : "Add group room block"}</DialogTitle></DialogHeader>
+          <div className="grid gap-4 md:grid-cols-2">
+            <div><Label>Group/company *</Label><Input value={groupRoomForm.groupName} onChange={(e) => setGroupRoomForm({ ...groupRoomForm, groupName: e.target.value })} /></div>
+            <div><Label>Project / program name</Label><Input value={groupRoomForm.projectName} onChange={(e) => setGroupRoomForm({ ...groupRoomForm, projectName: e.target.value })} /></div>
+            <div><Label>Arrival date *</Label><Input type="date" value={groupRoomForm.arrivalDate} onChange={(e) => setGroupRoomForm({ ...groupRoomForm, arrivalDate: e.target.value })} /></div>
+            <div><Label>Departure date *</Label><Input type="date" min={groupRoomForm.arrivalDate || undefined} value={groupRoomForm.departureDate} onChange={(e) => setGroupRoomForm({ ...groupRoomForm, departureDate: e.target.value })} /></div>
+            <div><Label>Status</Label><Select value={groupRoomForm.status} onValueChange={(status) => setGroupRoomForm({ ...groupRoomForm, status })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{["prospect", "tentative", "definite", "in_house", "completed", "cancelled"].map((status) => <SelectItem key={status} value={status}>{status.replaceAll("_", " ")}</SelectItem>)}</SelectContent></Select></div>
+            <div><Label>Booking method</Label><Select value={groupRoomForm.bookingMethod} onValueChange={(bookingMethod) => setGroupRoomForm({ ...groupRoomForm, bookingMethod })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="reservation_link">Reservation link</SelectItem><SelectItem value="rooming_list">Rooming list</SelectItem><SelectItem value="call_in">Call-in</SelectItem><SelectItem value="individual_pay">Individual pay</SelectItem><SelectItem value="other">Other</SelectItem></SelectContent></Select></div>
+            <div className="md:col-span-2 rounded-xl border border-[#bfd0df] bg-[#f4f8fb] p-4"><h3 className="mb-3 font-semibold text-[#315f86]">Room block</h3><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <div><Label>Peak rooms per night</Label><Input type="number" min="0" value={groupRoomForm.peakRooms} onChange={(e) => setGroupRoomForm({ ...groupRoomForm, peakRooms: e.target.value })} /></div>
+              <div><Label>Total room nights</Label><Input type="number" min="0" value={groupRoomForm.totalRoomNights} onChange={(e) => setGroupRoomForm({ ...groupRoomForm, totalRoomNights: e.target.value })} /></div>
+              <div><Label>Group rate</Label><Input type="number" min="0" step="0.01" value={groupRoomForm.groupRate} onChange={(e) => setGroupRoomForm({ ...groupRoomForm, groupRate: e.target.value })} /></div>
+              <div><Label>Estimated room revenue</Label><div className="mt-2 text-xl font-bold text-[#315f86]">{money(Number(groupRoomForm.totalRoomNights || 0) * Number(groupRoomForm.groupRate || 0))}</div></div>
+              <div className="sm:col-span-2"><Label>Room types and quantities</Label><Input placeholder="Example: 12 kings, 8 double queens" value={groupRoomForm.roomTypeMix} onChange={(e) => setGroupRoomForm({ ...groupRoomForm, roomTypeMix: e.target.value })} /></div>
+              <div><Label>Group code</Label><Input value={groupRoomForm.groupCode} onChange={(e) => setGroupRoomForm({ ...groupRoomForm, groupCode: e.target.value })} /></div>
+              <div><Label>Cutoff date</Label><Input type="date" value={groupRoomForm.cutoffDate} onChange={(e) => setGroupRoomForm({ ...groupRoomForm, cutoffDate: e.target.value })} /></div>
+            </div></div>
+            {[['Primary contact','primaryContactName'],['Contact email','primaryContactEmail'],['Contact phone','primaryContactPhone'],['Sales owner','salesOwner']].map(([label, field]) => <div key={field}><Label>{label}</Label><Input type={field === 'primaryContactEmail' ? 'email' : 'text'} value={groupRoomForm[field]} onChange={(e) => setGroupRoomForm({ ...groupRoomForm, [field]: e.target.value })} /></div>)}
+            <div><Label>Deposit due date</Label><Input type="date" value={groupRoomForm.depositDueDate} onChange={(e) => setGroupRoomForm({ ...groupRoomForm, depositDueDate: e.target.value })} /></div>
+            <div><Label>Deposit amount</Label><Input type="number" min="0" step="0.01" value={groupRoomForm.depositAmount} onChange={(e) => setGroupRoomForm({ ...groupRoomForm, depositAmount: e.target.value })} /></div>
+            <label className="flex items-center gap-2 rounded-lg border p-3"><input type="checkbox" checked={groupRoomForm.taxExempt} onChange={(e) => setGroupRoomForm({ ...groupRoomForm, taxExempt: e.target.checked })} />Tax-exempt group</label>
+            <div className="md:col-span-2"><Label>Billing instructions</Label><Textarea value={groupRoomForm.billingInstructions} onChange={(e) => setGroupRoomForm({ ...groupRoomForm, billingInstructions: e.target.value })} /></div>
+            {[['Arrival and check-in notes','arrivalNotes'],['VIP / accommodations','vipNotes'],['Transportation','transportationNotes'],['Breakfast','breakfastNotes'],['Front desk instructions','frontDeskNotes'],['Housekeeping instructions','housekeepingNotes'],['Internal notes','internalNotes']].map(([label, field]) => <div className={field === 'internalNotes' ? 'md:col-span-2' : ''} key={field}><Label>{label}</Label><Textarea value={groupRoomForm[field]} onChange={(e) => setGroupRoomForm({ ...groupRoomForm, [field]: e.target.value })} /></div>)}
+            <Button className="bg-[#315f86] text-white md:col-span-2 hover:bg-[#244966]" disabled={saveGroupRoom.isPending} onClick={() => saveGroupRoom.mutate(groupRoomForm)}>{saveGroupRoom.isPending ? "Saving…" : editingGroupRoomId ? "Save group changes" : "Add group to calendar"}</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={Boolean(selectedGroupRoom)} onOpenChange={(isOpen) => { if (!isOpen) setSelectedGroupRoom(null); }}>
+        <DialogContent className="max-h-[92dvh] max-w-3xl overflow-y-auto bg-white text-[#201814]">
+          {selectedGroupRoom && <><DialogHeader><div className="flex items-start justify-between gap-3 pr-7"><div><DialogTitle className="text-2xl">{selectedGroupRoom.groupName}</DialogTitle><p className="text-[#5f5247]">{selectedGroupRoom.projectName || "Group room block"}</p></div><Badge className={groupStatusColors[selectedGroupRoom.status]}>{selectedGroupRoom.status.replaceAll("_", " ")}</Badge></div></DialogHeader>
+            <section className="rounded-xl border border-[#bfd0df] bg-[#f4f8fb] p-4"><div className="grid gap-3 sm:grid-cols-4"><div><div className="text-xs font-bold uppercase text-[#315f86]">Arrival</div>{selectedGroupRoom.arrivalDate}</div><div><div className="text-xs font-bold uppercase text-[#315f86]">Departure</div>{selectedGroupRoom.departureDate}</div><div><div className="text-xs font-bold uppercase text-[#315f86]">Stay</div>{groupNights(selectedGroupRoom)} nights</div><div><div className="text-xs font-bold uppercase text-[#315f86]">Peak rooms</div>{selectedGroupRoom.peakRooms || 0}</div></div></section>
+            <section><h3 className="mb-2 font-semibold">Room block and revenue</h3><div className="grid gap-2 sm:grid-cols-2">{[["Total room nights", selectedGroupRoom.totalRoomNights || 0],["Room types", selectedGroupRoom.roomTypeMix || "Not specified"],["Group rate", money(selectedGroupRoom.groupRate)],["Estimated room revenue", money(selectedGroupRoom.estimatedRoomRevenue)],["Group code", selectedGroupRoom.groupCode || "Not specified"],["Cutoff date", selectedGroupRoom.cutoffDate || "Not specified"],["Booking method", selectedGroupRoom.bookingMethod?.replaceAll("_", " ") || "Not specified"],["Tax status", selectedGroupRoom.taxExempt ? "Tax exempt" : "Standard tax"]].map(([label, value]) => <div key={String(label)} className="rounded-lg border p-3"><div className="text-xs font-bold uppercase text-[#315f86]">{label}</div><div className="capitalize">{value}</div></div>)}</div></section>
+            {(selectedGroupRoom.primaryContactName || selectedGroupRoom.salesOwner) && <section><h3 className="mb-2 font-semibold">Contacts</h3><div className="rounded-lg border p-4"><div><b>Primary contact:</b> {selectedGroupRoom.primaryContactName || "Not specified"}</div><div>{selectedGroupRoom.primaryContactEmail} {selectedGroupRoom.primaryContactPhone}</div><div><b>Sales owner:</b> {selectedGroupRoom.salesOwner || "Not specified"}</div></div></section>}
+            <section><h3 className="mb-2 font-semibold">Operational preparation</h3><div className="space-y-2">{[["Arrival",selectedGroupRoom.arrivalNotes],["VIP / accommodations",selectedGroupRoom.vipNotes],["Transportation",selectedGroupRoom.transportationNotes],["Breakfast",selectedGroupRoom.breakfastNotes],["Front desk",selectedGroupRoom.frontDeskNotes],["Housekeeping",selectedGroupRoom.housekeepingNotes],["Billing",selectedGroupRoom.billingInstructions],["Internal",selectedGroupRoom.internalNotes]].filter(([,value]) => value).map(([label,value]) => <div key={String(label)} className="rounded-lg border bg-[#f4f8fb] p-3"><div className="text-xs font-bold uppercase text-[#315f86]">{label}</div><p className="whitespace-pre-wrap text-sm">{value}</p></div>)}</div></section>
+            <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setSelectedGroupRoom(null)}>Close</Button><Button className="bg-[#315f86] text-white" onClick={() => openEditGroupRoom(selectedGroupRoom)}>Edit group</Button></div>
+          </>}
         </DialogContent>
       </Dialog>
     </div>

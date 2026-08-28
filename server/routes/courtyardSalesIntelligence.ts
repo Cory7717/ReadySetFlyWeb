@@ -29,6 +29,7 @@ import {
   courtyardMeetingEvents,
   courtyardMeetingEventDocuments,
   courtyardMeetingCalendarShares,
+  courtyardGroupRoomBlocks,
   tipsUsers,
 } from "@shared/schema";
 import {
@@ -250,6 +251,33 @@ function meetingRevenueValidationError(body: any) {
     if (!Number.isFinite(value) || value < 0 || value > 9999999999) return "Revenue amounts must be valid non-negative numbers.";
   }
   if (body?.meetingRoom && !["pecan", "cedar", "full_room"].includes(String(body.meetingRoom))) return "Choose a valid meeting room.";
+  return null;
+}
+const GROUP_ROOM_STATUSES = ["prospect", "tentative", "definite", "in_house", "completed", "cancelled"];
+function groupRoomWriteValues(body: any) {
+  const peakRooms = body?.peakRooms === "" || body?.peakRooms == null ? null : Number(body.peakRooms);
+  const totalRoomNights = body?.totalRoomNights === "" || body?.totalRoomNights == null ? null : Number(body.totalRoomNights);
+  const groupRate = body?.groupRate === "" || body?.groupRate == null ? null : Number(body.groupRate);
+  const depositAmount = body?.depositAmount === "" || body?.depositAmount == null ? null : Number(body.depositAmount);
+  return {
+    groupName: String(body?.groupName || "").trim(), projectName: String(body?.projectName || "").trim() || null,
+    arrivalDate: body.arrivalDate, departureDate: body.departureDate, status: String(body?.status || "prospect"),
+    peakRooms, totalRoomNights, roomTypeMix: String(body?.roomTypeMix || "").trim() || null,
+    groupRate: groupRate == null ? null : groupRate.toFixed(2), estimatedRoomRevenue: groupRate == null || totalRoomNights == null ? null : (groupRate * totalRoomNights).toFixed(2),
+    bookingMethod: String(body?.bookingMethod || "").trim() || null, cutoffDate: body?.cutoffDate || null, groupCode: String(body?.groupCode || "").trim() || null, taxExempt: Boolean(body?.taxExempt),
+    primaryContactName: String(body?.primaryContactName || "").trim() || null, primaryContactEmail: String(body?.primaryContactEmail || "").trim() || null, primaryContactPhone: String(body?.primaryContactPhone || "").trim() || null, salesOwner: String(body?.salesOwner || "").trim() || null,
+    billingInstructions: String(body?.billingInstructions || "").trim() || null, depositDueDate: body?.depositDueDate || null, depositAmount: depositAmount == null ? null : depositAmount.toFixed(2),
+    arrivalNotes: String(body?.arrivalNotes || "").trim() || null, vipNotes: String(body?.vipNotes || "").trim() || null, transportationNotes: String(body?.transportationNotes || "").trim() || null, breakfastNotes: String(body?.breakfastNotes || "").trim() || null,
+    frontDeskNotes: String(body?.frontDeskNotes || "").trim() || null, housekeepingNotes: String(body?.housekeepingNotes || "").trim() || null, internalNotes: String(body?.internalNotes || "").trim() || null,
+  };
+}
+function groupRoomValidationError(body: any) {
+  if (!String(body?.groupName || "").trim()) return "Group/company is required.";
+  if (!validDateOnly(body?.arrivalDate) || !validDateOnly(body?.departureDate)) return "Enter valid arrival and departure dates.";
+  if (body.departureDate <= body.arrivalDate) return "Departure must be after arrival.";
+  if (!GROUP_ROOM_STATUSES.includes(String(body?.status || ""))) return "Choose a valid group status.";
+  for (const field of ["peakRooms", "totalRoomNights"]) { const value = body?.[field]; if (value !== "" && value != null && (!Number.isInteger(Number(value)) || Number(value) < 0)) return "Room counts must be non-negative whole numbers."; }
+  for (const field of ["groupRate", "depositAmount"]) { const value = body?.[field]; if (value !== "" && value != null && (!Number.isFinite(Number(value)) || Number(value) < 0)) return "Rates and deposits must be valid non-negative amounts."; }
   return null;
 }
 async function auth(req: any, res: any, next: any) {
@@ -796,7 +824,7 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
     } catch (e) { next(e); }
   });
   router.get("/meeting-calendar", async (req: any, res, next) => {
-    try { const hotelId=String(req.query.hotelId||""); if(!hasHotel(req,hotelId)) return res.status(403).json({error:"Property access required."}); await db.update(courtyardMeetingEvents).set({status:"expired",updatedAt:new Date()}).where(and(eq(courtyardMeetingEvents.hotelId,hotelId),eq(courtyardMeetingEvents.status,"courtesy_hold"),lt(courtyardMeetingEvents.holdExpiresAt,new Date()))); let spaces=await db.select().from(courtyardMeetingSpaces).where(and(eq(courtyardMeetingSpaces.hotelId,hotelId),eq(courtyardMeetingSpaces.active,true))); if(!spaces.length){spaces=await db.insert(courtyardMeetingSpaces).values({hotelId,name:"Meeting Space",squareFeet:2000}).returning();} const start=String(req.query.start||"0001-01-01"),end=String(req.query.end||"9999-12-31"); const events=(await db.select().from(courtyardMeetingEvents).where(eq(courtyardMeetingEvents.hotelId,hotelId)).orderBy(asc(courtyardMeetingEvents.eventDate),asc(courtyardMeetingEvents.setupStartTime))).filter(x=>x.eventDate>=start&&x.eventDate<=end); const ids=events.map(x=>x.id); const documents=ids.length?await db.select({id:courtyardMeetingEventDocuments.id,eventId:courtyardMeetingEventDocuments.eventId,filename:courtyardMeetingEventDocuments.filename,category:courtyardMeetingEventDocuments.category,sizeBytes:courtyardMeetingEventDocuments.sizeBytes}).from(courtyardMeetingEventDocuments).where(inArray(courtyardMeetingEventDocuments.eventId,ids)):[]; const calendarManager=canManageMeetingCalendar(req); const shares=calendarManager?await db.select().from(courtyardMeetingCalendarShares).where(eq(courtyardMeetingCalendarShares.hotelId,hotelId)).orderBy(desc(courtyardMeetingCalendarShares.createdAt)):[]; res.json({spaces,events,documents,shares,user:{isAdmin:calendarManager}}); }catch(e){next(e);}
+    try { const hotelId=String(req.query.hotelId||""); if(!hasHotel(req,hotelId)) return res.status(403).json({error:"Property access required."}); await db.update(courtyardMeetingEvents).set({status:"expired",updatedAt:new Date()}).where(and(eq(courtyardMeetingEvents.hotelId,hotelId),eq(courtyardMeetingEvents.status,"courtesy_hold"),lt(courtyardMeetingEvents.holdExpiresAt,new Date()))); let spaces=await db.select().from(courtyardMeetingSpaces).where(and(eq(courtyardMeetingSpaces.hotelId,hotelId),eq(courtyardMeetingSpaces.active,true))); if(!spaces.length){spaces=await db.insert(courtyardMeetingSpaces).values({hotelId,name:"Meeting Space",squareFeet:2000}).returning();} const start=String(req.query.start||"0001-01-01"),end=String(req.query.end||"9999-12-31"); const events=(await db.select().from(courtyardMeetingEvents).where(eq(courtyardMeetingEvents.hotelId,hotelId)).orderBy(asc(courtyardMeetingEvents.eventDate),asc(courtyardMeetingEvents.setupStartTime))).filter(x=>x.eventDate>=start&&x.eventDate<=end); const groupRoomBlocks=(await db.select().from(courtyardGroupRoomBlocks).where(eq(courtyardGroupRoomBlocks.hotelId,hotelId)).orderBy(asc(courtyardGroupRoomBlocks.arrivalDate))).filter(x=>x.arrivalDate<=end&&x.departureDate>=start); const ids=events.map(x=>x.id); const documents=ids.length?await db.select({id:courtyardMeetingEventDocuments.id,eventId:courtyardMeetingEventDocuments.eventId,filename:courtyardMeetingEventDocuments.filename,category:courtyardMeetingEventDocuments.category,sizeBytes:courtyardMeetingEventDocuments.sizeBytes}).from(courtyardMeetingEventDocuments).where(inArray(courtyardMeetingEventDocuments.eventId,ids)):[]; const calendarManager=canManageMeetingCalendar(req); const shares=calendarManager?await db.select().from(courtyardMeetingCalendarShares).where(eq(courtyardMeetingCalendarShares.hotelId,hotelId)).orderBy(desc(courtyardMeetingCalendarShares.createdAt)):[]; res.json({spaces,events,groupRoomBlocks,documents,shares,user:{isAdmin:calendarManager}}); }catch(e){next(e);}
   });
   router.get("/meeting-calendar/events/:id/beo.pdf", async (req: any, res, next) => {
     try {
@@ -906,6 +934,26 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
   router.post("/meeting-calendar/events/:id/documents",transitionUpload.single("file"),async(req:any,res,next)=>{try{const [event]=await db.select().from(courtyardMeetingEvents).where(eq(courtyardMeetingEvents.id,req.params.id)).limit(1);if(!event||!hasHotel(req,event.hotelId))return res.status(404).json({error:"Event not found."});if(!req.file)return res.status(400).json({error:"Choose a file."});const [document]=await db.insert(courtyardMeetingEventDocuments).values({eventId:event.id,filename:req.file.originalname,mimeType:req.file.mimetype||"application/octet-stream",sizeBytes:req.file.size,category:req.body.category||"other",contentBase64:req.file.buffer.toString("base64"),uploadedByUserId:req.salesUser.id}).returning();res.status(201).json({document:{...document,contentBase64:undefined}});}catch(e){next(e);}});
   router.get("/meeting-calendar/events/:eventId/documents/:id",async(req:any,res,next)=>{try{const [event]=await db.select().from(courtyardMeetingEvents).where(eq(courtyardMeetingEvents.id,req.params.eventId)).limit(1);if(!event||!hasHotel(req,event.hotelId))return res.status(404).json({error:"Event not found."});const [doc]=await db.select().from(courtyardMeetingEventDocuments).where(and(eq(courtyardMeetingEventDocuments.id,req.params.id),eq(courtyardMeetingEventDocuments.eventId,event.id))).limit(1);if(!doc)return res.status(404).json({error:"Document not found."});res.setHeader("Content-Type",doc.mimeType);res.setHeader("Content-Disposition",`attachment; filename="${doc.filename.replace(/[\r\n"]/g,"_")}"`);res.send(Buffer.from(doc.contentBase64,"base64"));}catch(e){next(e);}});
   router.post("/meeting-calendar/shares",async(req:any,res,next)=>{try{const hotelId=String(req.body.hotelId||"");if(!hasHotel(req,hotelId))return res.status(403).json({error:"Property access required."});const token=crypto.randomBytes(32).toString("base64url"),days=Math.min(30,Math.max(1,Number(req.body.expiresInDays||7))),expiresAt=new Date(Date.now()+days*86400000);const [share]=await db.insert(courtyardMeetingCalendarShares).values({hotelId,tokenHash:transitionTokenHash(token),recipientName:req.body.recipientName||null,rangeStart:req.body.rangeStart||null,rangeEnd:req.body.rangeEnd||null,expiresAt,createdByUserId:req.salesUser.id}).returning();const base=(process.env.FRONTEND_BASE_URL||"https://readysetfly.us").replace(/\/$/,"");res.status(201).json({share,url:`${base}/courtyard/meeting-calendar/share/${token}`});}catch(e){next(e);}});
+  router.post("/meeting-calendar/group-rooms", async (req: any, res, next) => {
+    try {
+      const hotelId = String(req.body.hotelId || "");
+      if (!hasHotel(req, hotelId)) return res.status(403).json({ error: "Property access required." });
+      const validationError = groupRoomValidationError(req.body);
+      if (validationError) return res.status(400).json({ error: validationError });
+      const [block] = await db.insert(courtyardGroupRoomBlocks).values({ hotelId, ...groupRoomWriteValues(req.body), createdByUserId: req.salesUser.id, updatedByUserId: req.salesUser.id }).returning();
+      res.status(201).json({ block });
+    } catch (e) { next(e); }
+  });
+  router.patch("/meeting-calendar/group-rooms/:id", async (req: any, res, next) => {
+    try {
+      const [existing] = await db.select().from(courtyardGroupRoomBlocks).where(eq(courtyardGroupRoomBlocks.id, req.params.id)).limit(1);
+      if (!existing || !hasHotel(req, existing.hotelId)) return res.status(404).json({ error: "Group room block not found." });
+      const validationError = groupRoomValidationError(req.body);
+      if (validationError) return res.status(400).json({ error: validationError });
+      const [block] = await db.update(courtyardGroupRoomBlocks).set({ ...groupRoomWriteValues(req.body), updatedByUserId: req.salesUser.id, updatedAt: new Date() }).where(eq(courtyardGroupRoomBlocks.id, existing.id)).returning();
+      res.json({ block });
+    } catch (e) { next(e); }
+  });
   router.post("/transitions", async (req: any, res, next) => {
     try { const hotelId = String(req.body.hotelId || ""); if (!hasHotel(req, hotelId)) return res.status(403).json({ error: "Property access required." }); if (!String(req.body.title || "").trim()) return res.status(400).json({ error: "Title is required." }); if (!validDateOnly(req.body.departureDate)) return res.status(400).json({ error: "Enter a valid departure date." }); const [transition] = await db.insert(courtyardSalesTransitions).values({ hotelId, title: String(req.body.title).trim(), departureDate: req.body.departureDate || null, departingUserName: req.body.departingUserName || null, summary: req.body.summary || null, createdByUserId: req.salesUser.id }).returning(); res.status(201).json({ transition }); } catch (e) { next(e); }
   });

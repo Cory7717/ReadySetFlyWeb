@@ -10,6 +10,7 @@ import {
   Plus,
   Printer,
   Share2,
+  Upload,
 } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
@@ -137,6 +138,9 @@ export default function CourtyardMeetingCalendar() {
   const [groupRoomForm, setGroupRoomForm] = useState<any>(emptyGroupRoom);
   const [editingGroupRoomId, setEditingGroupRoomId] = useState<string | null>(null);
   const [selectedGroupRoom, setSelectedGroupRoom] = useState<any>(null);
+  const [contractOpen, setContractOpen] = useState(false);
+  const [contractFile, setContractFile] = useState<File | null>(null);
+  const [contractPreview, setContractPreview] = useState<any>(null);
   const me = useQuery({
     queryKey: ["sales-meeting-me"],
     queryFn: () => request("/api/courtyard/sales-intelligence/me"),
@@ -227,6 +231,16 @@ export default function CourtyardMeetingCalendar() {
     }),
     onSuccess: () => { setGroupRoomOpen(false); setSelectedGroupRoom(null); setEditingGroupRoomId(null); setGroupRoomForm(emptyGroupRoom); qc.invalidateQueries({ queryKey: ["meeting-calendar"] }); toast({ title: editingGroupRoomId ? "Group room block updated" : "Group room block added" }); },
     onError: (error: Error) => toast({ title: "Could not save group room block", description: error.message, variant: "destructive" }),
+  });
+  const previewContract = useMutation({
+    mutationFn: async () => { const data = new FormData(); data.append("hotelId", hotelId); data.append("file", contractFile!); return request("/api/courtyard/sales-intelligence/meeting-calendar/contracts/preview", { method: "POST", body: data }); },
+    onSuccess: (result: any) => setContractPreview(result),
+    onError: (error: Error) => toast({ title: "Could not read contract", description: error.message, variant: "destructive" }),
+  });
+  const importContract = useMutation({
+    mutationFn: async () => { const data = new FormData(); data.append("hotelId", hotelId); data.append("file", contractFile!); data.append("draft", JSON.stringify(contractPreview.draft)); return request("/api/courtyard/sales-intelligence/meeting-calendar/contracts/import", { method: "POST", body: data }); },
+    onSuccess: (result: any) => { setContractOpen(false); setContractFile(null); setContractPreview(null); qc.invalidateQueries({ queryKey: ["meeting-calendar"] }); toast({ title: "Linked group booking imported", description: `Created the room block and ${result.count} meeting-space dates.` }); },
+    onError: (error: Error) => toast({ title: "Could not import contract", description: error.message, variant: "destructive" }),
   });
   const days = useMemo(
     () =>
@@ -360,6 +374,7 @@ export default function CourtyardMeetingCalendar() {
             <Button className="bg-[#315f86] text-white hover:bg-[#244966]" onClick={() => openNewGroupRoom()}>
               <BedDouble className="mr-2 h-4 w-4" />Add group rooms
             </Button>
+            <Button variant="outline" onClick={() => setContractOpen(true)}><Upload className="mr-2 h-4 w-4" />Import contract</Button>
           </div>
         </div>
       </header>
@@ -806,6 +821,7 @@ export default function CourtyardMeetingCalendar() {
                   </div>
                 </section>
               )}
+              {selectedEvent.groupBookingId && groupRoomBlocks.some((block: any) => block.groupBookingId === selectedEvent.groupBookingId) && <section className="rounded-xl border border-[#bfd0df] bg-[#f4f8fb] p-4"><div className="text-xs font-bold uppercase text-[#315f86]">Linked group rooms</div>{groupRoomBlocks.filter((block: any) => block.groupBookingId === selectedEvent.groupBookingId).map((block: any) => <button key={block.id} className="mt-2 w-full rounded-lg border bg-white p-3 text-left hover:border-[#315f86]" onClick={() => { setSelectedEvent(null); setSelectedGroupRoom(block); }}><b>{block.groupName}</b><div className="text-sm">{block.arrivalDate}–{block.departureDate} · {block.totalRoomNights || 0} room nights</div></button>)}</section>}
 
               {(selectedEvent.cateringNotes || selectedEvent.avNotes || selectedEvent.accessibilityNotes || selectedEvent.internalNotes) && (
                 <section>
@@ -879,9 +895,30 @@ export default function CourtyardMeetingCalendar() {
             <section className="rounded-xl border border-[#bfd0df] bg-[#f4f8fb] p-4"><div className="grid gap-3 sm:grid-cols-4"><div><div className="text-xs font-bold uppercase text-[#315f86]">Arrival</div>{selectedGroupRoom.arrivalDate}</div><div><div className="text-xs font-bold uppercase text-[#315f86]">Departure</div>{selectedGroupRoom.departureDate}</div><div><div className="text-xs font-bold uppercase text-[#315f86]">Stay</div>{groupNights(selectedGroupRoom)} nights</div><div><div className="text-xs font-bold uppercase text-[#315f86]">Peak rooms</div>{selectedGroupRoom.peakRooms || 0}</div></div></section>
             <section><h3 className="mb-2 font-semibold">Room block and revenue</h3><div className="grid gap-2 sm:grid-cols-2">{[["Total room nights", selectedGroupRoom.totalRoomNights || 0],["Room types", selectedGroupRoom.roomTypeMix || "Not specified"],["Group rate", money(selectedGroupRoom.groupRate)],["Estimated room revenue", money(selectedGroupRoom.estimatedRoomRevenue)],["Group code", selectedGroupRoom.groupCode || "Not specified"],["Cutoff date", selectedGroupRoom.cutoffDate || "Not specified"],["Booking method", selectedGroupRoom.bookingMethod?.replaceAll("_", " ") || "Not specified"],["Tax status", selectedGroupRoom.taxExempt ? "Tax exempt" : "Standard tax"]].map(([label, value]) => <div key={String(label)} className="rounded-lg border p-3"><div className="text-xs font-bold uppercase text-[#315f86]">{label}</div><div className="capitalize">{value}</div></div>)}</div></section>
             {(selectedGroupRoom.primaryContactName || selectedGroupRoom.salesOwner) && <section><h3 className="mb-2 font-semibold">Contacts</h3><div className="rounded-lg border p-4"><div><b>Primary contact:</b> {selectedGroupRoom.primaryContactName || "Not specified"}</div><div>{selectedGroupRoom.primaryContactEmail} {selectedGroupRoom.primaryContactPhone}</div><div><b>Sales owner:</b> {selectedGroupRoom.salesOwner || "Not specified"}</div></div></section>}
+            {selectedGroupRoom.groupBookingId && events.some((event: any) => event.groupBookingId === selectedGroupRoom.groupBookingId) && <section className="rounded-xl border border-[#b9d0c2] bg-[#f3f8f4] p-4"><div className="text-xs font-bold uppercase text-[#2f5f46]">Linked meeting space</div>{Array.from(new Map(events.filter((event: any) => event.groupBookingId === selectedGroupRoom.groupBookingId).map((event: any) => [event.bookingSeriesId || event.id, event])).values()).map((event: any) => <button key={event.id} className="mt-2 w-full rounded-lg border bg-white p-3 text-left hover:border-[#2f5f46]" onClick={() => { setSelectedGroupRoom(null); setSelectedEvent(event); }}><b>{event.eventName}</b><div className="text-sm">Beginning {event.bookingStartDate || event.eventDate} · {event.meetingRoom?.replaceAll('_',' ')}</div></button>)}</section>}
+            {selectedGroupRoom.groupBookingId && (cal.data?.groupBookingDocuments || []).some((document: any) => document.groupBookingId === selectedGroupRoom.groupBookingId) && <section><h3 className="mb-2 font-semibold">Original contract</h3>{(cal.data?.groupBookingDocuments || []).filter((document: any) => document.groupBookingId === selectedGroupRoom.groupBookingId).map((document: any) => <a key={document.id} className="block rounded-lg border p-3 text-blue-700 underline hover:bg-[#f4f8fb]" href={apiUrl(`/api/courtyard/sales-intelligence/meeting-calendar/group-bookings/${selectedGroupRoom.groupBookingId}/documents/${document.id}`)}>{document.filename}</a>)}</section>}
             <section><h3 className="mb-2 font-semibold">Operational preparation</h3><div className="space-y-2">{[["Arrival",selectedGroupRoom.arrivalNotes],["VIP / accommodations",selectedGroupRoom.vipNotes],["Transportation",selectedGroupRoom.transportationNotes],["Breakfast",selectedGroupRoom.breakfastNotes],["Front desk",selectedGroupRoom.frontDeskNotes],["Housekeeping",selectedGroupRoom.housekeepingNotes],["Billing",selectedGroupRoom.billingInstructions],["Internal",selectedGroupRoom.internalNotes]].filter(([,value]) => value).map(([label,value]) => <div key={String(label)} className="rounded-lg border bg-[#f4f8fb] p-3"><div className="text-xs font-bold uppercase text-[#315f86]">{label}</div><p className="whitespace-pre-wrap text-sm">{value}</p></div>)}</div></section>
             <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setSelectedGroupRoom(null)}>Close</Button><Button className="bg-[#315f86] text-white" onClick={() => openEditGroupRoom(selectedGroupRoom)}>Edit group</Button></div>
           </>}
+        </DialogContent>
+      </Dialog>
+      <Dialog open={contractOpen} onOpenChange={(isOpen) => { setContractOpen(isOpen); if (!isOpen) { setContractFile(null); setContractPreview(null); } }}>
+        <DialogContent className="max-h-[92dvh] max-w-4xl overflow-y-auto bg-white text-[#201814]">
+          <DialogHeader><DialogTitle>Import group contract</DialogTitle></DialogHeader>
+          {!contractPreview ? <div className="space-y-4"><div className="rounded-xl border-2 border-dashed border-[#bfd0df] bg-[#f4f8fb] p-8 text-center"><Upload className="mx-auto mb-3 h-9 w-9 text-[#315f86]" /><Label htmlFor="group-contract" className="text-base font-semibold">Choose a DOCX or PDF contract</Label><Input id="group-contract" className="mx-auto mt-3 max-w-lg bg-white" type="file" accept=".docx,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event) => setContractFile(event.target.files?.[0] || null)} /><p className="mt-2 text-sm text-[#5f5247]">DOCX provides the most reliable table extraction. The original file will be stored with the linked group booking.</p></div><Button className="w-full bg-[#315f86] text-white" disabled={!contractFile || previewContract.isPending} onClick={() => previewContract.mutate()}>{previewContract.isPending ? "Reading contract…" : "Review extracted information"}</Button></div> : <div className="space-y-5">
+            <div className="rounded-lg border border-amber-300 bg-amber-50 p-4"><div className="font-semibold">Review required before import</div>{contractPreview.draft.warnings.length ? <ul className="mt-2 list-disc space-y-1 pl-5 text-sm">{contractPreview.draft.warnings.map((warning: string) => <li key={warning}>{warning}</li>)}</ul> : <p className="mt-1 text-sm">No extraction warnings were found.</p>}</div>
+            <section><h3 className="mb-3 flex items-center gap-2 font-semibold"><BedDouble className="h-5 w-5 text-[#315f86]" />Group Rooms</h3><div className="grid gap-3 md:grid-cols-3">
+              {[['Group/company','groupName','text'],['Project','projectName','text'],['Arrival','arrivalDate','date'],['Departure','departureDate','date'],['Peak rooms','peakRooms','number'],['Total room nights','totalRoomNights','number'],['Lodging rate','groupRate','number'],['Room type mix','roomTypeMix','text'],['Primary contact','primaryContactName','text'],['Email','primaryContactEmail','email'],['Phone','primaryContactPhone','text']].map(([label,field,type]) => <div key={field}><Label>{label}</Label><Input type={type} value={contractPreview.draft.groupRoom[field] ?? ''} onChange={(event) => setContractPreview({ ...contractPreview, draft: { ...contractPreview.draft, groupRoom: { ...contractPreview.draft.groupRoom, [field]: event.target.value } } })} /></div>)}
+              <div className="rounded-lg border bg-[#f4f8fb] p-3"><div className="text-xs font-bold uppercase text-[#315f86]">Estimated lodging revenue</div><div className="text-xl font-bold">{money(Number(contractPreview.draft.groupRoom.totalRoomNights || 0) * Number(contractPreview.draft.groupRoom.groupRate || 0))}</div></div>
+            </div></section>
+            {contractPreview.draft.meeting && <section><h3 className="mb-3 flex items-center gap-2 font-semibold"><CalendarDays className="h-5 w-5 text-[#2f5f46]" />Linked Meeting Space</h3><div className="grid gap-3 md:grid-cols-3">
+              {[['Event name','eventName','text'],['Start date','eventDate','date'],['End date','eventEndDate','date'],['Attendance','attendance','number'],['Room rental total','roomRentalRevenue','number'],['Setup begins','setupStartTime','time'],['Guests begin','guestStartTime','time'],['Guests end','guestEndTime','time'],['Breakdown complete','breakdownEndTime','time']].map(([label,field,type]) => <div key={field}><Label>{label}</Label><Input type={type} value={contractPreview.draft.meeting[field] ?? ''} onChange={(event) => setContractPreview({ ...contractPreview, draft: { ...contractPreview.draft, meeting: { ...contractPreview.draft.meeting, [field]: event.target.value } } })} /></div>)}
+              <div><Label>Meeting room</Label><Select value={contractPreview.draft.meeting.meetingRoom} onValueChange={(meetingRoom) => setContractPreview({ ...contractPreview, draft: { ...contractPreview.draft, meeting: { ...contractPreview.draft.meeting, meetingRoom } } })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="pecan">Pecan</SelectItem><SelectItem value="cedar">Cedar</SelectItem><SelectItem value="full_room">Full room · Cedar & Pecan</SelectItem></SelectContent></Select></div>
+              <div><Label>Setup style</Label><Select value={contractPreview.draft.meeting.roomSetup} onValueChange={(roomSetup) => setContractPreview({ ...contractPreview, draft: { ...contractPreview.draft, meeting: { ...contractPreview.draft.meeting, roomSetup } } })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{['classroom','theater','u_shape','conference','banquet','reception','custom'].map((setup) => <SelectItem key={setup} value={setup}>{setup.replaceAll('_',' ')}</SelectItem>)}</SelectContent></Select></div>
+            </div></section>}
+            <div className="rounded-lg border bg-[#fffaf2] p-3 text-sm"><b>Revenue allocation:</b> The lodging rate is kept separate from breakfast and meeting-space revenue so a packaged rate is not counted twice.</div>
+            <div className="flex justify-end gap-2"><Button variant="outline" onClick={() => setContractPreview(null)}>Choose another file</Button><Button className="bg-[#315f86] text-white" disabled={importContract.isPending} onClick={() => importContract.mutate()}>{importContract.isPending ? "Creating linked booking…" : "Confirm and create linked booking"}</Button></div>
+          </div>}
         </DialogContent>
       </Dialog>
     </div>

@@ -2274,6 +2274,17 @@ export const courtyardSalesTransitionShares = pgTable("courtyard_sales_transitio
   createdByUserId: varchar("created_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }), createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [index("idx_sales_transition_shares_transition").on(table.transitionId)]);
 
+export const courtyardGroupBookings = pgTable("courtyard_group_bookings", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`), hotelId: varchar("hotel_id").notNull().references(() => courtyardHotels.id, { onDelete: "cascade" }),
+  groupName: text("group_name").notNull(), projectName: text("project_name"), sourceFormat: text("source_format"), importProfile: text("import_profile"),
+  createdByUserId: varchar("created_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }), createdAt: timestamp("created_at").defaultNow(), updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [index("idx_courtyard_group_bookings_hotel").on(table.hotelId)]);
+
+export const courtyardGroupBookingDocuments = pgTable("courtyard_group_booking_documents", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`), groupBookingId: varchar("group_booking_id").notNull().references(() => courtyardGroupBookings.id, { onDelete: "cascade" }),
+  filename: text("filename").notNull(), mimeType: text("mime_type").notNull(), sizeBytes: integer("size_bytes").notNull(), contentBase64: text("content_base64").notNull(), createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [index("idx_courtyard_group_booking_documents_booking").on(table.groupBookingId)]);
+
 export const courtyardMeetingSpaces = pgTable("courtyard_meeting_spaces", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`), hotelId: varchar("hotel_id").notNull().references(() => courtyardHotels.id, { onDelete: "cascade" }),
   name: text("name").notNull(), squareFeet: integer("square_feet").notNull().default(2000), active: boolean("active").notNull().default(true),
@@ -2282,6 +2293,7 @@ export const courtyardMeetingSpaces = pgTable("courtyard_meeting_spaces", {
 
 export const courtyardMeetingEvents = pgTable("courtyard_meeting_events", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`), hotelId: varchar("hotel_id").notNull().references(() => courtyardHotels.id, { onDelete: "cascade" }),
+  groupBookingId: varchar("group_booking_id").references(() => courtyardGroupBookings.id, { onDelete: "set null" }),
   spaceId: varchar("space_id").notNull().references(() => courtyardMeetingSpaces.id, { onDelete: "restrict" }), groupName: text("group_name").notNull(), eventName: text("event_name").notNull(),
   eventDate: date("event_date").notNull(), setupStartTime: time("setup_start_time").notNull(), guestStartTime: time("guest_start_time").notNull(), guestEndTime: time("guest_end_time").notNull(), breakdownEndTime: time("breakdown_end_time").notNull(),
   status: text("status").notNull().default("inquiry"), holdExpiresAt: timestamp("hold_expires_at"), attendance: integer("attendance"), squareFeetRequired: integer("square_feet_required"), roomSetup: text("room_setup"), meetingRoom: text("meeting_room"), bookingSeriesId: varchar("booking_series_id"), bookingStartDate: date("booking_start_date"),
@@ -2307,6 +2319,7 @@ export const courtyardMeetingCalendarShares = pgTable("courtyard_meeting_calenda
 export const courtyardGroupRoomBlocks = pgTable("courtyard_group_room_blocks", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   hotelId: varchar("hotel_id").notNull().references(() => courtyardHotels.id, { onDelete: "cascade" }),
+  groupBookingId: varchar("group_booking_id").references(() => courtyardGroupBookings.id, { onDelete: "set null" }),
   groupName: text("group_name").notNull(), projectName: text("project_name"),
   arrivalDate: date("arrival_date").notNull(), departureDate: date("departure_date").notNull(),
   status: text("status").notNull().default("prospect"), peakRooms: integer("peak_rooms"), totalRoomNights: integer("total_room_nights"),

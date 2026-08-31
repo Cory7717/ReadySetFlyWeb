@@ -333,16 +333,21 @@ export default function CourtyardMeetingCalendar() {
   const updateGroupRoomAllocations = (roomAllocations: any[]) => setGroupRoomForm((current: any) => ({ ...current, roomAllocations, roomTypeMix: roomAllocations.length ? roomAllocations.map((item) => `${item.roomsPerNight || 0} ${item.roomType || "room"} @ ${money(item.rate)}`).join("; ") : "", peakRooms: roomAllocations.length ? roomAllocations.reduce((sum, item) => sum + Number(item.roomsPerNight || 0), 0) : current.peakRooms, totalRoomNights: roomAllocations.length ? roomAllocations.reduce((sum, item) => sum + Number(item.roomNights || 0), 0) : current.totalRoomNights, groupRate: roomAllocations.length === 1 ? roomAllocations[0].rate : roomAllocations.length > 1 ? "" : current.groupRate }));
   const todayKey = key(new Date());
   const upcomingGroups = groupRoomBlocks.filter((block: any) => block.departureDate >= todayKey && !["completed", "cancelled"].includes(block.status)).sort((a: any, b: any) => a.arrivalDate.localeCompare(b.arrivalDate)).slice(0, 5);
-  const monthlyEvents = Array.from(new Map(
-    events
-      .filter((event: any) => {
-        const revenueDate = event.bookingStartDate || event.eventDate;
-        return revenueDate >= key(first) && revenueDate <= key(last) && !["cancelled", "expired"].includes(event.status);
-      })
-      .map((event: any) => [event.bookingSeriesId || event.id, event]),
-  ).values()) as any[];
-  const monthlyRevenue = monthlyEvents.reduce((sum, event) => sum + Number(event.expectedRevenue || 0), 0);
-  const monthlyGroupRoomRevenue = groupRoomBlocks.filter((block: any) => block.arrivalDate >= key(first) && block.arrivalDate <= key(last) && block.status !== "cancelled").reduce((sum: number, block: any) => sum + (Number(block.estimatedRoomRevenue || 0) || allocationRevenue(block)), 0);
+  const displayedMonthStart = key(first), displayedMonthEnd = key(last);
+  const dateInDisplayedMonth = (date: string) => date >= displayedMonthStart && date <= displayedMonthEnd;
+  const monthlyRevenue = events.filter((event: any) => dateInDisplayedMonth(event.eventDate) && !["cancelled", "expired"].includes(event.status)).reduce((sum: number, event: any) => sum + Number(event.expectedRevenue || 0) / Math.max(1, Number(event.bookingSeriesDayCount || 1)), 0);
+  const monthlyGroupRoomMetrics = groupRoomBlocks.filter((block: any) => block.status !== "cancelled").reduce((totals: { revenue: number; roomNights: number }, block: any) => {
+    const stayNights = Math.max(1, groupNights(block));
+    let monthNights = 0;
+    const cursor = new Date(`${block.arrivalDate}T12:00:00Z`), departure = new Date(`${block.departureDate}T12:00:00Z`);
+    while (cursor < departure) { if (dateInDisplayedMonth(cursor.toISOString().slice(0, 10))) monthNights += 1; cursor.setUTCDate(cursor.getUTCDate() + 1); }
+    if (!monthNights) return totals;
+    const share = monthNights / stayNights, totalRevenue = Number(block.estimatedRoomRevenue || 0) || allocationRevenue(block);
+    totals.revenue += totalRevenue * share;
+    totals.roomNights += Number(block.totalRoomNights || 0) * share;
+    return totals;
+  }, { revenue: 0, roomNights: 0 });
+  const monthlyGroupRoomRevenue = monthlyGroupRoomMetrics.revenue;
   const combinedMonthlyRevenue = monthlyRevenue + monthlyGroupRoomRevenue;
   const openNew = (date = "") => {
     setEditingEventId(null);
@@ -506,7 +511,7 @@ export default function CourtyardMeetingCalendar() {
             <div className="border-b border-[#deceba] px-4 py-3"><div className="text-xs font-bold uppercase tracking-[.16em] text-[#8a6b3f]">Monthly booking revenue</div><div className="text-sm text-[#5f5247]">Active bookings arriving or beginning in {month.toLocaleDateString("en-US", { month: "long", year: "numeric" })}</div></div>
             <div className="grid sm:grid-cols-3">
               <div className="border-b border-[#deceba] p-4 sm:border-b-0 sm:border-r"><div className="text-xs font-bold uppercase tracking-[.12em] text-[#8a6b3f]">Meeting / event revenue</div><div className="mt-1 text-2xl font-bold text-[#2f5f46]">{money(monthlyRevenue)}</div></div>
-              <div className="border-b border-[#deceba] p-4 sm:border-b-0 sm:border-r"><div className="text-xs font-bold uppercase tracking-[.12em] text-[#315f86]">Group Room revenue</div><div className="mt-1 text-2xl font-bold text-[#315f86]">{money(monthlyGroupRoomRevenue)}</div></div>
+              <div className="border-b border-[#deceba] p-4 sm:border-b-0 sm:border-r"><div className="text-xs font-bold uppercase tracking-[.12em] text-[#315f86]">Group Room revenue</div><div className="mt-1 text-2xl font-bold text-[#315f86]">{money(monthlyGroupRoomRevenue)}</div><div className="mt-1 text-xs text-[#4c6478]">{Math.round(monthlyGroupRoomMetrics.roomNights).toLocaleString()} room nights in this month</div></div>
               <div className="bg-[#f1e6d4] p-4 dark:bg-[#f1e6d4]"><div className="text-xs font-bold uppercase tracking-[.12em] text-[#5d4529]">Combined monthly revenue</div><div className="mt-1 text-3xl font-bold text-[#201814]">{money(combinedMonthlyRevenue)}</div></div>
             </div>
           </CardContent>
@@ -528,14 +533,14 @@ export default function CourtyardMeetingCalendar() {
             </div>
             <div className="grid grid-cols-7">
               {days.map((d) => {
-                const date = key(d),
-                  rows = calendarLayer === "groups" ? [] : events.filter((x: any) => x.eventDate === date),
-                  groupRows = calendarLayer === "meetings" ? [] : groupRoomBlocks.filter((x: any) => x.arrivalDate <= date && x.departureDate >= date && x.status !== "cancelled");
+                const date = key(d), inDisplayedMonth = dateInDisplayedMonth(date),
+                  rows = !inDisplayedMonth || calendarLayer === "groups" ? [] : events.filter((x: any) => x.eventDate === date),
+                  groupRows = !inDisplayedMonth || calendarLayer === "meetings" ? [] : groupRoomBlocks.filter((x: any) => x.arrivalDate <= date && x.departureDate >= date && x.status !== "cancelled");
                 return (
                   <button
                     key={date}
-                    className={`min-h-32 border-t border-r p-2 text-left align-top hover:bg-[#fffaf2] ${d.getMonth() !== month.getMonth() ? "bg-slate-50 text-slate-400" : ""}`}
-                    onClick={() => openNew(date)}
+                    className={`min-h-32 border-t border-r p-2 text-left align-top ${inDisplayedMonth ? "hover:bg-[#fffaf2]" : "cursor-default bg-slate-50 text-slate-400"}`}
+                    onClick={() => { if (inDisplayedMonth) openNew(date); }}
                   >
                     <div className="font-semibold">{d.getDate()}</div>
                     {rows.map((x: any) => (
@@ -562,7 +567,7 @@ export default function CourtyardMeetingCalendar() {
           </div>
           <div className="space-y-2 md:hidden">
             {days.filter((day) => {
-              if (day.getMonth() !== month.getMonth()) return false;
+              if (!dateInDisplayedMonth(key(day))) return false;
               const date = key(day);
               const hasEvents = calendarLayer !== "groups" && events.some((event: any) => event.eventDate === date);
               const hasGroups = calendarLayer !== "meetings" && groupRoomBlocks.some((block: any) => block.arrivalDate <= date && block.departureDate >= date && block.status !== "cancelled");
@@ -571,12 +576,12 @@ export default function CourtyardMeetingCalendar() {
               const date = key(day), mobileEvents = calendarLayer === "groups" ? [] : events.filter((event: any) => event.eventDate === date), mobileGroups = calendarLayer === "meetings" ? [] : groupRoomBlocks.filter((block: any) => block.arrivalDate <= date && block.departureDate >= date && block.status !== "cancelled");
               return <section key={date} className="overflow-hidden rounded-xl border border-[#cdbda8] bg-white text-[#201814]"><button className="flex w-full items-center justify-between bg-[#eadfce] px-3 py-2 text-left" onClick={() => openNew(date)}><span className="font-semibold">{day.toLocaleDateString("en-US", { weekday: "long", month: "short", day: "numeric" })}</span><Plus className="h-4 w-4" /></button><div className="space-y-2 p-2">{mobileEvents.map((event: any) => <button key={event.id} className={`w-full rounded-lg p-3 text-left ${colors[event.status] || colors.inquiry}`} onClick={() => setSelectedEvent(event)}><div className="flex items-start gap-2"><div className="min-w-0 flex-1"><div className="truncate font-semibold">{event.groupName} · {event.eventName}</div><div className="text-xs">{event.guestStartTime.slice(0, 5)}–{event.guestEndTime.slice(0, 5)} · {event.status.replaceAll("_", " ")}</div></div><BookingTypeBadge type={meetingBookingType(event)} /></div></button>)}{mobileGroups.map((block: any) => { const marker = date === block.arrivalDate ? "ARRIVAL" : date === block.departureDate ? "DEPARTURE" : "IN HOUSE"; return <button key={block.id} className={`w-full rounded-lg border border-blue-200 p-3 text-left ${groupStatusColors[block.status] || groupStatusColors.prospect}`} onClick={() => setSelectedGroupRoom(block)}><div className="flex items-start gap-2"><div className="min-w-0 flex-1"><div className="truncate font-semibold">{marker} · {block.groupName}</div><div className="text-xs">{date === block.departureDate ? "Checks out" : `${block.peakRooms || 0} rooms`} · {block.status.replaceAll("_", " ")}</div></div><BookingTypeBadge type={groupBookingType(block)} /></div></button>; })}</div></section>;
             })}
-            {!days.some((day) => { const date = key(day); return day.getMonth() === month.getMonth() && ((calendarLayer !== "groups" && events.some((event: any) => event.eventDate === date)) || (calendarLayer !== "meetings" && groupRoomBlocks.some((block: any) => block.arrivalDate <= date && block.departureDate >= date && block.status !== "cancelled"))); }) && <div className="rounded-xl border border-dashed border-[#cdbda8] bg-white p-6 text-center text-sm text-[#5f5247]">No calendar entries this month.</div>}
+            {!days.some((day) => { const date = key(day); return dateInDisplayedMonth(date) && ((calendarLayer !== "groups" && events.some((event: any) => event.eventDate === date)) || (calendarLayer !== "meetings" && groupRoomBlocks.some((block: any) => block.arrivalDate <= date && block.departureDate >= date && block.status !== "cancelled"))); }) && <div className="rounded-xl border border-dashed border-[#cdbda8] bg-white p-6 text-center text-sm text-[#5f5247]">No calendar entries this month.</div>}
           </div></>
         ) : (
           <Card>
             <CardContent className="space-y-2 p-4">
-              {calendarLayer !== "groups" && events.map((x: any) => (
+              {calendarLayer !== "groups" && events.filter((event: any) => dateInDisplayedMonth(event.eventDate)).map((x: any) => (
                 <div
                   key={x.id}
                   role="button"
@@ -603,7 +608,7 @@ export default function CourtyardMeetingCalendar() {
                   </Badge>
                 </div>
               ))}
-              {calendarLayer !== "meetings" && groupRoomBlocks.map((block: any) => <div key={block.id} role="button" tabIndex={0} className="flex cursor-pointer flex-wrap justify-between gap-2 rounded border border-blue-200 bg-[#f4f8fb] p-3 text-left hover:border-[#315f86]" onClick={() => setSelectedGroupRoom(block)}><div><div className="flex items-center gap-2"><b>{block.arrivalDate}–{block.departureDate} · {block.groupName}</b><BookingTypeBadge type={groupBookingType(block)} /></div><div className="text-sm">{groupNights(block)} nights · {block.peakRooms || 0} peak rooms · {block.totalRoomNights || 0} total room nights</div></div><Badge className={groupStatusColors[block.status]}>{block.status.replaceAll("_", " ")}</Badge></div>)}
+              {calendarLayer !== "meetings" && groupRoomBlocks.filter((block: any) => block.arrivalDate <= displayedMonthEnd && block.departureDate >= displayedMonthStart).map((block: any) => <div key={block.id} role="button" tabIndex={0} className="flex cursor-pointer flex-wrap justify-between gap-2 rounded border border-blue-200 bg-[#f4f8fb] p-3 text-left hover:border-[#315f86]" onClick={() => setSelectedGroupRoom(block)}><div><div className="flex items-center gap-2"><b>{block.arrivalDate}–{block.departureDate} · {block.groupName}</b><BookingTypeBadge type={groupBookingType(block)} /></div><div className="text-sm">{groupNights(block)} nights · {block.peakRooms || 0} peak rooms · {block.totalRoomNights || 0} total room nights</div></div><Badge className={groupStatusColors[block.status]}>{block.status.replaceAll("_", " ")}</Badge></div>)}
             </CardContent>
           </Card>
         )}

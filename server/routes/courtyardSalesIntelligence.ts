@@ -270,7 +270,7 @@ function groupRoomWriteValues(body: any) {
   return {
     groupName: String(body?.groupName || "").trim(), projectName: String(body?.projectName || "").trim() || null,
     arrivalDate: body.arrivalDate, departureDate: body.departureDate, status: String(body?.status || "prospect"),
-    peakRooms, totalRoomNights, roomTypeMix: String(body?.roomTypeMix || "").trim() || null, roomAllocationsJson: roomAllocations.length ? JSON.stringify(roomAllocations) : null,
+    peakRooms, totalRoomNights, roomTypeMix: roomAllocations.length ? roomAllocations.map((item) => `${item.roomsPerNight} ${item.roomType} @ $${item.rate.toFixed(2)}`).join("; ") : String(body?.roomTypeMix || "").trim() || null, roomAllocationsJson: roomAllocations.length ? JSON.stringify(roomAllocations) : null,
     groupRate: groupRate == null ? null : groupRate.toFixed(2), estimatedRoomRevenue: roomAllocations.length ? allocationRevenue.toFixed(2) : groupRate == null || totalRoomNights == null ? null : (groupRate * totalRoomNights).toFixed(2),
     bookingMethod: String(body?.bookingMethod || "").trim() || null, cutoffDate: body?.cutoffDate || null, groupCode: String(body?.groupCode || "").trim() || null, taxExempt: Boolean(body?.taxExempt),
     primaryContactName: String(body?.primaryContactName || "").trim() || null, primaryContactEmail: String(body?.primaryContactEmail || "").trim() || null, primaryContactPhone: String(body?.primaryContactPhone || "").trim() || null, salesOwner: String(body?.salesOwner || "").trim() || null,

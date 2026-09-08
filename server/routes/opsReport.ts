@@ -2,7 +2,7 @@ import express, { type Express, type RequestHandler } from "express";
 import multer from "multer";
 import { z } from "zod";
 import bcrypt from "bcrypt";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, gte, lte } from "drizzle-orm";
 import { createRequire } from "module";
 import { randomUUID } from "crypto";
 import { db } from "../db";
@@ -13,6 +13,7 @@ import {
   courtyardOpsReportDrafts,
   courtyardOpsMonthlySummaries,
   courtyardOpsReportUserSettings,
+  courtyardMeetingEvents,
   tipsKioskSettings,
   tipsUsers,
   weeklySchedules,
@@ -938,6 +939,42 @@ export function registerOpsReportRoutes(app: Express) {
       }
       for (const items of Object.values(breakdown)) items.sort((a, b) => b.hours - a.hours || a.label.localeCompare(b.label));
       res.json({ weekStart: parsed.data.weekStart, scheduleId: schedule.id, departments, breakdown, wageEstimates: finalizeLaborWageEstimates(wageEstimates) });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.get("/labor/events", requireOpsManager as RequestHandler, async (req, res, next) => {
+    try {
+      const parsed = z.object({ weekStart: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) }).safeParse(req.query);
+      if (!parsed.success) return res.status(400).json({ error: "Valid weekStart is required." });
+      const start = new Date(`${parsed.data.weekStart}T00:00:00Z`);
+      start.setUTCDate(start.getUTCDate() + 6);
+      const weekEnd = start.toISOString().slice(0, 10);
+      const events = await db
+        .select({
+          id: courtyardMeetingEvents.id,
+          groupName: courtyardMeetingEvents.groupName,
+          eventName: courtyardMeetingEvents.eventName,
+          eventDate: courtyardMeetingEvents.eventDate,
+          status: courtyardMeetingEvents.status,
+          attendance: courtyardMeetingEvents.attendance,
+          setupStartTime: courtyardMeetingEvents.setupStartTime,
+          guestStartTime: courtyardMeetingEvents.guestStartTime,
+          guestEndTime: courtyardMeetingEvents.guestEndTime,
+          breakdownEndTime: courtyardMeetingEvents.breakdownEndTime,
+          cateringRevenue: courtyardMeetingEvents.cateringRevenue,
+          breakfastPerPerson: courtyardMeetingEvents.breakfastPerPerson,
+          lunchDinnerPerPerson: courtyardMeetingEvents.lunchDinnerPerPerson,
+          cateringNotes: courtyardMeetingEvents.cateringNotes,
+        })
+        .from(courtyardMeetingEvents)
+        .where(and(
+          eq(courtyardMeetingEvents.hotelId, "courtyard-austin-lakeline"),
+          gte(courtyardMeetingEvents.eventDate, parsed.data.weekStart),
+          lte(courtyardMeetingEvents.eventDate, weekEnd),
+        ));
+      res.json({ weekStart: parsed.data.weekStart, weekEnd, events });
     } catch (error) {
       next(error);
     }

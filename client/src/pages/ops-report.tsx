@@ -45,6 +45,23 @@ type LaborWageEstimate = {
   blendedHourlyRate: number;
   blendedRateIncludingSalary: number;
 };
+type BistroLaborEvent = {
+  id: string;
+  groupName: string;
+  eventName: string;
+  eventDate: string;
+  status: string;
+  attendance: number | null;
+  setupStartTime: string;
+  guestStartTime: string;
+  guestEndTime: string;
+  breakdownEndTime: string;
+  cateringRevenue: string | null;
+  breakfastPerPerson: string | null;
+  lunchDinnerPerPerson: string | null;
+  cateringNotes: string | null;
+};
+type BistroLaborEventsResponse = { weekStart: string; weekEnd: string; events: BistroLaborEvent[] };
 type LaborHoursResponse = {
   weekStart: string;
   scheduleId?: string | null;
@@ -103,6 +120,14 @@ const DEFAULT_HOUSEKEEPING_LABOR_MODEL = {
   laundryMinutesPerRoom: "6.3",
   supervisorInspectorHours: "56",
   housepersonPublicAreaHours: "40",
+};
+const DEFAULT_BISTRO_EVENT_LABOR_MODEL = {
+  attendeesPerAttendant: "25",
+  minimumServiceAttendants: "1",
+  setupStaff: "1",
+  breakdownStaff: "1",
+  availableHoursPerAdditionalAssociate: "30",
+  eventScope: "catered",
 };
 const defaultLaborRows = (): Row[] => [
   { department: "FRONT DESK / NIGHT AUDIT HOURS", scheduledHours: "", actualHours: "", budget: "168", comments: "112 FD + 56 Night Audit + Front Desk Supervisor" },
@@ -297,6 +322,25 @@ function bistroBudgetHoursForOccupancy(occupancyPercent: number) {
   if (occupancyPercent <= 50) return interpolateHours(occupancyPercent, 40, 50, 100, 110);
   if (occupancyPercent <= 65) return interpolateHours(occupancyPercent, 51, 65, 111, 119);
   return interpolateHours(occupancyPercent, 66, 100, 120, 130);
+}
+
+function clockHoursBetween(startValue: string, endValue: string) {
+  const parse = (value: string) => {
+    const match = String(value || "").match(/^(\d{1,2}):(\d{2})/);
+    return match ? Number(match[1]) * 60 + Number(match[2]) : null;
+  };
+  const start = parse(startValue);
+  const end = parse(endValue);
+  if (start == null || end == null) return 0;
+  const minutes = end >= start ? end - start : end + 24 * 60 - start;
+  return minutes / 60;
+}
+
+function eventHasCatering(event: BistroLaborEvent) {
+  return num(event.cateringRevenue || "") > 0
+    || num(event.breakfastPerPerson || "") > 0
+    || num(event.lunchDinnerPerPerson || "") > 0
+    || Boolean(String(event.cateringNotes || "").trim());
 }
 
 function mergeLaborHours(rows: Row[], departments: Record<string, number>, field: "scheduledHours" | "actualHours") {
@@ -1142,6 +1186,7 @@ export default function OpsReportPage() {
   const [ledgerExceptions, setLedgerExceptions] = useState<Row[]>([]);
   const [labor, setLabor] = useState<Row[]>(defaultLaborRows());
   const [housekeepingLaborModel, setHousekeepingLaborModel] = useState(DEFAULT_HOUSEKEEPING_LABOR_MODEL);
+  const [bistroEventLaborModel, setBistroEventLaborModel] = useState(DEFAULT_BISTRO_EVENT_LABOR_MODEL);
   const [laborFile, setLaborFile] = useState<File | null>(null);
   const [uploadedReports, setUploadedReports] = useState<Array<Record<string, any>>>([]);
   const [draftHydrated, setDraftHydrated] = useState(false);
@@ -1265,6 +1310,15 @@ export default function OpsReportPage() {
     enabled: Boolean(access.data?.unlocked && /^\d{4}-\d{2}-\d{2}$/.test(topMetrics.weekStart)),
     queryFn: async () => {
       const response = await fetch(apiUrl(`/api/opsreport/labor/scheduled?weekStart=${encodeURIComponent(topMetrics.weekStart)}`), { credentials: "include" });
+      if (!response.ok) throw new Error(await response.text());
+      return response.json();
+    },
+  });
+  const bistroLaborEvents = useQuery<BistroLaborEventsResponse>({
+    queryKey: ["/api/opsreport/labor/events", topMetrics.weekStart],
+    enabled: Boolean(access.data?.unlocked && /^\d{4}-\d{2}-\d{2}$/.test(topMetrics.weekStart)),
+    queryFn: async () => {
+      const response = await fetch(apiUrl(`/api/opsreport/labor/events?weekStart=${encodeURIComponent(topMetrics.weekStart)}`), { credentials: "include" });
       if (!response.ok) throw new Error(await response.text());
       return response.json();
     },
@@ -1396,6 +1450,31 @@ export default function OpsReportPage() {
   const ytdVariancePercent = num(topMetrics.ytdLastYear)
     ? ytdVariance / Math.abs(num(topMetrics.ytdLastYear)) * 100
     : null;
+  const bistroEventLabor = useMemo(() => {
+    const ratio = Math.max(1, num(bistroEventLaborModel.attendeesPerAttendant));
+    const minimumServiceAttendants = Math.max(0, num(bistroEventLaborModel.minimumServiceAttendants));
+    const setupStaff = Math.max(0, num(bistroEventLaborModel.setupStaff));
+    const breakdownStaff = Math.max(0, num(bistroEventLaborModel.breakdownStaff));
+    const eligibleEvents = (bistroLaborEvents.data?.events || []).filter((event) =>
+      event.status !== "cancelled" && (bistroEventLaborModel.eventScope === "all" || eventHasCatering(event)),
+    );
+    const details = eligibleEvents.map((event) => {
+      const serviceAttendants = Math.max(minimumServiceAttendants, Math.ceil(Math.max(0, Number(event.attendance || 0)) / ratio));
+      const setupHours = clockHoursBetween(event.setupStartTime, event.guestStartTime) * setupStaff;
+      const serviceHours = clockHoursBetween(event.guestStartTime, event.guestEndTime) * serviceAttendants;
+      const breakdownHours = clockHoursBetween(event.guestEndTime, event.breakdownEndTime) * breakdownStaff;
+      return { ...event, setupHours, serviceHours, breakdownHours, laborHours: setupHours + serviceHours + breakdownHours, serviceAttendants };
+    });
+    const confirmedStatuses = new Set(["definite", "in_house", "completed"]);
+    const confirmed = details.filter((event) => confirmedStatuses.has(event.status));
+    const tentative = details.filter((event) => !confirmedStatuses.has(event.status));
+    return {
+      confirmedHours: confirmed.reduce((total, event) => total + event.laborHours, 0),
+      tentativeHours: tentative.reduce((total, event) => total + event.laborHours, 0),
+      confirmed,
+      tentative,
+    };
+  }, [bistroLaborEvents.data?.events, bistroEventLaborModel]);
   const effectiveLabor = useMemo<Row[]>(() => labor.map((row): Row => {
     const department = String(row.department || "").trim().toUpperCase();
     if (department === "BREAKFAST / BISTRO HOURS") {
@@ -1403,9 +1482,13 @@ export default function OpsReportPage() {
       const totalRooms = num(setup.totalRooms) || DEFAULT_OPS_TOTAL_ROOMS;
       const roomsSold = num(topMetrics.roomsSold);
       const occupancyPercent = occupancy > 0 ? occupancy : totalRooms > 0 && roomsSold > 0 ? roomsSold / totalRooms * 100 : 0;
+      const baseOutletHours = occupancyPercent > 0 ? bistroBudgetHoursForOccupancy(occupancyPercent) : num(row.budget);
       return {
         ...row,
-        budget: occupancyPercent > 0 ? fmtHours(bistroBudgetHoursForOccupancy(occupancyPercent)) : row.budget,
+        budget: fmtHours(baseOutletHours + bistroEventLabor.confirmedHours),
+        baseOutletExpectedHours: fmtHours(baseOutletHours),
+        confirmedEventExpectedHours: fmtHours(bistroEventLabor.confirmedHours),
+        tentativeEventExpectedHours: fmtHours(bistroEventLabor.tentativeHours),
         calculatedMpor: "",
         targetMpor: "",
         mporVariance: "",
@@ -1436,9 +1519,17 @@ export default function OpsReportPage() {
       targetMpor: "30.0",
       mporVariance: mporVariance == null ? "" : `${mporVariance > 0 ? "+" : ""}${mporVariance.toFixed(1)}`,
     };
-  }), [labor, setup.totalRooms, topMetrics.occupancy, topMetrics.roomsSold, housekeepingLaborModel]);
+  }), [labor, setup.totalRooms, topMetrics.occupancy, topMetrics.roomsSold, housekeepingLaborModel, bistroEventLabor.confirmedHours, bistroEventLabor.tentativeHours]);
   const scheduledLaborTotal = useMemo(() => effectiveLabor.reduce((sum, row) => sum + num(row.scheduledHours), 0), [effectiveLabor]);
   const actualLaborTotal = useMemo(() => effectiveLabor.reduce((sum, row) => sum + num(row.actualHours), 0), [effectiveLabor]);
+  const bistroLaborSummary = useMemo(() => {
+    const row = effectiveLabor.find((item) => String(item.department || "").trim().toUpperCase() === "BREAKFAST / BISTRO HOURS");
+    const expectedHours = num(row?.budget);
+    const scheduledHours = num(row?.scheduledHours);
+    const uncoveredHours = Math.max(0, expectedHours - scheduledHours);
+    const availableHoursPerAssociate = Math.max(1, num(bistroEventLaborModel.availableHoursPerAdditionalAssociate));
+    return { expectedHours, scheduledHours, uncoveredHours, additionalAssociates: Math.ceil(uncoveredHours / availableHoursPerAssociate) };
+  }, [effectiveLabor, bistroEventLaborModel.availableHoursPerAdditionalAssociate]);
   const laborTotal = actualLaborTotal || scheduledLaborTotal;
   const laborBudget = useMemo(() => effectiveLabor.reduce((sum, row) => sum + num(row.budget), 0), [effectiveLabor]);
   const laborVariance = actualLaborTotal ? actualLaborTotal - laborBudget : 0;
@@ -1960,6 +2051,7 @@ export default function OpsReportPage() {
     setLedgerExceptions([]);
     setLabor(defaultLaborRows());
     setHousekeepingLaborModel(DEFAULT_HOUSEKEEPING_LABOR_MODEL);
+    setBistroEventLaborModel(DEFAULT_BISTRO_EVENT_LABOR_MODEL);
     setStaffing({ openPositions: "", status: "", overtimeLastWeek: "", overtimeExpected: "", comment: "" });
     setCases(emptyRows(5, ["no", "guest", "incidentType", "resolution", "comment"]));
     setGmOverviewRows(emptyRows(6, ["no", "bullet"]));
@@ -1990,6 +2082,7 @@ export default function OpsReportPage() {
     if (payload.ledgerExceptions) setLedgerExceptions(payload.ledgerExceptions);
     if (payload.labor) setLabor(normalizeLaborRows(payload.labor));
     if (payload.housekeepingLaborModel) setHousekeepingLaborModel({ ...DEFAULT_HOUSEKEEPING_LABOR_MODEL, ...payload.housekeepingLaborModel });
+    if (payload.bistroEventLaborModel) setBistroEventLaborModel({ ...DEFAULT_BISTRO_EVENT_LABOR_MODEL, ...payload.bistroEventLaborModel });
     if (payload.monthlyBudgets) setMonthlyBudgets(payload.monthlyBudgets.map(normalizeMonthlyBudgetRow));
     if (payload.bistroProductions) setBistroProductions(payload.bistroProductions);
     if (payload.meetingProductions) setMeetingProductions(payload.meetingProductions);
@@ -2043,6 +2136,7 @@ export default function OpsReportPage() {
     ledgerExceptions,
     labor,
     housekeepingLaborModel,
+    bistroEventLaborModel,
     monthlyBudgets: monthlyBudgets.map(normalizeMonthlyBudgetRow),
     bistroProductions,
     meetingProductions,
@@ -2056,7 +2150,7 @@ export default function OpsReportPage() {
     negativeReviews,
     followUp,
     priorities,
-  }), [setup, topMetrics, monthRows, nextMonthRows, chargebacks, maintenance, oooRooms, adjustments, ar, ledger, ledgerExceptions, labor, housekeepingLaborModel, monthlyBudgets, bistroProductions, meetingProductions, staffing, cases, gmOverviewRows, gssRows, gssWaveRows, reputationRows, positiveReviews, negativeReviews, followUp, priorities]);
+  }), [setup, topMetrics, monthRows, nextMonthRows, chargebacks, maintenance, oooRooms, adjustments, ar, ledger, ledgerExceptions, labor, housekeepingLaborModel, bistroEventLaborModel, monthlyBudgets, bistroProductions, meetingProductions, staffing, cases, gmOverviewRows, gssRows, gssWaveRows, reputationRows, positiveReviews, negativeReviews, followUp, priorities]);
 
   useEffect(() => {
     if (!access.data?.unlocked || draft.isLoading || draftHydrated) return;
@@ -2832,6 +2926,55 @@ export default function OpsReportPage() {
                   </Button>
                 </div>
               </div>
+              <div className="border-b border-[#e0d3c1] bg-[#f4f7f9] p-4">
+                <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <div className="text-sm font-semibold text-[#201814]">Bistro outlet + event labor model</div>
+                    <p className="mt-1 max-w-3xl text-xs text-[#5f5247]">
+                      Base outlet hours follow the occupancy scale. Definite Meeting Calendar event labor is added for setup, guest service, and breakdown; tentative demand is shown separately.
+                    </p>
+                  </div>
+                  <Button variant="outline" className={C.outline} onClick={() => bistroLaborEvents.refetch()} disabled={bistroLaborEvents.isFetching}>
+                    {bistroLaborEvents.isFetching ? "Refreshing events..." : "Refresh events"}
+                  </Button>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                  <LabeledInput label="Guests per attendant" value={bistroEventLaborModel.attendeesPerAttendant} onChange={(attendeesPerAttendant) => setBistroEventLaborModel({ ...bistroEventLaborModel, attendeesPerAttendant })} type="number" />
+                  <LabeledInput label="Minimum service attendants" value={bistroEventLaborModel.minimumServiceAttendants} onChange={(minimumServiceAttendants) => setBistroEventLaborModel({ ...bistroEventLaborModel, minimumServiceAttendants })} type="number" />
+                  <LabeledInput label="Setup staff" value={bistroEventLaborModel.setupStaff} onChange={(setupStaff) => setBistroEventLaborModel({ ...bistroEventLaborModel, setupStaff })} type="number" />
+                  <LabeledInput label="Breakdown staff" value={bistroEventLaborModel.breakdownStaff} onChange={(breakdownStaff) => setBistroEventLaborModel({ ...bistroEventLaborModel, breakdownStaff })} type="number" />
+                  <LabeledInput label="Available hours / added associate" value={bistroEventLaborModel.availableHoursPerAdditionalAssociate} onChange={(availableHoursPerAdditionalAssociate) => setBistroEventLaborModel({ ...bistroEventLaborModel, availableHoursPerAdditionalAssociate })} type="number" />
+                  <div>
+                    <Label className={`text-xs font-semibold uppercase tracking-[0.12em] ${C.label}`}>Events included</Label>
+                    <Select value={bistroEventLaborModel.eventScope} onValueChange={(eventScope) => setBistroEventLaborModel({ ...bistroEventLaborModel, eventScope })}>
+                      <SelectTrigger className={`mt-1 ${C.field}`}><SelectValue /></SelectTrigger>
+                      <SelectContent className={C.menu}>
+                        <SelectItem value="catered">Catered events only</SelectItem>
+                        <SelectItem value="all">All meeting events</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                  <div className="rounded-lg border border-[#cbd5df] bg-white p-3"><div className="text-xs text-[#5f5247]">Base outlet</div><div className="text-xl font-semibold text-[#201814]">{effectiveLabor.find((row) => row.department === "BREAKFAST / BISTRO HOURS")?.baseOutletExpectedHours || "0"} hrs</div></div>
+                  <div className="rounded-lg border border-[#b8d6c0] bg-[#edf5ef] p-3"><div className="text-xs text-[#315a3f]">Confirmed event labor</div><div className="text-xl font-semibold text-[#173c25]">{fmtHours(bistroEventLabor.confirmedHours)} hrs</div></div>
+                  <div className="rounded-lg border border-[#dcc9aa] bg-[#fff8e8] p-3"><div className="text-xs text-[#765b2f]">Tentative event forecast</div><div className="text-xl font-semibold text-[#5f431d]">{fmtHours(bistroEventLabor.tentativeHours)} hrs</div></div>
+                  <div className="rounded-lg border border-[#d7c8b5] bg-white p-3"><div className="text-xs text-[#5f5247]">Uncovered confirmed hours</div><div className="text-xl font-semibold text-[#201814]">{fmtHours(bistroLaborSummary.uncoveredHours)} hrs</div></div>
+                  <div className="rounded-lg border border-[#d7b1ae] bg-[#fff1f0] p-3"><div className="text-xs text-[#7d3631]">Additional associates indicated</div><div className="text-xl font-semibold text-[#681f1a]">{bistroLaborSummary.additionalAssociates}</div></div>
+                </div>
+                <details className="mt-3 rounded-lg border border-[#d7c8b5] bg-white p-3 text-sm text-[#201814]">
+                  <summary className="cursor-pointer font-semibold">Meeting Calendar labor detail ({bistroEventLabor.confirmed.length} confirmed, {bistroEventLabor.tentative.length} tentative)</summary>
+                  <div className="mt-2 space-y-2">
+                    {[...bistroEventLabor.confirmed, ...bistroEventLabor.tentative].length === 0 && <div className="text-xs text-[#5f5247]">No matching events were found for this report week.</div>}
+                    {[...bistroEventLabor.confirmed, ...bistroEventLabor.tentative].map((event) => (
+                      <div key={event.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-[#eadcc9] pt-2 first:border-0 first:pt-0">
+                        <div><span className="font-medium">{event.eventDate} · {event.groupName}</span><span className="text-[#5f5247]"> — {event.eventName}, {event.attendance || 0} guests, {event.serviceAttendants} service staff</span></div>
+                        <div className="flex items-center gap-2"><Badge variant="outline">{event.status.replaceAll("_", " ")}</Badge><span className="font-semibold">{fmtHours(event.laborHours)} hrs</span></div>
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              </div>
               <div className="border-b border-[#e0d3c1] bg-[#fbf6ee] p-4">
                 <div className="mb-3">
                   <div className="text-sm font-semibold text-[#201814]">Housekeeping operational labor model</div>
@@ -2885,7 +3028,7 @@ export default function OpsReportPage() {
                 rows={laborRows}
                 onChange={(rows) => setLabor(rows
                   .filter((row) => row.__readOnly !== "true")
-                  .map(({ __readOnly, variance, ownershipTargetHours, ownershipVariance, roomAttendantExpectedHours, laundryExpectedHours, supervisorInspectorExpectedHours, housepersonPublicAreaExpectedHours, estimatedActualWages, estimatedActualWagesWithSalary, calculatedMpor, targetMpor, mporVariance, ...row }) => row))}
+                  .map(({ __readOnly, variance, ownershipTargetHours, ownershipVariance, roomAttendantExpectedHours, laundryExpectedHours, supervisorInspectorExpectedHours, housepersonPublicAreaExpectedHours, baseOutletExpectedHours, confirmedEventExpectedHours, tentativeEventExpectedHours, estimatedActualWages, estimatedActualWagesWithSalary, calculatedMpor, targetMpor, mporVariance, ...row }) => row))}
                 getCellPreview={laborDepartmentPreview}
               />
             </Section>

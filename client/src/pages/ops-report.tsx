@@ -1517,6 +1517,31 @@ export default function OpsReportPage() {
     };
   }), [reputationRows]);
   const currentMonthKey = useMemo(() => monthKeyFromDate(topMetrics.weekStart), [topMetrics.weekStart]);
+  const updateCurrentMonthRows = (nextRows: Row[]) => {
+    const normalizedRows = normalizeCurrentMonthRows(nextRows);
+    setMonthRows(normalizedRows);
+
+    if (!currentMonthKey) return;
+    const editedBudget = normalizedRows.find((row) => row.label === "CURRENT MONTH BUDGET");
+    if (!editedBudget) return;
+
+    setMonthlyBudgets((currentBudgets) => {
+      const existing = currentBudgets.find((row) => row.month === currentMonthKey) || {};
+      const updated = {
+        ...existing,
+        month: currentMonthKey,
+        occupancy: editedBudget.occupancy || "",
+        rooms: editedBudget.rooms || "",
+        adr: editedBudget.adr || "",
+        revenue: editedBudget.revenue || "",
+      };
+      const unchanged = ["occupancy", "rooms", "adr", "revenue"].every(
+        (field) => String(existing[field] || "") === String(updated[field] || ""),
+      );
+      if (unchanged) return currentBudgets;
+      return [...currentBudgets.filter((row) => row.month !== currentMonthKey), updated];
+    });
+  };
   useEffect(() => {
     setMonthlyReviewHydrated(false);
   }, [monthlyReviewMonth]);
@@ -2119,7 +2144,7 @@ export default function OpsReportPage() {
       const nextRows = rows.map((row) => {
       const label = String(row.label || "").trim().toUpperCase();
       const next = (label === "CURRENT MONTH BUDGET" || label === "CURRENT MONTHLY BUDGET") && budget
-        ? { ...row, occupancy: budget.occupancy || "", rooms: monthlyRoomsValue(budget.rooms || "", budget.adr || "", budget.revenue || ""), adr: budget.adr || "", revenue: budget.revenue || "", comments: `Budget for ${monthLabelFromKey(currentMonthKey)}` }
+        ? { ...row, occupancy: budget.occupancy || "", rooms: budget.rooms || "", adr: budget.adr || "", revenue: budget.revenue || "", comments: `Budget for ${monthLabelFromKey(currentMonthKey)}` }
         : label === "MONTHLY TOTAL"
           ? { ...row, ...monthlyTotal, comments: "Month to date plus future booked" }
           : label === "LY SAME MONTH" && ly
@@ -2655,7 +2680,7 @@ export default function OpsReportPage() {
                 uploading={opsReportUpload.isPending}
                 onUpload={(files) => uploadSectionReports("Current Month", files)}
               />
-              <EditableTable columns={[{ key: "label", label: "Current Month", wide: true }, { key: "occupancy", label: "Occupancy" }, { key: "rooms", label: "Rooms" }, { key: "adr", label: "ADR" }, { key: "revenue", label: "Room Revenue" }, { key: "comments", label: "Comments", wide: true }]} rows={monthRows} onChange={setMonthRows} />
+              <EditableTable columns={[{ key: "label", label: "Current Month", wide: true }, { key: "occupancy", label: "Occupancy" }, { key: "rooms", label: "Rooms" }, { key: "adr", label: "ADR" }, { key: "revenue", label: "Room Revenue" }, { key: "comments", label: "Comments", wide: true }]} rows={monthRows} onChange={updateCurrentMonthRows} />
               <div className="rounded-lg border border-[#d7c8b5] bg-[#fffaf2] px-4 py-3 text-sm text-[#5f5247]">
                 <span className="font-semibold text-[#201814]">Variance to Budget</span> = Monthly Total minus Current Month Budget.{" "}
                 <span className="font-semibold text-[#201814]">Pacing Variance to LY</span> = Monthly Total minus the SDLY OTB snapshot.{" "}

@@ -98,6 +98,12 @@ const CONTROLLABLE_LABOR_DEPARTMENTS = [
   "BREAKFAST / BISTRO HOURS",
   "MAINTENANCE HOURS",
 ];
+const DEFAULT_HOUSEKEEPING_LABOR_MODEL = {
+  roomAttendantMinutesPerRoom: "30",
+  laundryMinutesPerRoom: "6.3",
+  supervisorInspectorHours: "56",
+  housepersonPublicAreaHours: "40",
+};
 const defaultLaborRows = (): Row[] => [
   { department: "FRONT DESK / NIGHT AUDIT HOURS", scheduledHours: "", actualHours: "", budget: "168", comments: "112 FD + 56 Night Audit + Front Desk Supervisor" },
   { department: "HOUSEKEEPING HOURS", scheduledHours: "", actualHours: "", budget: "45", comments: "" },
@@ -1135,6 +1141,7 @@ export default function OpsReportPage() {
   const [ledger, setLedger] = useState({ balance: "", over1000: "", uncovered: "", comment: "" });
   const [ledgerExceptions, setLedgerExceptions] = useState<Row[]>([]);
   const [labor, setLabor] = useState<Row[]>(defaultLaborRows());
+  const [housekeepingLaborModel, setHousekeepingLaborModel] = useState(DEFAULT_HOUSEKEEPING_LABOR_MODEL);
   const [laborFile, setLaborFile] = useState<File | null>(null);
   const [uploadedReports, setUploadedReports] = useState<Array<Record<string, any>>>([]);
   const [draftHydrated, setDraftHydrated] = useState(false);
@@ -1408,18 +1415,28 @@ export default function OpsReportPage() {
       return { ...row, calculatedMpor: "", targetMpor: "", mporVariance: "" };
     }
     const roomsSold = num(topMetrics.roomsSold);
-    const budgetHours = roomsSold * 30 / 60;
+    const roomAttendantHours = roomsSold * num(housekeepingLaborModel.roomAttendantMinutesPerRoom) / 60;
+    const laundryHours = roomsSold * num(housekeepingLaborModel.laundryMinutesPerRoom) / 60;
+    const supervisorInspectorHours = num(housekeepingLaborModel.supervisorInspectorHours);
+    const housepersonPublicAreaHours = num(housekeepingLaborModel.housepersonPublicAreaHours);
+    const operationalExpectedHours = roomAttendantHours + laundryHours + supervisorInspectorHours + housepersonPublicAreaHours;
+    const ownershipTargetHours = roomsSold * 30 / 60;
     const hasActualHours = String(row.actualHours || "").trim() !== "";
     const actualMpor = roomsSold > 0 && hasActualHours ? num(row.actualHours) * 60 / roomsSold : null;
     const mporVariance = actualMpor == null ? null : actualMpor - 30;
     return {
       ...row,
-      budget: fmtHours(budgetHours),
+      budget: fmtHours(operationalExpectedHours),
+      ownershipTargetHours: fmtHours(ownershipTargetHours),
+      roomAttendantExpectedHours: fmtHours(roomAttendantHours),
+      laundryExpectedHours: fmtHours(laundryHours),
+      supervisorInspectorExpectedHours: fmtHours(supervisorInspectorHours),
+      housepersonPublicAreaExpectedHours: fmtHours(housepersonPublicAreaHours),
       calculatedMpor: actualMpor == null ? "" : actualMpor.toFixed(1),
       targetMpor: "30.0",
       mporVariance: mporVariance == null ? "" : `${mporVariance > 0 ? "+" : ""}${mporVariance.toFixed(1)}`,
     };
-  }), [labor, setup.totalRooms, topMetrics.occupancy, topMetrics.roomsSold]);
+  }), [labor, setup.totalRooms, topMetrics.occupancy, topMetrics.roomsSold, housekeepingLaborModel]);
   const scheduledLaborTotal = useMemo(() => effectiveLabor.reduce((sum, row) => sum + num(row.scheduledHours), 0), [effectiveLabor]);
   const actualLaborTotal = useMemo(() => effectiveLabor.reduce((sum, row) => sum + num(row.actualHours), 0), [effectiveLabor]);
   const laborTotal = actualLaborTotal || scheduledLaborTotal;
@@ -1436,6 +1453,9 @@ export default function OpsReportPage() {
           ...row,
           estimatedActualWages: hasActualHours && estimate ? money(actualHours * estimate.blendedHourlyRate) : "",
           estimatedActualWagesWithSalary: hasActualHours && estimate ? money(actualHours * estimate.blendedRateIncludingSalary) : "",
+          ownershipVariance: hasActualHours && String(row.ownershipTargetHours || "").trim() !== ""
+            ? fmtHours(actualHours - num(row.ownershipTargetHours))
+            : "",
         };
       })(),
       variance: String(row.actualHours || "").trim() !== "" && String(row.budget || "").trim() !== ""
@@ -1445,6 +1465,7 @@ export default function OpsReportPage() {
     const scheduledTotal = rows.reduce((sum, row) => sum + num(row.scheduledHours), 0);
     const actualTotal = rows.reduce((sum, row) => sum + num(row.actualHours), 0);
     const budgetTotal = rows.reduce((sum, row) => sum + num(row.budget), 0);
+    const ownershipTargetTotal = rows.reduce((sum, row) => sum + num(row.ownershipTargetHours), 0);
     const estimatedActualWagesTotal = rows.reduce((sum, row) => sum + num(row.estimatedActualWages), 0);
     const estimatedActualWagesWithSalaryTotal = rows.reduce((sum, row) => sum + num(row.estimatedActualWagesWithSalary), 0);
     const hasActual = rows.some((row) => String(row.actualHours || "").trim() !== "");
@@ -1456,7 +1477,9 @@ export default function OpsReportPage() {
         scheduledHours: fmtHours(scheduledTotal),
         actualHours: hasActual ? fmtHours(actualTotal) : "",
         budget: fmtHours(budgetTotal),
+        ownershipTargetHours: ownershipTargetTotal ? fmtHours(ownershipTargetTotal) : "",
         variance: hasActual ? fmtHours(actualTotal - budgetTotal) : "",
+        ownershipVariance: hasActual && ownershipTargetTotal ? fmtHours(actualTotal - ownershipTargetTotal) : "",
         estimatedActualWages: hasActual ? money(estimatedActualWagesTotal) : "",
         estimatedActualWagesWithSalary: hasActual ? money(estimatedActualWagesWithSalaryTotal) : "",
         calculatedMpor: "",
@@ -1475,6 +1498,18 @@ export default function OpsReportPage() {
       if (!items.length) return null;
       const total = items.reduce((sum, item) => sum + num(item.hours), 0);
       const lines = items.map((item) => `${item.label}: ${fmtHours(item.hours)} hrs`);
+      const housekeepingModelLines = department === "HOUSEKEEPING HOURS"
+        ? [
+          "",
+          "Operational expected-hours model:",
+          `Room attendants: ${row.roomAttendantExpectedHours || "0"} hrs`,
+          `Laundry: ${row.laundryExpectedHours || "0"} hrs`,
+          `Supervisors / inspectors: ${row.supervisorInspectorExpectedHours || "0"} hrs`,
+          `Housepersons / public areas: ${row.housepersonPublicAreaExpectedHours || "0"} hrs`,
+          `Operational total: ${row.budget || "0"} hrs`,
+          `Ownership 30 MPOR cap: ${row.ownershipTargetHours || "0"} hrs`,
+        ]
+        : [];
       const estimate = scheduledLabor.data?.wageEstimates?.[department];
       const wageLines = estimate
         ? [
@@ -1485,7 +1520,7 @@ export default function OpsReportPage() {
         : [];
       return {
         label: `${department} schedule detail`,
-        text: [`Scheduled total: ${fmtHours(total)} hrs`, "", ...lines, ...wageLines].join("\n"),
+        text: [`Scheduled total: ${fmtHours(total)} hrs`, "", ...lines, ...housekeepingModelLines, ...wageLines].join("\n"),
       };
     };
   }, [scheduledLabor.data?.breakdown, scheduledLabor.data?.wageEstimates]);
@@ -1535,9 +1570,10 @@ export default function OpsReportPage() {
         adr: editedBudget.adr || "",
         revenue: editedBudget.revenue || "",
       };
-      const unchanged = ["occupancy", "rooms", "adr", "revenue"].every(
-        (field) => String(existing[field] || "") === String(updated[field] || ""),
-      );
+      const unchanged = String(existing.occupancy || "") === String(updated.occupancy || "")
+        && String(existing.rooms || "") === String(updated.rooms || "")
+        && String(existing.adr || "") === String(updated.adr || "")
+        && String(existing.revenue || "") === String(updated.revenue || "");
       if (unchanged) return currentBudgets;
       return [...currentBudgets.filter((row) => row.month !== currentMonthKey), updated];
     });
@@ -1923,6 +1959,7 @@ export default function OpsReportPage() {
     setLedger({ balance: "", over1000: "", uncovered: "", comment: "" });
     setLedgerExceptions([]);
     setLabor(defaultLaborRows());
+    setHousekeepingLaborModel(DEFAULT_HOUSEKEEPING_LABOR_MODEL);
     setStaffing({ openPositions: "", status: "", overtimeLastWeek: "", overtimeExpected: "", comment: "" });
     setCases(emptyRows(5, ["no", "guest", "incidentType", "resolution", "comment"]));
     setGmOverviewRows(emptyRows(6, ["no", "bullet"]));
@@ -1952,6 +1989,7 @@ export default function OpsReportPage() {
     if (payload.ledger) setLedger(payload.ledger);
     if (payload.ledgerExceptions) setLedgerExceptions(payload.ledgerExceptions);
     if (payload.labor) setLabor(normalizeLaborRows(payload.labor));
+    if (payload.housekeepingLaborModel) setHousekeepingLaborModel({ ...DEFAULT_HOUSEKEEPING_LABOR_MODEL, ...payload.housekeepingLaborModel });
     if (payload.monthlyBudgets) setMonthlyBudgets(payload.monthlyBudgets.map(normalizeMonthlyBudgetRow));
     if (payload.bistroProductions) setBistroProductions(payload.bistroProductions);
     if (payload.meetingProductions) setMeetingProductions(payload.meetingProductions);
@@ -2004,6 +2042,7 @@ export default function OpsReportPage() {
     ledger,
     ledgerExceptions,
     labor,
+    housekeepingLaborModel,
     monthlyBudgets: monthlyBudgets.map(normalizeMonthlyBudgetRow),
     bistroProductions,
     meetingProductions,
@@ -2017,7 +2056,7 @@ export default function OpsReportPage() {
     negativeReviews,
     followUp,
     priorities,
-  }), [setup, topMetrics, monthRows, nextMonthRows, chargebacks, maintenance, oooRooms, adjustments, ar, ledger, ledgerExceptions, labor, monthlyBudgets, bistroProductions, meetingProductions, staffing, cases, gmOverviewRows, gssRows, gssWaveRows, reputationRows, positiveReviews, negativeReviews, followUp, priorities]);
+  }), [setup, topMetrics, monthRows, nextMonthRows, chargebacks, maintenance, oooRooms, adjustments, ar, ledger, ledgerExceptions, labor, housekeepingLaborModel, monthlyBudgets, bistroProductions, meetingProductions, staffing, cases, gmOverviewRows, gssRows, gssWaveRows, reputationRows, positiveReviews, negativeReviews, followUp, priorities]);
 
   useEffect(() => {
     if (!access.data?.unlocked || draft.isLoading || draftHydrated) return;
@@ -2793,13 +2832,49 @@ export default function OpsReportPage() {
                   </Button>
                 </div>
               </div>
+              <div className="border-b border-[#e0d3c1] bg-[#fbf6ee] p-4">
+                <div className="mb-3">
+                  <div className="text-sm font-semibold text-[#201814]">Housekeeping operational labor model</div>
+                  <p className="mt-1 text-xs text-[#5f5247]">
+                    Operational Expected Hours include every Housekeeping function below. The separate Ownership Target remains fixed at 30 MPOR for the full department.
+                  </p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <LabeledInput
+                    label="Room attendant minutes / room"
+                    value={housekeepingLaborModel.roomAttendantMinutesPerRoom}
+                    onChange={(roomAttendantMinutesPerRoom) => setHousekeepingLaborModel({ ...housekeepingLaborModel, roomAttendantMinutesPerRoom })}
+                    type="number"
+                  />
+                  <LabeledInput
+                    label="Laundry minutes / room"
+                    value={housekeepingLaborModel.laundryMinutesPerRoom}
+                    onChange={(laundryMinutesPerRoom) => setHousekeepingLaborModel({ ...housekeepingLaborModel, laundryMinutesPerRoom })}
+                    type="number"
+                  />
+                  <LabeledInput
+                    label="Supervisor / inspector hours"
+                    value={housekeepingLaborModel.supervisorInspectorHours}
+                    onChange={(supervisorInspectorHours) => setHousekeepingLaborModel({ ...housekeepingLaborModel, supervisorInspectorHours })}
+                    type="number"
+                  />
+                  <LabeledInput
+                    label="Houseperson / public-area hours"
+                    value={housekeepingLaborModel.housepersonPublicAreaHours}
+                    onChange={(housepersonPublicAreaHours) => setHousekeepingLaborModel({ ...housekeepingLaborModel, housepersonPublicAreaHours })}
+                    type="number"
+                  />
+                </div>
+              </div>
               <EditableTable
                 columns={[
                   { key: "department", label: "Department", wide: true },
                   { key: "scheduledHours", label: "Scheduled Hours" },
                   { key: "actualHours", label: "Actual Hours" },
-                  { key: "budget", label: "Expected Hours" },
-                  { key: "variance", label: "Hours Variance", readOnly: true },
+                  { key: "budget", label: "Operational Expected", readOnly: true },
+                  { key: "variance", label: "Operational Variance", readOnly: true },
+                  { key: "ownershipTargetHours", label: "Ownership Target", readOnly: true },
+                  { key: "ownershipVariance", label: "Ownership Variance", readOnly: true },
                   { key: "estimatedActualWages", label: "Est. Wages", readOnly: true },
                   { key: "estimatedActualWagesWithSalary", label: "Est. Wages w/ Salary", readOnly: true },
                   { key: "calculatedMpor", label: "Actual MPOR", readOnly: true },
@@ -2810,7 +2885,7 @@ export default function OpsReportPage() {
                 rows={laborRows}
                 onChange={(rows) => setLabor(rows
                   .filter((row) => row.__readOnly !== "true")
-                  .map(({ __readOnly, variance, estimatedActualWages, estimatedActualWagesWithSalary, calculatedMpor, targetMpor, mporVariance, ...row }) => row))}
+                  .map(({ __readOnly, variance, ownershipTargetHours, ownershipVariance, roomAttendantExpectedHours, laundryExpectedHours, supervisorInspectorExpectedHours, housepersonPublicAreaExpectedHours, estimatedActualWages, estimatedActualWagesWithSalary, calculatedMpor, targetMpor, mporVariance, ...row }) => row))}
                 getCellPreview={laborDepartmentPreview}
               />
             </Section>

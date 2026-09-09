@@ -259,7 +259,7 @@ function meetingEventWriteValues(body: any, holdExpiresAt: Date | null, eventDay
     serviceItemsJson,
     gratuityAllocationsJson: cleanGratuityAllocations(body?.gratuityAllocationsJson),
     setupOrientation: body?.setupOrientation === "widthwise" ? "widthwise" : "lengthwise",
-    setupLayoutJson: (Array.isArray(body?.setupLayoutJson) ? body.setupLayoutJson : []).map((item: any, index: number) => ({ id: String(item?.id || `item-${index}`).slice(0, 80), x: safeNonnegativeNumber(item?.x, 1), y: safeNonnegativeNumber(item?.y, 1) })).slice(0, 150),
+    setupLayoutJson: (Array.isArray(body?.setupLayoutJson) ? body.setupLayoutJson : []).map((item: any, index: number) => ({ id: String(item?.id || `item-${index}`).slice(0, 80), x: safeNonnegativeNumber(item?.x, 1), y: safeNonnegativeNumber(item?.y, 1), type: String(item?.type || "").slice(0, 40) || undefined, label: String(item?.label || "").trim().slice(0, 80) || undefined, rotation: Math.round(safeNonnegativeNumber(item?.rotation, 270) / 90) * 90 % 360 })).slice(0, 150),
     cateringRevenue: cateringRevenue.toFixed(2),
     breakfastPerPerson: breakfastPerPerson.toFixed(2),
     lunchDinnerPerPerson: lunchDinnerPerPerson.toFixed(2),
@@ -880,26 +880,53 @@ export async function createMeetingBeoPdf(event: any, seriesEvents: any[], space
     page.drawText(`${room.name} | Approx. ${room.width}' x ${room.length}' | ${room.area.toLocaleString()} sq. ft. | ${guests} guests | ${setup.replaceAll("_", " ").toUpperCase()} | ${String(event.setupOrientation || "lengthwise").toUpperCase()}`, { x: 46, y: 665, size: 8.5, font: bold, color: gold });
     const left = 66, bottom = 235, width = 480, height = 390;
     const savedLayout = Array.isArray(event.setupLayoutJson) ? event.setupLayoutJson : [], lengthwise = event.setupOrientation !== "widthwise";
-    const placed = (index: number, autoX: number, autoY: number) => { const saved = savedLayout.find((item: any) => item.id === `table-${index}`); return saved ? { x: left + 30 + Number(saved.x) * (width - 60), y: bottom + 30 + (1 - Number(saved.y)) * (height - 60) } : { x: autoX, y: autoY }; };
+    const feetToPlan = Math.min((width - 60) / room.length, (height - 60) / room.width);
+    const roundTableRadius = 2.5 * feetToPlan, rectangleLong = 6 * feetToPlan, rectangleShort = 2.5 * feetToPlan;
+    const placedId = (id: string, autoX: number, autoY: number) => { const saved = savedLayout.find((item: any) => item.id === id); return saved ? { x: left + 30 + Number(saved.x) * (width - 60), y: bottom + 30 + (1 - Number(saved.y)) * (height - 60) } : { x: autoX, y: autoY }; };
+    const placed = (index: number, autoX: number, autoY: number) => placedId(`table-${index}`, autoX, autoY);
     page.drawRectangle({ x: left, y: bottom, width, height, color: rgb(0.985, 0.975, 0.955), borderColor: ink, borderWidth: 2 });
-    page.drawRectangle({ x: 246, y: 588, width: 120, height: 23, color: ink }); page.drawText("PRESENTATION / FRONT", { x: 254, y: 596, size: 8, font: bold, color: white });
+    const presentationItem = savedLayout.find((item: any) => item.id === "presentation"), presentation = placedId("presentation", 306, 590), presentationRotation = Number(presentationItem?.rotation || 0) % 360, presentationVertical = presentationRotation === 90 || presentationRotation === 270;
+    page.drawRectangle({ x: presentation.x - (presentationVertical ? 12 : 60), y: presentation.y - (presentationVertical ? 60 : 12), width: presentationVertical ? 24 : 120, height: presentationVertical ? 120 : 24, color: ink });
+    page.drawText(presentationVertical ? "FRONT" : "PRESENTATION / FRONT", { x: presentation.x - (presentationVertical ? 14 : 52), y: presentation.y - 3, size: presentationVertical ? 6.5 : 8, font: bold, color: white });
     const chair = (x: number, yy: number) => page.drawCircle({ x, y: yy, size: 4, color: rgb(0.19, 0.37, 0.53) });
     if (setup === "banquet") {
       const tables = Math.ceil(guests / 8), cols = Math.min(5, Math.ceil(Math.sqrt(tables * 1.5)));
-      for (let i=0;i<tables;i++){const pos=placed(i,125+(i%cols)*(370/Math.max(1,cols-1)),520-Math.floor(i/cols)*88);page.drawCircle({x:pos.x,y:pos.y,size:24,color:rgb(0.92,0.87,0.8),borderColor:muted,borderWidth:1});page.drawText("8",{x:pos.x-4,y:pos.y-3,size:8,font:bold,color:ink});}
+      for (let i=0;i<tables;i++){const pos=placed(i,125+(i%cols)*(370/Math.max(1,cols-1)),520-Math.floor(i/cols)*88);page.drawCircle({x:pos.x,y:pos.y,size:roundTableRadius,color:rgb(0.92,0.87,0.8),borderColor:muted,borderWidth:1});page.drawText('60"',{x:pos.x-8,y:pos.y-3,size:7,font:bold,color:ink});}
     } else if (setup === "classroom") {
-      const tables=Math.ceil(guests/3),cols=Math.min(8,Math.max(1,Math.ceil(Math.sqrt(tables*1.7))));for(let i=0;i<tables;i++){const pos=placed(i,110+(i%cols)*(390/Math.max(1,cols)),540-Math.floor(i/cols)*58),tw=lengthwise?14:42,th=lengthwise?42:14;page.drawRectangle({x:pos.x-tw/2,y:pos.y-th/2,width:tw,height:th,color:rgb(0.92,0.87,0.8),borderColor:muted,borderWidth:.7});if(lengthwise){chair(pos.x-12,pos.y+12);chair(pos.x-12,pos.y);chair(pos.x-12,pos.y-12);}else{chair(pos.x-14,pos.y-13);chair(pos.x,pos.y-13);chair(pos.x+14,pos.y-13);}}
+      const tables=Math.ceil(guests/3),cols=Math.min(8,Math.max(1,Math.ceil(Math.sqrt(tables*1.7))));for(let i=0;i<tables;i++){const pos=placed(i,110+(i%cols)*(390/Math.max(1,cols)),540-Math.floor(i/cols)*58),tw=lengthwise?rectangleShort:rectangleLong,th=lengthwise?rectangleLong:rectangleShort;page.drawRectangle({x:pos.x-tw/2,y:pos.y-th/2,width:tw,height:th,color:rgb(0.92,0.87,0.8),borderColor:muted,borderWidth:.7});if(lengthwise){chair(pos.x-tw/2-7,pos.y-th*.3);chair(pos.x-tw/2-7,pos.y);chair(pos.x-tw/2-7,pos.y+th*.3);}else{chair(pos.x-tw*.3,pos.y-th/2-7);chair(pos.x,pos.y-th/2-7);chair(pos.x+tw*.3,pos.y-th/2-7);}}
     } else if (setup === "theater") {
       const count=Math.min(guests,120),cols=Math.min(12,Math.ceil(Math.sqrt(count*1.8)));for(let i=0;i<count;i++)chair(105+(i%cols)*(390/Math.max(1,cols-1)),540-Math.floor(i/cols)*30);
     } else if (setup === "u_shape") {
       page.drawLine({start:{x:165,y:535},end:{x:165,y:335},thickness:18,color:rgb(0.72,0.62,0.5)});page.drawLine({start:{x:165,y:335},end:{x:445,y:335},thickness:18,color:rgb(0.72,0.62,0.5)});page.drawLine({start:{x:445,y:335},end:{x:445,y:535},thickness:18,color:rgb(0.72,0.62,0.5)});for(let i=0;i<Math.min(guests,30);i++){const side=i%3,pos=Math.floor(i/3);chair(side===0?140:side===1?470:190+pos*25,side===2?307:515-pos*20);}
     } else if (setup === "conference") {
-      const pos=placed(0,305,427);page.drawRectangle({x:pos.x-(lengthwise?68:140),y:pos.y-(lengthwise?140:68),width:lengthwise?136:280,height:lengthwise?280:136,color:rgb(0.92,0.87,0.8),borderColor:muted,borderWidth:1});for(let i=0;i<Math.min(guests,24);i++)chair(lengthwise?(i<12?pos.x-82:pos.x+82):pos.x-121+(i%12)*22,lengthwise?pos.y-121+(i%12)*22:(i<12?pos.y+82:pos.y-82));
+      const pos=placed(0,305,427),count=Math.min(guests,24),endSeats=count>=4?2:0,sideSeats=count-endSeats,firstSide=Math.ceil(sideSeats/2),secondSide=Math.floor(sideSeats/2),conferenceLength=Math.min(room.length-4,Math.max(6,Math.ceil(Math.max(2,sideSeats)/4)*6))*feetToPlan,conferenceWidth=5*feetToPlan,tw=lengthwise?conferenceWidth:conferenceLength,th=lengthwise?conferenceLength:conferenceWidth;
+      page.drawRectangle({x:pos.x-tw/2,y:pos.y-th/2,width:tw,height:th,color:rgb(0.92,0.87,0.8),borderColor:muted,borderWidth:1});
+      for(let i=0;i<firstSide;i++){const fraction=(i+1)/(firstSide+1);chair(lengthwise?pos.x-tw/2-14:pos.x-tw/2+fraction*tw,lengthwise?pos.y-th/2+fraction*th:pos.y-th/2-14);}
+      for(let i=0;i<secondSide;i++){const fraction=(i+1)/(secondSide+1);chair(lengthwise?pos.x+tw/2+14:pos.x-tw/2+fraction*tw,lengthwise?pos.y-th/2+fraction*th:pos.y+th/2+14);}
+      if(endSeats){chair(lengthwise?pos.x:pos.x-tw/2-14,lengthwise?pos.y-th/2-14:pos.y);chair(lengthwise?pos.x:pos.x+tw/2+14,lengthwise?pos.y+th/2+14:pos.y);}
     } else if (setup === "reception") {
       const tables=Math.max(3,Math.ceil(guests/12));for(let i=0;i<tables;i++){const pos=placed(i,125+(i%5)*90,520-Math.floor(i/5)*95);page.drawCircle({x:pos.x,y:pos.y,size:16,color:rgb(0.92,0.87,0.8),borderColor:muted,borderWidth:1});}
     } else page.drawText("CUSTOM SETUP - REFER TO SETUP NOTES", { x: 175, y: 430, size: 13, font: bold, color: muted });
-    page.drawLine({ start: { x: left, y: bottom + 45 }, end: { x: left + 28, y: bottom + 45 }, thickness: 5, color: rgb(0.18, 0.37, 0.27) }); page.drawText("ENTRY / EXIT", { x: 100, y: bottom + 40, size: 8, font: bold, color: rgb(0.18, 0.37, 0.27) });
-    page.drawText("Conceptual operational layout only. Confirm measurements, ADA access, fire-code capacity, and unobstructed exits onsite.", { x: 66, y: 205, size: 8, font: regular, color: muted });
+    const equipment = savedLayout.filter((item: any) => item.type && !["presentation", "entry"].includes(item.type));
+    for (const item of equipment) {
+      const pos = placedId(String(item.id), 306, 430), rotation = Number(item.rotation || 0) % 360, vertical = rotation === 90 || rotation === 270, label = String(item.label || "Equipment");
+      if (item.type === "podium") {
+        page.drawRectangle({ x: pos.x - (vertical ? 16 : 12), y: pos.y - (vertical ? 12 : 16), width: vertical ? 32 : 24, height: vertical ? 24 : 32, color: rgb(0.66, 0.51, 0.33), borderColor: rgb(0.37, 0.25, 0.15), borderWidth: 1 });
+      } else if (item.type === "tv") {
+        page.drawRectangle({ x: pos.x - (vertical ? 16 : 27), y: pos.y - (vertical ? 27 : 16), width: vertical ? 32 : 54, height: vertical ? 54 : 32, color: ink });
+        page.drawLine({ start: { x: pos.x, y: pos.y - 24 }, end: { x: pos.x, y: pos.y - 38 }, thickness: 2, color: muted });
+        page.drawLine({ start: { x: pos.x - 12, y: pos.y - 38 }, end: { x: pos.x + 12, y: pos.y - 38 }, thickness: 2, color: muted });
+      } else {
+        const baseWidth = rectangleLong, baseHeight = rectangleShort, itemWidth = vertical ? baseHeight : baseWidth, itemHeight = vertical ? baseWidth : baseHeight;
+        page.drawRectangle({ x: pos.x - itemWidth / 2, y: pos.y - itemHeight / 2, width: itemWidth, height: itemHeight, color: rgb(0.92, 0.87, 0.8), borderColor: muted, borderWidth: 0.8 });
+      }
+      page.drawText(fitText(label, bold, 6.5, Math.max(42, rectangleLong - 6)), { x: pos.x - Math.min(35, label.length * 1.7), y: pos.y - 2, size: 6.5, font: bold, color: item.type === "tv" ? white : ink });
+    }
+    const entryItem = savedLayout.find((item: any) => item.id === "entry"), entry = placedId("entry", left + 28, bottom + 45), entryRotation = Number(entryItem?.rotation || 0) % 360, doorColor = rgb(0.18, 0.37, 0.27);
+    if (entryRotation === 90 || entryRotation === 270) { page.drawLine({ start: { x: entry.x, y: entry.y - 18 }, end: { x: entry.x, y: entry.y + 18 }, thickness: 4, color: doorColor }); page.drawLine({ start: { x: entry.x, y: entry.y - 18 }, end: { x: entry.x + (entryRotation === 90 ? 22 : -22), y: entry.y - 18 }, thickness: 4, color: doorColor }); }
+    else { page.drawLine({ start: { x: entry.x - 18, y: entry.y }, end: { x: entry.x + 18, y: entry.y }, thickness: 4, color: doorColor }); page.drawLine({ start: { x: entry.x - 18, y: entry.y }, end: { x: entry.x - 18, y: entry.y + (entryRotation === 180 ? -22 : 22) }, thickness: 4, color: doorColor }); }
+    page.drawText("ENTRY / EXIT", { x: Math.min(entry.x + 24, left + width - 62), y: entry.y - 3, size: 7, font: bold, color: doorColor });
+    page.drawText('Table sizes are drawn to room scale (60-inch rounds and 72 x 30-inch rectangles). Confirm ADA access, capacity, and exits onsite.', { x: 66, y: 205, size: 8, font: regular, color: muted });
     page.drawText("Setup lead approval: ______________________________   Date / time: __________________", { x: 66, y: 170, size: 9, font: regular, color: ink });
   };
   addPage();

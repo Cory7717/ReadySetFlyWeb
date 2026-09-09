@@ -60,7 +60,7 @@ const eventDayCount = (value: any) => {
   return Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1);
 };
 const cateringValue = (value: any) => value?.eventEndDate !== undefined
-  ? Number(value?.attendance || 0) * eventDayCount(value) * (Number(value?.breakfastPerPerson || 0) + Number(value?.lunchDinnerPerPerson || 0))
+  ? Number(value?.attendance || 0) * eventDayCount(value) * (Number(value?.breakfastPerPerson || 0) + Number(value?.lunchDinnerPerPerson || 0) + Number(value?.snackBarPerPerson || 0))
   : Number(value?.cateringRevenue || 0);
 const roomRentalValue = (value: any) => Number(value?.roomRentalRevenue || 0) * (value?.roomRentalChargeMethod === "per_day" ? eventDayCount(value) : 1);
 const roomTaxValue = (value: any) => roomRentalValue(value) * Number(value?.roomTaxPercent ?? 6) / 100;
@@ -109,6 +109,7 @@ const empty = {
   cateringRevenue: "",
   breakfastPerPerson: "",
   lunchDinnerPerPerson: "",
+  snackBarPerPerson: "",
   otherRevenue: "",
   expectedRoomNights: "",
   cateringNotes: "",
@@ -268,6 +269,7 @@ export default function CourtyardMeetingCalendar() {
           avRevenue: Number(body.avRevenue || 0),
           breakfastPerPerson: Number(body.breakfastPerPerson || 0),
           lunchDinnerPerPerson: Number(body.lunchDinnerPerPerson || 0),
+          snackBarPerPerson: Number(body.snackBarPerPerson || 0),
           otherRevenue: Number(body.otherRevenue || 0),
         }),
       }),
@@ -447,6 +449,7 @@ export default function CourtyardMeetingCalendar() {
       cateringRevenue: event.cateringRevenue ?? "",
       breakfastPerPerson: event.breakfastPerPerson ?? "",
       lunchDinnerPerPerson: event.lunchDinnerPerPerson ?? "",
+      snackBarPerPerson: event.snackBarPerPerson ?? "",
       otherRevenue: event.otherRevenue ?? "",
       roomTaxPercent: event.roomTaxPercent ?? "6",
       roomServiceFeePercent: event.roomServiceFeePercent ?? "21",
@@ -850,7 +853,8 @@ export default function CourtyardMeetingCalendar() {
                 <div><Label>Room rental charge method</Label><Select value={form.roomRentalChargeMethod || "per_event"} onValueChange={(roomRentalChargeMethod)=>setForm({...form,roomRentalChargeMethod})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="per_event">Per event</SelectItem><SelectItem value="per_day">Per day</SelectItem></SelectContent></Select>{form.roomRentalChargeMethod === "per_day" && <p className="mt-1 text-xs text-[#5f5247]">{money(form.roomRentalRevenue)} × {eventDayCount(form)} event days</p>}</div>
                 <div><Label>AV add-ons</Label><Input type="number" min="0" step="0.01" value={form.avRevenue} onChange={(event) => setForm({ ...form, avRevenue: event.target.value })} /></div>
                 <div><Label>Breakfast per person</Label><Input type="number" min="0" step="0.01" value={form.breakfastPerPerson} onChange={(event) => setForm({ ...form, breakfastPerPerson: event.target.value })} /></div>
-                <div><Label>Lunch / dinner per person</Label><Input type="number" min="0" step="0.01" value={form.lunchDinnerPerPerson} onChange={(event) => setForm({ ...form, lunchDinnerPerPerson: event.target.value })} /><p className="mt-1 text-xs text-[#5f5247]">Catering: {form.attendance || 0} attendees × {eventDayCount(form)} day{eventDayCount(form) === 1 ? "" : "s"} = {money(cateringValue(form))}</p></div>
+                <div><Label>Lunch / dinner per person</Label><Input type="number" min="0" step="0.01" value={form.lunchDinnerPerPerson} onChange={(event) => setForm({ ...form, lunchDinnerPerPerson: event.target.value })} /></div>
+                <div><Label>Snack bar per person</Label><Input type="number" min="0" step="0.01" value={form.snackBarPerPerson} onChange={(event) => setForm({ ...form, snackBarPerPerson: event.target.value })} /><p className="mt-1 text-xs text-[#5f5247]">Catering: {form.attendance || 0} attendees × {eventDayCount(form)} day{eventDayCount(form) === 1 ? "" : "s"} = {money(cateringValue(form))}</p></div>
                 <div className="rounded-lg border border-[#deceba] bg-white p-3"><div className="text-xs font-semibold uppercase text-[#8a6b3f]">Meeting room charges</div><div className="mt-2 grid grid-cols-2 gap-2"><div><Label className="text-xs">Room tax %</Label><Input type="number" min="0" max="100" step="0.01" value={form.roomTaxPercent} onChange={(e)=>setForm({...form,roomTaxPercent:e.target.value})}/></div><div><Label className="text-xs">Service fee %</Label><Input type="number" min="0" max="100" step="0.01" value={form.roomServiceFeePercent} onChange={(e)=>setForm({...form,roomServiceFeePercent:e.target.value})}/></div></div><div className="mt-2 text-sm">Tax: <strong>{money(roomTaxValue(form))}</strong> · Service fee: <strong>{money(roomServiceFeeValue(form))}</strong></div><p className="mt-1 text-xs text-[#5f5247]">Applied only to room rental.</p></div>
                 <div className="rounded-lg border border-[#deceba] bg-white p-3"><div className="text-xs font-semibold uppercase text-[#8a6b3f]">Food & beverage charges</div><div className="mt-2 grid grid-cols-2 gap-2"><div><Label className="text-xs">F&amp;B tax %</Label><Input type="number" min="0" max="100" step="0.01" value={form.fbTaxPercent} onChange={(e)=>setForm({...form,fbTaxPercent:e.target.value})}/></div><div><Label className="text-xs">Gratuity %</Label><Input type="number" min="0" max="100" step="0.01" value={form.fbGratuityPercent} onChange={(e)=>setForm({...form,fbGratuityPercent:e.target.value})}/></div></div><div className="mt-2 text-sm">Tax: <strong>{money(fbTaxValue(form))}</strong> · Gratuity: <strong>{money(fbGratuityValue(form))}</strong></div><p className="mt-1 text-xs text-[#5f5247]">Applied only to catering and itemized F&amp;B services.</p></div>
                 <div className="sm:col-span-2 lg:col-span-3"><Label>Catering and incidental service details</Label><Textarea placeholder="Example: coffee service for 20, assorted sodas, bottled water, delivery timing, dietary notes…" value={form.cateringNotes} onChange={(event) => setForm({ ...form, cateringNotes: event.target.value })} /></div>
@@ -948,7 +952,7 @@ export default function CourtyardMeetingCalendar() {
               <section>
                 <div className="mb-2 flex items-center justify-between gap-3"><h3 className="font-semibold">Event revenue</h3><div className="text-2xl font-bold text-[#2f5f46]">{money(selectedEvent.expectedRevenue)}</div></div>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {[[selectedEvent.roomRentalChargeMethod === "per_day" ? `Room rental (${money(selectedEvent.roomRentalRevenue)} × ${eventDayCount(selectedEvent)} days)` : "Room rental (per event)", roomRentalValue(selectedEvent)], [`Meeting room tax (${Number(selectedEvent.roomTaxPercent ?? 6)}%)`, roomTaxValue(selectedEvent)], [`Room service fee (${Number(selectedEvent.roomServiceFeePercent ?? 21)}%)`, roomServiceFeeValue(selectedEvent)], [`Breakfast (${money(selectedEvent.breakfastPerPerson)}/person)`, Number(selectedEvent.attendance || 0) * Number(selectedEvent.breakfastPerPerson || 0)], [`Lunch / dinner (${money(selectedEvent.lunchDinnerPerPerson)}/person)`, Number(selectedEvent.attendance || 0) * Number(selectedEvent.lunchDinnerPerPerson || 0)], ["Total in-house catering", selectedEvent.cateringRevenue], ["Drink, coffee & incidental add-ons", selectedEvent.otherRevenue], [`F&B tax (${Number(selectedEvent.fbTaxPercent ?? 8.25)}%)`, fbTaxValue(selectedEvent)], [`F&B gratuity (${Number(selectedEvent.fbGratuityPercent ?? 18)}%)`, fbGratuityValue(selectedEvent)], ["AV add-ons", selectedEvent.avRevenue]].map(([label, value]) => <div key={String(label)} className="flex justify-between rounded-lg border border-[#deceba] bg-[#fffaf2] p-3"><span className="text-sm text-[#5f5247]">{label}</span><strong>{money(value)}</strong></div>)}
+                  {[[selectedEvent.roomRentalChargeMethod === "per_day" ? `Room rental (${money(selectedEvent.roomRentalRevenue)} × ${eventDayCount(selectedEvent)} days)` : "Room rental (per event)", roomRentalValue(selectedEvent)], [`Meeting room tax (${Number(selectedEvent.roomTaxPercent ?? 6)}%)`, roomTaxValue(selectedEvent)], [`Room service fee (${Number(selectedEvent.roomServiceFeePercent ?? 21)}%)`, roomServiceFeeValue(selectedEvent)], [`Breakfast (${money(selectedEvent.breakfastPerPerson)}/person × ${eventDayCount(selectedEvent)} days)`, Number(selectedEvent.attendance || 0) * Number(selectedEvent.breakfastPerPerson || 0) * eventDayCount(selectedEvent)], [`Lunch / dinner (${money(selectedEvent.lunchDinnerPerPerson)}/person × ${eventDayCount(selectedEvent)} days)`, Number(selectedEvent.attendance || 0) * Number(selectedEvent.lunchDinnerPerPerson || 0) * eventDayCount(selectedEvent)], [`Snack bar (${money(selectedEvent.snackBarPerPerson)}/person × ${eventDayCount(selectedEvent)} days)`, Number(selectedEvent.attendance || 0) * Number(selectedEvent.snackBarPerPerson || 0) * eventDayCount(selectedEvent)], ["Total in-house catering", selectedEvent.cateringRevenue], ["Drink, coffee & incidental add-ons", selectedEvent.otherRevenue], [`F&B tax (${Number(selectedEvent.fbTaxPercent ?? 8.25)}%)`, fbTaxValue(selectedEvent)], [`F&B gratuity (${Number(selectedEvent.fbGratuityPercent ?? 18)}%)`, fbGratuityValue(selectedEvent)], ["AV add-ons", selectedEvent.avRevenue]].map(([label, value]) => <div key={String(label)} className="flex justify-between rounded-lg border border-[#deceba] bg-[#fffaf2] p-3"><span className="text-sm text-[#5f5247]">{label}</span><strong>{money(value)}</strong></div>)}
                 </div>
               </section>
 

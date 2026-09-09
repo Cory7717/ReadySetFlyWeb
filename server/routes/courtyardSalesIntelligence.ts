@@ -245,7 +245,8 @@ function meetingEventWriteValues(body: any, holdExpiresAt: Date | null, eventDay
   const revenue = Object.fromEntries(revenueFields.map((field) => [field, Number(body?.[field] || 0).toFixed(2)]));
   const breakfastPerPerson = Number(body?.breakfastPerPerson || 0);
   const lunchDinnerPerPerson = Number(body?.lunchDinnerPerPerson || 0);
-  const cateringRevenue = Number(body?.attendance || 0) * eventDays * (breakfastPerPerson + lunchDinnerPerPerson);
+  const snackBarPerPerson = Number(body?.snackBarPerPerson || 0);
+  const cateringRevenue = Number(body?.attendance || 0) * eventDays * (breakfastPerPerson + lunchDinnerPerPerson + snackBarPerPerson);
   const percentage = (field: string, fallback: number) => body?.[field] === "" || body?.[field] == null ? fallback : safeNonnegativeNumber(body[field], 100);
   const roomTaxPercent = percentage("roomTaxPercent", 6), roomServiceFeePercent = percentage("roomServiceFeePercent", 21), fbTaxPercent = percentage("fbTaxPercent", 8.25), fbGratuityPercent = percentage("fbGratuityPercent", 18);
   const roomRentalChargeMethod = body?.roomRentalChargeMethod === "per_day" ? "per_day" : "per_event";
@@ -266,6 +267,7 @@ function meetingEventWriteValues(body: any, holdExpiresAt: Date | null, eventDay
     cateringRevenue: cateringRevenue.toFixed(2),
     breakfastPerPerson: breakfastPerPerson.toFixed(2),
     lunchDinnerPerPerson: lunchDinnerPerPerson.toFixed(2),
+    snackBarPerPerson: snackBarPerPerson.toFixed(2),
     roomTaxPercent: roomTaxPercent.toFixed(3),
     roomServiceFeePercent: roomServiceFeePercent.toFixed(3),
     fbTaxPercent: fbTaxPercent.toFixed(3),
@@ -277,7 +279,7 @@ function meetingEventWriteValues(body: any, holdExpiresAt: Date | null, eventDay
   };
 }
 function meetingRevenueValidationError(body: any) {
-  for (const field of ["roomRentalRevenue", "avRevenue", "otherRevenue", "breakfastPerPerson", "lunchDinnerPerPerson", "roomTaxPercent", "roomServiceFeePercent", "fbTaxPercent", "fbGratuityPercent"]) {
+  for (const field of ["roomRentalRevenue", "avRevenue", "otherRevenue", "breakfastPerPerson", "lunchDinnerPerPerson", "snackBarPerPerson", "roomTaxPercent", "roomServiceFeePercent", "fbTaxPercent", "fbGratuityPercent"]) {
     const value = Number(body?.[field] || 0);
     if (!Number.isFinite(value) || value < 0 || value > 9999999999) return "Revenue amounts must be valid non-negative numbers.";
   }
@@ -957,6 +959,7 @@ export async function createMeetingBeoPdf(event: any, seriesEvents: any[], space
   const foodEntries = [
     { heading: `Breakfast · ${money(event.breakfastPerPerson)} per person`, detail: `${event.attendance || 0} guests × ${dates.length} day(s)` },
     { heading: `Lunch / Dinner · ${money(event.lunchDinnerPerPerson)} per person`, detail: `${event.attendance || 0} guests × ${dates.length} day(s)` },
+    { heading: `Snack Bar · ${money(event.snackBarPerPerson)} per person`, detail: `${event.attendance || 0} guests × ${dates.length} day(s)` },
     ...serviceItems.map((item:any)=>({heading:`${item.name} · ${money(serviceItemTotal(item,Number(event.attendance||0),dates.length))}`,detail:`${item.serviceDates}; ${methodLabel[item.chargeMethod]}; qty ${item.quantity} @ ${money(item.unitPrice)}. ${item.instructions||""}${item.refillPrice?` Additional refill/unit ${money(item.refillPrice)}.`:""}`})),
     ...(event.cateringNotes?[{heading:"Service notes",detail:String(event.cateringNotes)}]:[]),
   ];

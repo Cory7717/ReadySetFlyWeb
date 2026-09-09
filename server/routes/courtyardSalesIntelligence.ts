@@ -248,7 +248,9 @@ function meetingEventWriteValues(body: any, holdExpiresAt: Date | null, eventDay
   const cateringRevenue = Number(body?.attendance || 0) * eventDays * (breakfastPerPerson + lunchDinnerPerPerson);
   const percentage = (field: string, fallback: number) => body?.[field] === "" || body?.[field] == null ? fallback : safeNonnegativeNumber(body[field], 100);
   const roomTaxPercent = percentage("roomTaxPercent", 6), roomServiceFeePercent = percentage("roomServiceFeePercent", 21), fbTaxPercent = percentage("fbTaxPercent", 8.25), fbGratuityPercent = percentage("fbGratuityPercent", 18);
-  const roomRental = Number(body?.roomRentalRevenue || 0);
+  const roomRentalChargeMethod = body?.roomRentalChargeMethod === "per_day" ? "per_day" : "per_event";
+  const roomRentalRate = Number(body?.roomRentalRevenue || 0);
+  const roomRental = roomRentalRate * (roomRentalChargeMethod === "per_day" ? eventDays : 1);
   const otherRevenue = serviceItemsJson.length ? detailedServicesTotal : Number(body?.otherRevenue || 0);
   const fbSubtotal = cateringRevenue + otherRevenue;
   const expectedRevenue = (roomRental + (roomRental * roomTaxPercent / 100) + (roomRental * roomServiceFeePercent / 100) + fbSubtotal + (fbSubtotal * fbTaxPercent / 100) + (fbSubtotal * fbGratuityPercent / 100) + Number(body?.avRevenue || 0)).toFixed(2);
@@ -256,6 +258,7 @@ function meetingEventWriteValues(body: any, holdExpiresAt: Date | null, eventDay
     ...formValues,
     ...revenue,
     otherRevenue: otherRevenue.toFixed(2),
+    roomRentalChargeMethod,
     serviceItemsJson,
     gratuityAllocationsJson: cleanGratuityAllocations(body?.gratuityAllocationsJson),
     setupOrientation: body?.setupOrientation === "widthwise" ? "widthwise" : "lengthwise",
@@ -278,6 +281,7 @@ function meetingRevenueValidationError(body: any) {
     const value = Number(body?.[field] || 0);
     if (!Number.isFinite(value) || value < 0 || value > 9999999999) return "Revenue amounts must be valid non-negative numbers.";
   }
+  if (body?.roomRentalChargeMethod && !["per_event", "per_day"].includes(String(body.roomRentalChargeMethod))) return "Choose a valid room-rental charge method.";
   if (body?.meetingRoom && !["pecan", "cedar", "full_room"].includes(String(body.meetingRoom))) return "Choose a valid meeting room.";
   const allocations = cleanGratuityAllocations(body?.gratuityAllocationsJson);
   if (allocations.length && Math.abs(allocations.reduce((sum: number, item: any) => sum + item.percentage, 0) - 100) > 0.01) return "Internal gratuity allocations must total exactly 100%.";
@@ -853,7 +857,7 @@ export async function createMeetingBeoPdf(event: any, seriesEvents: any[], space
   const allocations = cleanGratuityAllocations(event.gratuityAllocationsJson);
   const money = (value: any) => `$${Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const serviceTotal = serviceItems.length ? serviceItems.reduce((sum: number, item: any) => sum + serviceItemTotal(item, Number(event.attendance || 0), dates.length), 0) : Number(event.otherRevenue || 0);
-  const roomRental = Number(event.roomRentalRevenue || 0), fbSubtotal = Number(event.cateringRevenue || 0) + serviceTotal;
+  const roomRentalRate = Number(event.roomRentalRevenue || 0), roomRentalChargeMethod = event.roomRentalChargeMethod === "per_day" ? "per_day" : "per_event", roomRental = roomRentalRate * (roomRentalChargeMethod === "per_day" ? dates.length : 1), fbSubtotal = Number(event.cateringRevenue || 0) + serviceTotal;
   const roomTaxPercent = Number(event.roomTaxPercent ?? 6), roomServicePercent = Number(event.roomServiceFeePercent ?? 21), fbTaxPercent = Number(event.fbTaxPercent ?? 8.25), fbGratuityPercent = Number(event.fbGratuityPercent ?? 18);
   const roomTax = roomRental * roomTaxPercent / 100, roomService = roomRental * roomServicePercent / 100, fbTax = fbSubtotal * fbTaxPercent / 100, fbGratuity = fbSubtotal * fbGratuityPercent / 100;
   const dateLabel = dates.length > 1 ? `${dates[0]} through ${dates[dates.length - 1]}` : dates[0];
@@ -939,7 +943,7 @@ export async function createMeetingBeoPdf(event: any, seriesEvents: any[], space
   summaryPanel(312, 254, "Operational timeline", [["Setup begins", String(event.setupStartTime || "").slice(0, 5)], ["Guest arrival", String(event.guestStartTime || "").slice(0, 5)], ["Event ends", String(event.guestEndTime || "").slice(0, 5)], ["Breakdown complete", String(event.breakdownEndTime || "").slice(0, 5)]]);
   const contactTop = overviewBottom - 12;
   const contactBottom = summaryPanel(46, 254, "Client & sales", [["Client contact", event.clientName || "Not provided"], ["Email", event.clientEmail || "Not provided"], ["Phone", event.clientPhone || "Not provided"], ["Sales owner", event.salesOwner || "Not assigned"]], contactTop, 23);
-  summaryPanel(312, 254, "Billing & account", [["Account / Group", event.groupName], ["Billing", event.billingInstructions || "Review contract"], ["Room rental", money(event.roomRentalRevenue)], ["Est. total", money(event.expectedRevenue)]], contactTop, 23);
+  summaryPanel(312, 254, "Billing & account", [["Account / Group", event.groupName], ["Billing", event.billingInstructions || "Review contract"], [roomRentalChargeMethod === "per_day" ? `Room rental (${dates.length} days)` : "Room rental", money(roomRental)], ["Est. total", money(event.expectedRevenue)]], contactTop, 23);
   y = contactBottom - 2;
   section("Daily function schedule");
   const sortedSeries = [...seriesEvents].sort((a, b) => String(a.eventDate).localeCompare(String(b.eventDate)));
@@ -968,7 +972,7 @@ export async function createMeetingBeoPdf(event: any, seriesEvents: any[], space
   narrativePanel(312,254,"Setup & AV",setupEntries,panelTop,panelHeight);
   y=panelTop-panelHeight-2;
   section("Revenue summary");
-  row("Meeting room rental", money(event.roomRentalRevenue)); row("In-house catering", money(event.cateringRevenue)); row("Itemized F&B services", money(serviceTotal)); row("A/V add-ons", money(event.avRevenue));
+  row(roomRentalChargeMethod === "per_day" ? `Meeting room rental (${money(roomRentalRate)} x ${dates.length} days)` : "Meeting room rental (per event)", money(roomRental)); row("In-house catering", money(event.cateringRevenue)); row("Itemized F&B services", money(serviceTotal)); row("A/V add-ons", money(event.avRevenue));
   row(`Meeting room tax (${roomTaxPercent}%)`, money(roomTax)); row(`Room service fee (${roomServicePercent}%)`, money(roomService)); row(`F&B tax (${fbTaxPercent}%)`, money(fbTax)); row(`F&B gratuity (${fbGratuityPercent}%)`, money(fbGratuity));
   ensure(32); page.drawRectangle({ x: 46, y: y - 24, width: 520, height: 30, color: ink }); page.drawText("TOTAL EVENT REVENUE", { x: 54, y: y - 13, size: 10, font: bold, color: white }); page.drawText(money(event.expectedRevenue), { x: 470, y: y - 13, size: 11, font: bold, color: gold }); y -= 43;
   if(event.internalNotes){section("Internal notes");note("Manager / operations",event.internalNotes);}

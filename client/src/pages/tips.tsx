@@ -2119,10 +2119,13 @@ type FoodWasteEntry = {
   unit: string | null;
   reason: "expired" | "spoiled" | "shift_meal";
   totalCost: string;
+  unitCost: string | null;
+  catalogItemId: string | null;
   notes: string | null;
   recordedByName: string;
   canEdit: boolean;
 };
+type FoodCostItem = { id: string; vendor: string; vendorItemNumber: string | null; itemName: string; packSize: string | null; costingUnit: string; unitsPerPack: string; packCost: string; costPerUnit: string; invoiceNumber: string | null; invoiceDate: string | null };
 
 const WASTE_REASON_LABELS = { expired: "Expired", spoiled: "Spoiled", shift_meal: "Shift Meal" } as const;
 const blankWasteForm = () => ({
@@ -2132,11 +2135,13 @@ const blankWasteForm = () => ({
   unit: "",
   reason: "expired" as FoodWasteEntry["reason"],
   totalCost: "",
+  unitCost: null as number | null,
+  catalogItemId: null as string | null,
   notes: "",
 });
 const wasteMoney = (value: string | number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(Number(value || 0));
 
-function BistroFoodWasteLog() {
+function BistroFoodWasteLog({ currentUser }: { currentUser: TipsUser }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const currentMonth = new Date().toLocaleDateString("en-CA").slice(0, 7);
@@ -2144,11 +2149,15 @@ function BistroFoodWasteLog() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState(blankWasteForm);
+  const [invoiceFile, setInvoiceFile] = useState<File | null>(null);
+  const [editingCostItem, setEditingCostItem] = useState<null | { id: string; itemName: string; costingUnit: string; unitsPerPack: string; packCost: string }>(null);
   const wasteQuery = useQuery<{ month: string; entries: FoodWasteEntry[] }>({
     queryKey: ["/api/tips/food-waste", month],
     queryFn: () => fetchJson(`/api/tips/food-waste?month=${encodeURIComponent(month)}`),
   });
   const entries = wasteQuery.data?.entries || [];
+  const costItemsQuery = useQuery<{ items: FoodCostItem[] }>({ queryKey: ["/api/tips/food-cost-items"], queryFn: () => fetchJson("/api/tips/food-cost-items") });
+  const costItems = costItemsQuery.data?.items || [];
   const reasonTotal = (reason: FoodWasteEntry["reason"]) => entries.filter((entry) => entry.reason === reason).reduce((sum, entry) => sum + Number(entry.totalCost || 0), 0);
   const totalCost = entries.reduce((sum, entry) => sum + Number(entry.totalCost || 0), 0);
   const openNew = () => {
@@ -2158,7 +2167,7 @@ function BistroFoodWasteLog() {
   };
   const openEdit = (entry: FoodWasteEntry) => {
     setEditingId(entry.id);
-    setForm({ entryDate: entry.entryDate, foodItem: entry.foodItem, quantity: entry.quantity, unit: entry.unit || "", reason: entry.reason, totalCost: entry.totalCost, notes: entry.notes || "" });
+    setForm({ entryDate: entry.entryDate, foodItem: entry.foodItem, quantity: entry.quantity, unit: entry.unit || "", reason: entry.reason, totalCost: entry.totalCost, unitCost: entry.unitCost == null ? null : Number(entry.unitCost), catalogItemId: entry.catalogItemId || null, notes: entry.notes || "" });
     setDialogOpen(true);
   };
   const save = useMutation({
@@ -2178,6 +2187,28 @@ function BistroFoodWasteLog() {
     },
     onError: (error: Error) => toast({ title: "Unable to delete waste entry", description: error.message, variant: "destructive" }),
   });
+  const importInvoice = useMutation({
+    mutationFn: async () => {
+      if (!invoiceFile) throw new Error("Choose an invoice PDF.");
+      const body = new FormData();
+      body.append("invoice", invoiceFile);
+      const response = await fetch(apiUrl("/api/tips/food-cost-items/import"), { method: "POST", credentials: "include", body });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || "Unable to import invoice.");
+      return result as { vendor: string; imported: number; warning?: string | null };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tips/food-cost-items"] });
+      setInvoiceFile(null);
+      toast({ title: result.imported ? `${result.imported} food costs imported` : "No product costs imported", description: result.warning || `${result.vendor} pricing is now available for waste calculations.` });
+    },
+    onError: (error: Error) => toast({ title: "Invoice import needs attention", description: error.message, variant: "destructive" }),
+  });
+  const updateCostItem = useMutation({
+    mutationFn: async () => editingCostItem && apiRequest("PATCH", `/api/tips/food-cost-items/${editingCostItem.id}`, editingCostItem),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/tips/food-cost-items"] }); setEditingCostItem(null); toast({ title: "Food cost updated" }); },
+    onError: (error: Error) => toast({ title: "Unable to update food cost", description: error.message, variant: "destructive" }),
+  });
   const valid = /^\d{4}-\d{2}-\d{2}$/.test(form.entryDate) && form.foodItem.trim() && Number(form.quantity) > 0 && Number(form.totalCost) >= 0 && form.totalCost !== "";
 
   return (
@@ -2190,6 +2221,7 @@ function BistroFoodWasteLog() {
           </div>
           <div className="flex flex-col gap-2 sm:flex-row">
             <Input type="month" className={`${C.field} sm:w-44`} value={month} onChange={(event) => setMonth(event.target.value)} />
+            <Button asChild variant="outline" className={C.outline}><a href={apiUrl("/api/tips/food-waste/blank-form.pdf")}><Download className="mr-2 h-4 w-4" />Printable form</a></Button>
             <Button className={C.green} onClick={openNew}><Plus className="mr-2 h-4 w-4" />Record waste</Button>
           </div>
         </CardHeader>
@@ -2200,6 +2232,14 @@ function BistroFoodWasteLog() {
             <StatCard label="Spoiled" value={wasteMoney(reasonTotal("spoiled"))} />
             <StatCard label="Shift meals" value={wasteMoney(reasonTotal("shift_meal"))} />
           </div>
+          <details className="mt-4 rounded-lg border border-[#d7c8b5] bg-white p-3 text-[#201814]">
+            <summary className="cursor-pointer text-sm font-semibold">Food cost catalog ({costItems.length} items)</summary>
+            {currentUser.isAdmin && <div className="mt-3 flex flex-col gap-2 rounded-lg border border-[#eadcc9] bg-[#fbf6ee] p-3 sm:flex-row sm:items-center"><Input type="file" accept="application/pdf,.pdf" className={C.field} onChange={(event) => setInvoiceFile(event.target.files?.[0] || null)} /><Button className={C.green} disabled={!invoiceFile || importInvoice.isPending} onClick={() => importInvoice.mutate()}><Upload className="mr-2 h-4 w-4" />{importInvoice.isPending ? "Reading invoice..." : "Import invoice"}</Button></div>}
+            <div className="mt-3 max-h-64 overflow-auto">
+              <table className="w-full min-w-[720px] text-xs"><thead className="sticky top-0 bg-[#243746] text-white"><tr>{["Item", "Vendor", "Pack", "Pack Cost", "Cost / Unit", "Invoice", ""].map((label, index) => <th key={`${label}-${index}`} className="p-2 text-left">{label}</th>)}</tr></thead><tbody>{costItems.map((item) => <tr key={item.id} className="border-b border-[#eadcc9]"><td className="p-2 font-medium">{item.itemName}</td><td className="p-2">{item.vendor}</td><td className="p-2">{item.packSize || `${item.unitsPerPack} ${item.costingUnit}`}</td><td className="p-2">{wasteMoney(item.packCost)}</td><td className="p-2 font-semibold">{wasteMoney(item.costPerUnit)} / {item.costingUnit}</td><td className="p-2">{item.invoiceNumber || "—"}</td><td className="p-2">{currentUser.isAdmin && <Button size="sm" variant="outline" className={`h-7 ${C.outline}`} onClick={() => setEditingCostItem({ id: item.id, itemName: item.itemName, costingUnit: item.costingUnit, unitsPerPack: item.unitsPerPack, packCost: item.packCost })}>Edit</Button>}</td></tr>)}</tbody></table>
+              {!costItemsQuery.isLoading && !costItems.length && <div className="p-4 text-center text-sm text-[#5f5247]">No invoice costs imported yet.</div>}
+            </div>
+          </details>
         </CardContent>
       </Card>
 
@@ -2235,13 +2275,21 @@ function BistroFoodWasteLog() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div><Label>Date</Label><Input type="date" className={`mt-1 ${C.field}`} value={form.entryDate} onChange={(event) => setForm({ ...form, entryDate: event.target.value })} /></div>
             <div><Label>Reason</Label><Select value={form.reason} onValueChange={(reason: FoodWasteEntry["reason"]) => setForm({ ...form, reason })}><SelectTrigger className={`mt-1 ${C.field}`}><SelectValue /></SelectTrigger><SelectContent className={C.menu}>{Object.entries(WASTE_REASON_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div>
-            <div className="sm:col-span-2"><Label>Food item</Label><Input className={`mt-1 ${C.field}`} value={form.foodItem} onChange={(event) => setForm({ ...form, foodItem: event.target.value })} placeholder="Example: chicken breast" /></div>
-            <div><Label>Quantity</Label><Input type="number" min="0" step="0.01" className={`mt-1 ${C.field}`} value={form.quantity} onChange={(event) => setForm({ ...form, quantity: event.target.value })} /></div>
+            <div className="sm:col-span-2"><Label>Invoice cost item</Label><Select value={form.catalogItemId || "manual"} onValueChange={(id) => { const item = costItems.find((candidate) => candidate.id === id); setForm(item ? { ...form, catalogItemId: item.id, foodItem: item.itemName, unit: item.costingUnit, unitCost: Number(item.costPerUnit), totalCost: form.quantity ? (Number(form.quantity) * Number(item.costPerUnit)).toFixed(2) : "" } : { ...form, catalogItemId: null, unitCost: null }); }}><SelectTrigger className={`mt-1 ${C.field}`}><SelectValue /></SelectTrigger><SelectContent className={`${C.menu} max-h-72`}><SelectItem value="manual">Manual item / cost</SelectItem>{costItems.map((item) => <SelectItem key={item.id} value={item.id}>{item.itemName} — {wasteMoney(item.costPerUnit)}/{item.costingUnit}</SelectItem>)}</SelectContent></Select></div>
+            <div className="sm:col-span-2"><Label>Food item</Label><Input className={`mt-1 ${C.field}`} value={form.foodItem} onChange={(event) => setForm({ ...form, foodItem: event.target.value, catalogItemId: null, unitCost: null })} placeholder="Example: oranges" /></div>
+            <div><Label>Quantity</Label><Input type="number" min="0" step="0.01" className={`mt-1 ${C.field}`} value={form.quantity} onChange={(event) => { const quantity = event.target.value; setForm({ ...form, quantity, totalCost: form.unitCost != null && quantity ? (Number(quantity) * form.unitCost).toFixed(2) : form.totalCost }); }} /></div>
             <div><Label>Unit</Label><Input className={`mt-1 ${C.field}`} value={form.unit} onChange={(event) => setForm({ ...form, unit: event.target.value })} placeholder="each, lb, tray..." /></div>
-            <div className="sm:col-span-2"><Label>Total waste cost</Label><Input type="number" min="0" step="0.01" className={`mt-1 ${C.field}`} value={form.totalCost} onChange={(event) => setForm({ ...form, totalCost: event.target.value })} placeholder="0.00" /></div>
+            <div className="sm:col-span-2"><Label>Total waste cost {form.unitCost != null ? `(${wasteMoney(form.unitCost)} × ${form.quantity || 0})` : ""}</Label><Input type="number" min="0" step="0.01" className={`mt-1 ${C.field}`} value={form.totalCost} onChange={(event) => setForm({ ...form, totalCost: event.target.value })} placeholder="0.00" /></div>
             <div className="sm:col-span-2"><Label>Notes</Label><Textarea className={`mt-1 ${C.field}`} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder="Optional details or corrective action" /></div>
           </div>
           <div className="flex justify-end gap-2"><Button variant="outline" className={C.outline} onClick={() => setDialogOpen(false)}>Cancel</Button><Button className={C.green} disabled={!valid || save.isPending} onClick={() => save.mutate()}>{save.isPending ? "Saving..." : "Save entry"}</Button></div>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={Boolean(editingCostItem)} onOpenChange={(open) => !open && setEditingCostItem(null)}>
+        <DialogContent className="max-w-lg border-[#d7c8b5] bg-[#fffaf2] text-[#201814]">
+          <DialogHeader><DialogTitle>Review invoice unit cost</DialogTitle><DialogDescription className={C.muted}>Correct the invoice description or pack conversion when the vendor’s printed pack format needs clarification.</DialogDescription></DialogHeader>
+          {editingCostItem && <div className="grid gap-4 sm:grid-cols-2"><div className="sm:col-span-2"><Label>Item name</Label><Input className={`mt-1 ${C.field}`} value={editingCostItem.itemName} onChange={(event) => setEditingCostItem({ ...editingCostItem, itemName: event.target.value })} /></div><div><Label>Units per purchased pack</Label><Input type="number" min="0.0001" step="0.0001" className={`mt-1 ${C.field}`} value={editingCostItem.unitsPerPack} onChange={(event) => setEditingCostItem({ ...editingCostItem, unitsPerPack: event.target.value })} /></div><div><Label>Waste costing unit</Label><Input className={`mt-1 ${C.field}`} value={editingCostItem.costingUnit} onChange={(event) => setEditingCostItem({ ...editingCostItem, costingUnit: event.target.value })} placeholder="each, lb, oz..." /></div><div className="sm:col-span-2"><Label>Pack cost</Label><Input type="number" min="0" step="0.01" className={`mt-1 ${C.field}`} value={editingCostItem.packCost} onChange={(event) => setEditingCostItem({ ...editingCostItem, packCost: event.target.value })} /></div><div className="sm:col-span-2 rounded-lg bg-[#edf5ef] p-3 text-sm text-[#173c25]">Calculated unit cost: <strong>{wasteMoney(Number(editingCostItem.packCost || 0) / Math.max(0.0001, Number(editingCostItem.unitsPerPack || 0)))}</strong> per {editingCostItem.costingUnit || "unit"}</div></div>}
+          <div className="flex justify-end gap-2"><Button variant="outline" className={C.outline} onClick={() => setEditingCostItem(null)}>Cancel</Button><Button className={C.green} disabled={!editingCostItem?.itemName.trim() || Number(editingCostItem?.unitsPerPack) <= 0 || Number(editingCostItem?.packCost) < 0 || updateCostItem.isPending} onClick={() => updateCostItem.mutate()}>Save cost</Button></div>
         </DialogContent>
       </Dialog>
     </div>
@@ -2331,7 +2379,7 @@ export default function TipsPage() {
         {isAdminPath ? (
           auth?.user?.isAdmin ? <TipsAdmin currentUser={auth.user} /> : <Card className={C.shell}><CardContent className="p-6">Manager access is required.</CardContent></Card>
         ) : isWastePath ? (
-          <BistroFoodWasteLog />
+          <BistroFoodWasteLog currentUser={auth!.user!} />
         ) : (
           <TipsGridTracker currentUser={auth?.user || null} />
         )}

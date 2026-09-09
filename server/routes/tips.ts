@@ -5,6 +5,7 @@ import crypto from "crypto";
 import multer from "multer";
 import bcrypt from "bcrypt";
 import { z } from "zod";
+import { createRequire } from "module";
 import { and, asc, desc, eq, gte, inArray, lte } from "drizzle-orm";
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import { db } from "../db";
@@ -13,6 +14,7 @@ import { getUncachableResendClient } from "../resendClient";
 import {
   tipAdminActions,
   bistroFoodWasteEntries,
+  bistroFoodCostItems,
   tipDailyReportAttachments,
   tipEntries,
   tipEntryAttachments,
@@ -24,6 +26,9 @@ import {
   tipsUsers,
   scheduleEmployees,
 } from "@shared/schema";
+
+const require = createRequire(import.meta.url);
+const invoiceUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 12 * 1024 * 1024 }, fileFilter: (_req, file, cb) => file.mimetype === "application/pdf" || /\.pdf$/i.test(file.originalname) ? cb(null, true) : cb(new Error("Upload a PDF vendor invoice.")) });
 
 const TIPS_SUPER_ADMIN_EMAILS = new Set(
   (process.env.TIPS_SUPER_ADMIN_EMAILS || "coryarmer@gmail.com")
@@ -39,8 +44,93 @@ const foodWasteEntrySchema = z.object({
   unit: z.string().trim().max(40).optional().default(""),
   reason: z.enum(["expired", "spoiled", "shift_meal"]),
   totalCost: z.coerce.number().min(0).max(1000000),
+  unitCost: z.coerce.number().min(0).max(1000000).nullable().optional(),
+  catalogItemId: z.string().uuid().nullable().optional(),
   notes: z.string().trim().max(1000).optional().default(""),
 });
+
+async function extractInvoiceText(buffer: Buffer) {
+  const pdfParse = require("pdf-parse/lib/pdf-parse.js") as (input: Buffer) => Promise<{ text?: string }>;
+  return String((await pdfParse(buffer)).text || "");
+}
+
+function costingFromPack(packSize: string) {
+  const normalized = packSize.trim().toUpperCase();
+  const match = normalized.match(/^((?:\d+(?:\.\d+)?|\.\d+)(?:[\/X](?:\d+(?:\.\d+)?|\.\d+)){0,2})\s*(EA|CT|DZ|LB|OZ|GA|GAL|QT|PT|#)$/);
+  if (!match) return { costingUnit: "each", unitsPerPack: 1 };
+  const quantities = match[1].split(/[\/X]/).map(Number);
+  const measure = match[2];
+  if (measure === "DZ") return { costingUnit: "each", unitsPerPack: quantities[0] * 12 };
+  if (measure === "EA" || measure === "CT") return { costingUnit: "each", unitsPerPack: quantities.reduce((total, value) => total * value, 1) };
+  // Multi-part food packs describe count, size, and unit (for example 2/12/4 OZ).
+  // The saleable/waste unit is the product count, not the combined fluid/weight measure.
+  if (quantities.length === 3) return { costingUnit: "each", unitsPerPack: quantities[0] * quantities[1] };
+  if (quantities.length === 2 && quantities[0] > 1) return { costingUnit: "each", unitsPerPack: quantities[0] };
+  const unitNames: Record<string, string> = { LB: "lb", "#": "lb", OZ: "oz", GA: "gallon", GAL: "gallon", QT: "quart", PT: "pint" };
+  return { costingUnit: unitNames[measure] || "each", unitsPerPack: quantities.reduce((total, value) => total * value, 1) };
+}
+
+export function parseVendorInvoice(text: string, sourceFileName: string) {
+  const vendor = /US Foods/i.test(text) ? "US Foods" : /Hardie/i.test(text) ? "Hardie's Fresh Foods" : "Unknown vendor";
+  const invoiceNumber = vendor === "US Foods" ? (text.match(/\n(\d{5,10})\nINVOICE NUMBER/i)?.[1] || "") : (text.match(/INVOICE\/POD\s*(\d+)/i)?.[1] || text.match(/INVOICE #\s*(\d+)/i)?.[1] || "");
+  const invoiceDateRaw = vendor === "US Foods"
+    ? (text.match(/INVOICE DATE\s*(\d{2}\/\d{2}\/\d{4})/i)?.[1] || text.match(/(\d{2}\/\d{2}\/\d{4})\s*\nINVOICE DATE/i)?.[1])
+    : (text.match(/DATE\/TRIP\s*(\d{2}\/\d{2}\/\d{2,4})/i)?.[1] || text.match(/DATE\s*(\d{2}\/\d{2}\/\d{2,4})/i)?.[1]);
+  const invoiceDate = invoiceDateRaw ? (() => { const [m, d, y] = invoiceDateRaw.split("/"); return `${y.length === 2 ? `20${y}` : y}-${m}-${d}`; })() : null;
+  const items: Array<{ vendor: string; vendorItemNumber: string; itemName: string; packSize: string; costingUnit: string; unitsPerPack: number; packCost: number; costPerUnit: number; invoiceNumber: string; invoiceDate: string | null; sourceFileName: string }> = [];
+  for (const rawLine of text.split(/\r?\n/)) {
+    const line = rawLine.replace(/\s+/g, " ").trim();
+    const usFoodsMatch = line.match(/^\d+?(?:CS|EA)(\d{5,8})(.+?)(?:CS|EA)\$(\d+\.\d{4})\$(\d+\.\d{2})$/i);
+    const hardiesMatch = vendor === "Hardie's Fresh Foods" ? line.match(/^(\d)(\d)(\d{5})(.+?)(\d+(?:\.\d+)?(?:[\/X]\d+(?:\.\d+)?)?\s*(?:OZ|CT|GAL|PT|#))(\d+\.\d{2})(\d+\.\d{2})$/i) : null;
+    if (!usFoodsMatch && !hardiesMatch) continue;
+    const vendorItemNumber = usFoodsMatch ? usFoodsMatch[1] : hardiesMatch![3];
+    const body = usFoodsMatch ? usFoodsMatch[2].trim() : hardiesMatch![4].trim();
+    const packMatch = usFoodsMatch ? body.match(/((?:\d+(?:\.\d+)?|\.\d+)(?:[\/X](?:\d+(?:\.\d+)?|\.\d+)){0,2}\s*(?:EA|CT|DZ|LB|OZ|GA|GAL|QT|PT|#))(?:T|B)?$/i) : null;
+    const packSize = hardiesMatch ? hardiesMatch[5] : packMatch?.[1] || "1 EA";
+    const itemName = (packMatch ? body.slice(0, packMatch.index).trim() : body).replace(/\s+/g, " ");
+    const packCost = Number(usFoodsMatch ? usFoodsMatch[4] : hardiesMatch![6]);
+    const costing = costingFromPack(packSize);
+    items.push({ vendor, vendorItemNumber, itemName, packSize, ...costing, packCost, costPerUnit: packCost / Math.max(1, costing.unitsPerPack), invoiceNumber, invoiceDate, sourceFileName });
+  }
+  // Some invoices repeat priced rows in recap sections. Keep the last occurrence so
+  // import counts and previews match the unique vendor catalog records being updated.
+  const uniqueItems = Array.from(new Map(items.map((item) => [`${item.vendor}:${item.vendorItemNumber}`, item])).values());
+  return { vendor, invoiceNumber, invoiceDate, items: uniqueItems, warning: uniqueItems.length ? null : /CUSTOMER STATEMENT/i.test(text) ? "This file is a customer statement and does not contain product line items. Upload the detailed Hardie's invoice to update unit costs." : "No supported product line items were found. Review the invoice format." };
+}
+
+export async function buildBlankFoodWasteLogPdf() {
+  const pdf = await PDFDocument.create();
+  const page = pdf.addPage([612, 792]);
+  const regular = await pdf.embedFont(StandardFonts.Helvetica);
+  const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const ink = rgb(0.13, 0.09, 0.07), green = rgb(0.18, 0.37, 0.27), tan = rgb(0.73, 0.52, 0.21), line = rgb(0.77, 0.71, 0.63);
+  page.drawRectangle({ x: 0, y: 730, width: 612, height: 62, color: rgb(0.96, 0.93, 0.88) });
+  page.drawText("COURTYARD AUSTIN LAKELINE", { x: 40, y: 766, size: 8, font: bold, color: tan });
+  page.drawText("Bistro Food Waste Log", { x: 40, y: 742, size: 20, font: bold, color: ink });
+  page.drawText("Property / Outlet: Courtyard Austin Lakeline - Bistro", { x: 40, y: 709, size: 9, font: regular, color: ink });
+  page.drawText("Month: ____________________", { x: 400, y: 709, size: 9, font: regular, color: ink });
+  page.drawText("Reason codes: EX - Expired   |   SP - Spoiled   |   SM - Shift Meal", { x: 40, y: 688, size: 9, font: bold, color: green });
+  page.drawText("Record the total dollar loss for each waste event. Enter the same entry in the digital Bistro waste log.", { x: 40, y: 672, size: 8, font: regular, color: ink });
+  const x = 40, top = 650, rowHeight = 27;
+  const widths = [55, 145, 65, 70, 60, 55, 82];
+  const headers = ["Date", "Food Item", "Qty / Unit", "Reason", "Cost", "Initials", "Notes"];
+  const tableWidth = widths.reduce((sum, value) => sum + value, 0);
+  page.drawRectangle({ x, y: top - rowHeight, width: tableWidth, height: rowHeight, color: rgb(0.14, 0.22, 0.28) });
+  let cursor = x;
+  headers.forEach((header, index) => { page.drawText(header, { x: cursor + 4, y: top - 18, size: 7.5, font: bold, color: rgb(1, 1, 1) }); cursor += widths[index]; });
+  for (let row = 0; row <= 17; row += 1) { const y = top - rowHeight * (row + 1); page.drawLine({ start: { x, y }, end: { x: x + tableWidth, y }, thickness: 0.6, color: line }); }
+  cursor = x;
+  page.drawLine({ start: { x, y: top }, end: { x, y: top - rowHeight * 18 }, thickness: 0.6, color: line });
+  widths.forEach((width) => { cursor += width; page.drawLine({ start: { x: cursor, y: top }, end: { x: cursor, y: top - rowHeight * 18 }, thickness: 0.6, color: line }); });
+  page.drawText("MONTHLY WASTE COST SUMMARY", { x: 40, y: 158, size: 10, font: bold, color: ink });
+  page.drawText("Expired: $____________", { x: 40, y: 138, size: 9, font: regular, color: ink });
+  page.drawText("Spoiled: $____________", { x: 175, y: 138, size: 9, font: regular, color: ink });
+  page.drawText("Shift Meals: $____________", { x: 310, y: 138, size: 9, font: regular, color: ink });
+  page.drawText("TOTAL: $____________", { x: 465, y: 138, size: 9, font: bold, color: green });
+  page.drawText("Manager review: ______________________________    Date: ______________", { x: 40, y: 92, size: 9, font: regular, color: ink });
+  page.drawText("Retain completed forms according to property accounting procedures.", { x: 40, y: 55, size: 7.5, font: regular, color: rgb(0.36, 0.31, 0.27) });
+  return Buffer.from(await pdf.save());
+}
 
 // TODO: set the actual Courtyard Bistro current pay period start date in env/admin settings.
 const TIPS_PAY_PERIOD_SEED =
@@ -2915,6 +3005,42 @@ export function registerTipsRoutes(app: Express) {
     },
   );
 
+  router.get("/food-cost-items", requireTipsGridAccess, async (_req: any, res, next) => {
+    try {
+      const items = await db.select().from(bistroFoodCostItems).where(eq(bistroFoodCostItems.active, true)).orderBy(asc(bistroFoodCostItems.itemName));
+      res.json({ items });
+    } catch (error) { next(error); }
+  });
+
+  router.post("/food-cost-items/import", requireTipsAdmin, (req: any, res, next) => {
+    invoiceUpload.single("invoice")(req, res, async (uploadError: any) => {
+      try {
+        if (uploadError) return res.status(400).json({ error: uploadError.message || "Unable to upload invoice." });
+        if (!req.file) return res.status(400).json({ error: "Choose a PDF vendor invoice." });
+        const parsedInvoice = parseVendorInvoice(await extractInvoiceText(req.file.buffer), req.file.originalname);
+        let imported = 0;
+        for (const item of parsedInvoice.items) {
+          const [existing] = await db.select().from(bistroFoodCostItems).where(and(eq(bistroFoodCostItems.vendor, item.vendor), eq(bistroFoodCostItems.vendorItemNumber, item.vendorItemNumber))).limit(1);
+          const values = { ...item, unitsPerPack: item.unitsPerPack.toFixed(4), packCost: item.packCost.toFixed(2), costPerUnit: item.costPerUnit.toFixed(4), active: true, createdByUserId: req.tipsUser.id, updatedAt: new Date() };
+          if (existing) await db.update(bistroFoodCostItems).set(values).where(eq(bistroFoodCostItems.id, existing.id));
+          else await db.insert(bistroFoodCostItems).values(values);
+          imported += 1;
+        }
+        res.json({ ...parsedInvoice, items: undefined, imported });
+      } catch (error) { next(error); }
+    });
+  });
+
+  router.patch("/food-cost-items/:id", requireTipsAdmin, async (req: any, res, next) => {
+    try {
+      const parsed = z.object({ itemName: z.string().trim().min(1).max(250), costingUnit: z.string().trim().min(1).max(40), unitsPerPack: z.coerce.number().positive(), packCost: z.coerce.number().min(0) }).safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Enter a valid item, costing unit, units per pack, and pack cost." });
+      const [item] = await db.update(bistroFoodCostItems).set({ ...parsed.data, unitsPerPack: parsed.data.unitsPerPack.toFixed(4), packCost: parsed.data.packCost.toFixed(2), costPerUnit: (parsed.data.packCost / parsed.data.unitsPerPack).toFixed(4), updatedAt: new Date() }).where(eq(bistroFoodCostItems.id, req.params.id)).returning();
+      if (!item) return res.status(404).json({ error: "Cost item not found." });
+      res.json({ item });
+    } catch (error) { next(error); }
+  });
+
   router.get("/food-waste", requireTipsGridAccess, async (req: any, res, next) => {
     try {
       const month = typeof req.query.month === "string" && /^\d{4}-\d{2}$/.test(req.query.month)
@@ -2942,6 +3068,15 @@ export function registerTipsRoutes(app: Express) {
     }
   });
 
+  router.get("/food-waste/blank-form.pdf", requireTipsGridAccess, async (_req: any, res, next) => {
+    try {
+      const pdf = await buildBlankFoodWasteLogPdf();
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", 'attachment; filename="bistro-food-waste-log.pdf"');
+      res.send(pdf);
+    } catch (error) { next(error); }
+  });
+
   router.post("/food-waste", requireTipsGridAccess, async (req: any, res, next) => {
     try {
       const parsed = foodWasteEntrySchema.safeParse(req.body);
@@ -2950,6 +3085,7 @@ export function registerTipsRoutes(app: Express) {
         ...parsed.data,
         quantity: parsed.data.quantity.toFixed(2),
         totalCost: parsed.data.totalCost.toFixed(2),
+        unitCost: parsed.data.unitCost == null ? null : parsed.data.unitCost.toFixed(4),
         unit: parsed.data.unit || null,
         notes: parsed.data.notes || null,
         recordedByUserId: req.tipsUser.id,
@@ -2972,6 +3108,7 @@ export function registerTipsRoutes(app: Express) {
         ...parsed.data,
         quantity: parsed.data.quantity.toFixed(2),
         totalCost: parsed.data.totalCost.toFixed(2),
+        unitCost: parsed.data.unitCost == null ? null : parsed.data.unitCost.toFixed(4),
         unit: parsed.data.unit || null,
         notes: parsed.data.notes || null,
         updatedByUserId: req.tipsUser.id,

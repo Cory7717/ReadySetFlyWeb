@@ -558,6 +558,8 @@ export const bistroFoodWasteEntries = pgTable(
     unit: text("unit"),
     reason: text("reason").notNull(),
     totalCost: numeric("total_cost", { precision: 12, scale: 2 }).notNull(),
+    unitCost: numeric("unit_cost", { precision: 12, scale: 4 }),
+    catalogItemId: varchar("catalog_item_id"),
     notes: text("notes"),
     recordedByUserId: varchar("recorded_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
     updatedByUserId: varchar("updated_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
@@ -567,6 +569,32 @@ export const bistroFoodWasteEntries = pgTable(
   (table) => [
     index("idx_bistro_food_waste_date").on(table.entryDate),
     index("idx_bistro_food_waste_reason").on(table.reason),
+  ],
+);
+
+export const bistroFoodCostItems = pgTable(
+  "bistro_food_cost_items",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    vendor: text("vendor").notNull(),
+    vendorItemNumber: text("vendor_item_number"),
+    itemName: text("item_name").notNull(),
+    packSize: text("pack_size"),
+    costingUnit: text("costing_unit").notNull().default("each"),
+    unitsPerPack: numeric("units_per_pack", { precision: 12, scale: 4 }).notNull().default("1"),
+    packCost: numeric("pack_cost", { precision: 12, scale: 2 }).notNull(),
+    costPerUnit: numeric("cost_per_unit", { precision: 12, scale: 4 }).notNull(),
+    invoiceNumber: text("invoice_number"),
+    invoiceDate: date("invoice_date"),
+    sourceFileName: text("source_file_name"),
+    active: boolean("active").notNull().default(true),
+    createdByUserId: varchar("created_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [
+    index("idx_bistro_food_cost_item_name").on(table.itemName),
+    index("idx_bistro_food_cost_vendor_sku").on(table.vendor, table.vendorItemNumber),
   ],
 );
 

@@ -1524,8 +1524,8 @@ export default function OpsReportPage() {
   const actualLaborTotal = useMemo(() => effectiveLabor.reduce((sum, row) => sum + num(row.actualHours), 0), [effectiveLabor]);
   const bistroLaborSummary = useMemo(() => {
     const row = effectiveLabor.find((item) => String(item.department || "").trim().toUpperCase() === "BREAKFAST / BISTRO HOURS");
-    const expectedHours = num(row?.budget);
-    const scheduledHours = num(row?.scheduledHours);
+    const expectedHours = num(row?.budget ?? "");
+    const scheduledHours = num(row?.scheduledHours ?? "");
     const uncoveredHours = Math.max(0, expectedHours - scheduledHours);
     const availableHoursPerAssociate = Math.max(1, num(bistroEventLaborModel.availableHoursPerAdditionalAssociate));
     return { expectedHours, scheduledHours, uncoveredHours, additionalAssociates: Math.ceil(uncoveredHours / availableHoursPerAssociate) };

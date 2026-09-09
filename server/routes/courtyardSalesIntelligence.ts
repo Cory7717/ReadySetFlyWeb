@@ -869,7 +869,8 @@ export async function createMeetingBeoPdf(event: any, seriesEvents: any[], space
   const fitText = (value: any, font: any, size: number, maxWidth: number) => { const text = String(value ?? "Not specified"); if (font.widthOfTextAtSize(text, size) <= maxWidth) return text; let clipped = text; while (clipped.length > 3 && font.widthOfTextAtSize(`${clipped}...`, size) > maxWidth) clipped = clipped.slice(0, -1); return `${clipped.trim()}...`; };
   const section = (title: string) => { ensure(40); y -= 9; page.drawText(title.toUpperCase(), { x: 46, y, size: 11, font: bold, color: gold }); y -= 8; page.drawLine({ start: { x: 46, y }, end: { x: 566, y }, thickness: 1, color: gold }); y -= 18; };
   const row = (label: string, value: any, height = 22) => { ensure(height + 5); page.drawRectangle({ x: 46, y: y - height + 6, width: 520, height, color: pale, borderColor: rgb(0.84, 0.82, 0.78), borderWidth: 0.5 }); page.drawText(fitText(label, bold, 8.3, 145), { x: 54, y: y - 8, size: 8.3, font: bold, color: ink }); page.drawText(fitText(value, regular, 8.3, 344), { x: 210, y: y - 8, size: 8.3, font: regular, color: ink }); y -= height + 5; };
-  const summaryPanel = (x: number, width: number, title: string, rows: Array<[string, any]>) => { const top = 622, titleHeight = 28, rowHeight = 27, totalHeight = titleHeight + rows.length * rowHeight; page.drawRectangle({ x, y: top - totalHeight, width, height: totalHeight, color: pale, borderColor: rgb(0.78, 0.74, 0.68), borderWidth: 0.8 }); page.drawRectangle({ x, y: top - titleHeight, width, height: titleHeight, color: ink }); page.drawText(title.toUpperCase(), { x: x + 10, y: top - 18, size: 9.5, font: bold, color: white }); rows.forEach(([label, value], index) => { const rowTop = top - titleHeight - index * rowHeight; if (index) page.drawLine({ start: { x, y: rowTop }, end: { x: x + width, y: rowTop }, thickness: 0.5, color: rgb(0.82, 0.79, 0.73) }); page.drawText(fitText(label, bold, 7.5, width * 0.38), { x: x + 9, y: rowTop - 17, size: 7.5, font: bold, color: ink }); page.drawText(fitText(value, regular, 7.5, width * 0.53), { x: x + width * 0.43, y: rowTop - 17, size: 7.5, font: regular, color: ink }); }); return top - totalHeight; };
+  const summaryPanel = (x: number, width: number, title: string, rows: Array<[string, any]>, top = 622, rowHeight = 27) => { const titleHeight = 28, totalHeight = titleHeight + rows.length * rowHeight; page.drawRectangle({ x, y: top - totalHeight, width, height: totalHeight, color: pale, borderColor: rgb(0.78, 0.74, 0.68), borderWidth: 0.8 }); page.drawRectangle({ x, y: top - titleHeight, width, height: titleHeight, color: ink }); page.drawText(title.toUpperCase(), { x: x + 10, y: top - 18, size: 9.5, font: bold, color: white }); rows.forEach(([label, value], index) => { const rowTop = top - titleHeight - index * rowHeight; if (index) page.drawLine({ start: { x, y: rowTop }, end: { x: x + width, y: rowTop }, thickness: 0.5, color: rgb(0.82, 0.79, 0.73) }); page.drawText(fitText(label, bold, 7.5, width * 0.38), { x: x + 9, y: rowTop - 17, size: 7.5, font: bold, color: ink }); page.drawText(fitText(value, regular, 7.5, width * 0.53), { x: x + width * 0.43, y: rowTop - 17, size: 7.5, font: regular, color: ink }); }); return top - totalHeight; };
+  const narrativePanel = (x: number, width: number, title: string, entries: Array<{ heading: string; detail?: string }>, top: number, height: number) => { page.drawRectangle({ x, y: top-height, width, height, color: white, borderColor: rgb(0.55,0.55,0.55), borderWidth: 1.2 }); page.drawRectangle({ x:x+5, y:top-33, width:width-10, height:27, color:rgb(0.92,0.92,0.91) }); page.drawText(title.toUpperCase(),{x:x+10,y:top-24,size:12,font:bold,color:ink}); let yy=top-50; const maxChars=Math.max(24,Math.floor(width/4.7)); for(const entry of entries){if(yy<top-height+22) break; page.drawText(fitText(entry.heading,bold,8.5,width-20),{x:x+10,y:yy,size:8.5,font:bold,color:ink}); yy-=12; if(entry.detail){let current="";const lines:string[]=[];for(const word of entry.detail.split(/\s+/)){if(`${current} ${word}`.trim().length>maxChars){lines.push(current);current=word}else current=`${current} ${word}`.trim()}if(current)lines.push(current);for(const lineText of lines){if(yy<top-height+16)break;page.drawText(lineText,{x:x+16,y:yy,size:7.8,font:regular,color:muted});yy-=10}} yy-=6; } };
   const note = (label: string, value: any) => { if (!value) return; const text = String(value); const lines: string[] = []; let current = ""; for (const word of text.split(/\s+/)) { if (`${current} ${word}`.trim().length > 92) { lines.push(current); current = word; } else current = `${current} ${word}`.trim(); } if (current) lines.push(current); ensure(28 + lines.length * 11); page.drawText(label, { x: 52, y, size: 9, font: bold, color: ink }); y -= 13; for (const line of lines) { page.drawText(line, { x: 52, y, size: 8.5, font: regular, color: muted }); y -= 11; } y -= 7; };
   const drawSetupPlanPage = () => {
     addPage();
@@ -905,40 +906,45 @@ export async function createMeetingBeoPdf(event: any, seriesEvents: any[], space
   page.drawText("BANQUET EVENT ORDER", { x: 46, y: 690, size: 20, font: bold, color: ink });
   page.drawText(`${event.groupName}  |  ${dateLabel}`, { x: 46, y: 671, size: 11, font: bold, color: gold });
   page.drawText(`Status: ${String(event.status || "inquiry").replaceAll("_", " ").toUpperCase()}  |  BEO generated ${new Date().toLocaleDateString("en-US")}`, { x: 46, y: 653, size: 8, font: regular, color: muted });
+  page.drawText(`BEO #: ${String(event.id || "DRAFT").slice(0, 8).toUpperCase()}`, { x: 476, y: 690, size: 8.5, font: bold, color: ink });
   const roomLabel = event.meetingRoom === "pecan" ? "Pecan - 560 sq. ft." : event.meetingRoom === "cedar" ? "Cedar - 1,575 sq. ft." : event.meetingRoom === "full_room" ? "Full Room - 2,135 sq. ft." : spaceName;
   const overviewBottom = summaryPanel(46, 254, "Event overview", [["Event / Project", event.eventName], ["Meeting dates", `${dateLabel} (${dates.length} day${dates.length === 1 ? "" : "s"})`], ["Meeting room", roomLabel], ["Setup / GTD", `${String(event.roomSetup || "Not specified").replaceAll("_", " ")} / ${event.attendance ?? "-"}`]]);
   summaryPanel(312, 254, "Operational timeline", [["Setup begins", String(event.setupStartTime || "").slice(0, 5)], ["Guest arrival", String(event.guestStartTime || "").slice(0, 5)], ["Event ends", String(event.guestEndTime || "").slice(0, 5)], ["Breakdown complete", String(event.breakdownEndTime || "").slice(0, 5)]]);
-  y = overviewBottom - 3;
+  const contactTop = overviewBottom - 12;
+  const contactBottom = summaryPanel(46, 254, "Client & sales", [["Client contact", event.clientName || "Not provided"], ["Email", event.clientEmail || "Not provided"], ["Phone", event.clientPhone || "Not provided"], ["Sales owner", event.salesOwner || "Not assigned"]], contactTop, 23);
+  summaryPanel(312, 254, "Billing & account", [["Account / Group", event.groupName], ["Billing", event.billingInstructions || "Review contract"], ["Room rental", money(event.roomRentalRevenue)], ["Est. total", money(event.expectedRevenue)]], contactTop, 23);
+  y = contactBottom - 2;
   section("Daily function schedule");
   const sortedSeries = [...seriesEvents].sort((a, b) => String(a.eventDate).localeCompare(String(b.eventDate)));
-  for (const item of sortedSeries.slice(0, 10)) row(item.eventDate, `Setup ${String(item.setupStartTime || "").slice(0, 5)} | Guests ${String(item.guestStartTime || "").slice(0, 5)}-${String(item.guestEndTime || "").slice(0, 5)} | Breakdown ${String(item.breakdownEndTime || "").slice(0, 5)} | GTD ${item.attendance ?? event.attendance ?? "-"}`, 19);
+  for (const item of sortedSeries.slice(0, 5)) row(item.eventDate, `Setup ${String(item.setupStartTime || "").slice(0, 5)} | Guests ${String(item.guestStartTime || "").slice(0, 5)}-${String(item.guestEndTime || "").slice(0, 5)} | Breakdown ${String(item.breakdownEndTime || "").slice(0, 5)} | GTD ${item.attendance ?? event.attendance ?? "-"}`, 18);
   drawSetupPlanPage();
   addPage();
-  if (sortedSeries.length > 10) { section("Daily function schedule - continued"); for (const item of sortedSeries.slice(10)) row(item.eventDate, `Setup ${String(item.setupStartTime || "").slice(0, 5)} | Guests ${String(item.guestStartTime || "").slice(0, 5)}-${String(item.guestEndTime || "").slice(0, 5)} | Breakdown ${String(item.breakdownEndTime || "").slice(0, 5)} | GTD ${item.attendance ?? event.attendance ?? "-"}`, 19); }
-  section("Catering and services");
-  row("Breakfast", `${money(event.breakfastPerPerson)} per person x ${event.attendance || 0} x ${dates.length} day(s)`);
-  row("Lunch / Dinner", `${money(event.lunchDinnerPerPerson)} per person x ${event.attendance || 0} x ${dates.length} day(s)`);
-  row("Calculated in-house catering", money(event.cateringRevenue)); row("A/V add-ons", money(event.avRevenue));
-  if (serviceItems.length) {
-    const methodLabel: Record<string, string> = { per_event: "per event", per_day: "per day", per_person: "per person", per_person_per_day: "per person/day", per_unit: "per unit", actual_consumption: "actual consumption", complimentary: "complimentary" };
-    for (const item of serviceItems) {
-      const amount = serviceItemTotal(item, Number(event.attendance || 0), dates.length);
-      row(item.name, `${item.serviceDates} | ${methodLabel[item.chargeMethod]} | Qty ${item.quantity} @ ${money(item.unitPrice)} | ${money(amount)}`);
-      if (item.includedQuantity || item.refillPrice) note("Included / refill terms", `${item.includedQuantity || 0} included; additional refill/unit ${money(item.refillPrice || 0)}. ${item.instructions || ""}`);
-      else note("Service instructions", item.instructions);
-    }
-    row("Itemized coffee, drinks and services", money(serviceTotal));
-  } else row("Drink / coffee / incidentals", money(event.otherRevenue));
-  note("Catering and incidental details", event.cateringNotes);
-  section("Contacts");
-  row("Sales owner", event.salesOwner || "Not assigned"); row("Client contact", event.clientName || "Not provided"); row("Email / Phone", [event.clientEmail, event.clientPhone].filter(Boolean).join("  |  ") || "Not provided");
-  note("Billing instructions", event.billingInstructions);
+  if (sortedSeries.length > 5) { section("Daily function schedule - continued"); for (const item of sortedSeries.slice(5)) row(item.eventDate, `Setup ${String(item.setupStartTime || "").slice(0, 5)} | Guests ${String(item.guestStartTime || "").slice(0, 5)}-${String(item.guestEndTime || "").slice(0, 5)} | Breakdown ${String(item.breakdownEndTime || "").slice(0, 5)} | GTD ${item.attendance ?? event.attendance ?? "-"}`, 19); }
+  if (sortedSeries.length > 10 || y < 430) addPage();
+  const methodLabel: Record<string, string> = { per_event: "per event", per_day: "per day", per_person: "per person", per_person_per_day: "per person/day", per_unit: "per unit", actual_consumption: "actual consumption", complimentary: "complimentary" };
+  const foodEntries = [
+    { heading: `Breakfast · ${money(event.breakfastPerPerson)} per person`, detail: `${event.attendance || 0} guests × ${dates.length} day(s)` },
+    { heading: `Lunch / Dinner · ${money(event.lunchDinnerPerPerson)} per person`, detail: `${event.attendance || 0} guests × ${dates.length} day(s)` },
+    ...serviceItems.map((item:any)=>({heading:`${item.name} · ${money(serviceItemTotal(item,Number(event.attendance||0),dates.length))}`,detail:`${item.serviceDates}; ${methodLabel[item.chargeMethod]}; qty ${item.quantity} @ ${money(item.unitPrice)}. ${item.instructions||""}${item.refillPrice?` Additional refill/unit ${money(item.refillPrice)}.`:""}`})),
+    ...(event.cateringNotes?[{heading:"Service notes",detail:String(event.cateringNotes)}]:[]),
+  ];
+  const setupEntries = [
+    {heading:`${roomLabel} · ${String(event.roomSetup||"").replaceAll("_"," ")}`,detail:`GTD ${event.attendance??"-"}; ${String(event.setupOrientation||"lengthwise")} orientation.`},
+    {heading:"Setup / breakdown",detail:event.setupNotes||"Follow the approved room diagram on page 2."},
+    {heading:`Audio / visual · ${money(event.avRevenue)}`,detail:event.avNotes||"No additional AV instructions."},
+    ...(event.decorNotes?[{heading:"Decor / restrictions",detail:String(event.decorNotes)}]:[]),
+    ...(event.damageNotes?[{heading:"Room condition",detail:String(event.damageNotes)}]:[]),
+    ...(event.accessibilityNotes?[{heading:"Accessibility",detail:String(event.accessibilityNotes)}]:[]),
+  ];
+  const panelTop=y, panelHeight=300;
+  narrativePanel(46,254,"Food & beverage",foodEntries,panelTop,panelHeight);
+  narrativePanel(312,254,"Setup & AV",setupEntries,panelTop,panelHeight);
+  y=panelTop-panelHeight-2;
   section("Revenue summary");
   row("Meeting room rental", money(event.roomRentalRevenue)); row("In-house catering", money(event.cateringRevenue)); row("Itemized F&B services", money(serviceTotal)); row("A/V add-ons", money(event.avRevenue));
   row(`Meeting room tax (${roomTaxPercent}%)`, money(roomTax)); row(`Room service fee (${roomServicePercent}%)`, money(roomService)); row(`F&B tax (${fbTaxPercent}%)`, money(fbTax)); row(`F&B gratuity (${fbGratuityPercent}%)`, money(fbGratuity));
   ensure(32); page.drawRectangle({ x: 46, y: y - 24, width: 520, height: 30, color: ink }); page.drawText("TOTAL EVENT REVENUE", { x: 54, y: y - 13, size: 10, font: bold, color: white }); page.drawText(money(event.expectedRevenue), { x: 470, y: y - 13, size: 11, font: bold, color: gold }); y -= 43;
-  section("Operational notes");
-  note("Setup and breakdown", event.setupNotes); note("Food and beverage", event.cateringNotes); note("Audio / visual", event.avNotes); note("Event decor and restrictions", event.decorNotes); note("Damage / condition", event.damageNotes); note("Accessibility", event.accessibilityNotes); note("Internal notes", event.internalNotes);
+  if(event.internalNotes){section("Internal notes");note("Manager / operations",event.internalNotes);}
   ensure(90); page.drawText("TEAM CONFIRMATION", { x: 46, y, size: 10, font: bold, color: gold }); y -= 28; page.drawText("Setup completed by: ______________________________   Time: __________", { x: 52, y, size: 9, font: regular, color: ink }); y -= 25; page.drawText("Breakdown completed by: __________________________   Time: __________", { x: 52, y, size: 9, font: regular, color: ink });
   section("Internal F&B gratuity closeout");
   row("F&B gratuity pool", money(fbGratuity));

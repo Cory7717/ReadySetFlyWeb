@@ -560,6 +560,8 @@ export const bistroFoodWasteEntries = pgTable(
     totalCost: numeric("total_cost", { precision: 12, scale: 2 }).notNull(),
     unitCost: numeric("unit_cost", { precision: 12, scale: 4 }),
     catalogItemId: varchar("catalog_item_id"),
+    employeeMealRecipeId: text("employee_meal_recipe_id"),
+    recipeCostBreakdown: jsonb("recipe_cost_breakdown").$type<Array<{ ingredient: string; quantity: number; unit: string; catalogItemId: string | null; catalogItemName: string | null; cost: number | null }>>(),
     notes: text("notes"),
     recordedByUserId: varchar("recorded_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
     updatedByUserId: varchar("updated_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),

@@ -46,8 +46,92 @@ const foodWasteEntrySchema = z.object({
   totalCost: z.coerce.number().min(0).max(1000000),
   unitCost: z.coerce.number().min(0).max(1000000).nullable().optional(),
   catalogItemId: z.string().uuid().nullable().optional(),
+  employeeMealRecipeId: z.string().trim().max(80).nullable().optional(),
   notes: z.string().trim().max(1000).optional().default(""),
 });
+
+type EmployeeMealIngredient = { name: string; quantity: number; unit: string; aliases: string[] };
+type EmployeeMealRecipe = { id: string; name: string; sourceRecipe: string; ingredients: EmployeeMealIngredient[] };
+
+export const EMPLOYEE_MEAL_RECIPES: EmployeeMealRecipe[] = [
+  { id: "breakfast-burrito", name: "Breakfast Burrito", sourceRecipe: "Breakfast Quesadilla", ingredients: [
+    { name: "Liquid whole egg", quantity: 4, unit: "fl oz", aliases: ["liquid whole egg", "whole egg", "egg liquid"] },
+    { name: "12-inch flour tortilla", quantity: 1, unit: "each", aliases: ["12 tortilla", "flour tortilla", "tortilla"] },
+    { name: "Bacon", quantity: 2, unit: "slice", aliases: ["bacon"] },
+    { name: "Jack cheese", quantity: 3, unit: "tbsp", aliases: ["jack cheese", "monterey jack"] },
+    { name: "White cheddar", quantity: 1, unit: "slice", aliases: ["white cheddar", "cheddar slice"] },
+    { name: "Garlic aioli", quantity: 1, unit: "tbsp", aliases: ["garlic aioli", "aioli"] },
+    { name: "Diced green chiles", quantity: 1, unit: "tbsp", aliases: ["green chile", "green chili"] },
+    { name: "Salsa", quantity: 3, unit: "tbsp", aliases: ["salsa"] },
+    { name: "Avocado mash", quantity: 3, unit: "tbsp", aliases: ["avocado mash", "avocado"] },
+  ] },
+  { id: "hamburger", name: "Hamburger", sourceRecipe: "The Bistro Burger (Beyond Meat)", ingredients: [
+    { name: "Burger patty", quantity: 1, unit: "each", aliases: ["burger patty", "beyond burger", "beef patty"] },
+    { name: "White cheddar", quantity: 1, unit: "slice", aliases: ["white cheddar", "cheddar slice"] },
+    { name: "Brioche bun", quantity: 1, unit: "each", aliases: ["brioche bun", "brioche roll", "hamburger bun"] },
+    { name: "Garlic aioli", quantity: 2, unit: "tbsp", aliases: ["garlic aioli", "aioli"] },
+    { name: "Tomato", quantity: 2, unit: "slice", aliases: ["tomato"] },
+    { name: "Romaine lettuce", quantity: 2.5, unit: "each", aliases: ["romaine", "lettuce"] },
+    { name: "French fries", quantity: 6, unit: "oz", aliases: ["french fries", "seashore fries", "potato fries"] },
+    { name: "Ketchup", quantity: 3, unit: "tbsp", aliases: ["ketchup"] },
+  ] },
+  { id: "pepperoni-flatbread", name: "Pepperoni Flatbread", sourceRecipe: "Meatball Flatbread", ingredients: [
+    { name: "Oval flatbread", quantity: 1, unit: "each", aliases: ["oval flatbread", "flatbread"] },
+    { name: "Marinara sauce", quantity: 3, unit: "tbsp", aliases: ["marinara"] },
+    { name: "Roasted tomatoes", quantity: 1.5, unit: "oz", aliases: ["roasted tomato", "tomato"] },
+    { name: "Parmesan", quantity: 4, unit: "tbsp", aliases: ["parmesan"] },
+    { name: "Jack cheese", quantity: 0.25, unit: "cup", aliases: ["jack cheese", "monterey jack"] },
+    { name: "Meatballs", quantity: 4, unit: "each", aliases: ["meatball"] },
+    { name: "Basil pesto", quantity: 1, unit: "tbsp", aliases: ["basil pesto", "pesto"] },
+    { name: "Basil", quantity: 2.5, unit: "each", aliases: ["basil"] },
+  ] },
+  { id: "bistro-breakfast-sandwich", name: "Bistro Breakfast Sandwich", sourceRecipe: "Balanced Breakfast Sandwich", ingredients: [
+    { name: "Liquid egg whites", quantity: 4, unit: "fl oz", aliases: ["liquid egg white", "egg white"] },
+    { name: "English muffin", quantity: 1, unit: "each", aliases: ["english muffin"] },
+    { name: "Turkey breast", quantity: 2, unit: "oz", aliases: ["turkey breast", "sliced turkey"] },
+    { name: "Diced green chiles", quantity: 1, unit: "tbsp", aliases: ["green chile", "green chili"] },
+    { name: "White cheddar", quantity: 1, unit: "slice", aliases: ["white cheddar", "cheddar slice"] },
+    { name: "Arugula", quantity: 0.25, unit: "cup", aliases: ["arugula"] },
+  ] },
+  { id: "breakfast-croissant", name: "Bacon or Sausage Egg & Cheese Croissant", sourceRecipe: "Ham, Egg and Cheese Croissant", ingredients: [
+    { name: "3-ounce croissant", quantity: 1, unit: "each", aliases: ["croissant"] },
+    { name: "Cage-free egg", quantity: 1, unit: "each", aliases: ["cage free egg", "shell egg", "egg shell"] },
+    { name: "White cheddar", quantity: 1, unit: "slice", aliases: ["white cheddar", "cheddar slice"] },
+    { name: "Breakfast meat", quantity: 2, unit: "oz", aliases: ["sausage patty", "breakfast sausage", "bacon", "ham sliced"] },
+  ] },
+];
+
+const normalizeFoodName = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+function recipeQuantityInCatalogUnits(quantity: number, recipeUnit: string, catalogUnit: string) {
+  const from = recipeUnit.toLowerCase(), to = catalogUnit.toLowerCase();
+  if (["each", "ea", "slice", "piece"].includes(from) && ["each", "ea", "count", "ct"].includes(to)) return quantity;
+  const fluidOunces = from === "fl oz" ? quantity : from === "tbsp" ? quantity / 2 : from === "tsp" ? quantity / 6 : from === "cup" ? quantity * 8 : null;
+  if (fluidOunces != null) {
+    if (["oz", "fl oz"].includes(to)) return fluidOunces;
+    if (["gallon", "gal", "ga"].includes(to)) return fluidOunces / 128;
+    if (["quart", "qt"].includes(to)) return fluidOunces / 32;
+    if (["pint", "pt"].includes(to)) return fluidOunces / 16;
+  }
+  if (from === "oz" && to === "oz") return quantity;
+  if (from === "oz" && ["lb", "pound"].includes(to)) return quantity / 16;
+  return null;
+}
+
+export function calculateEmployeeMealRecipe(recipe: EmployeeMealRecipe, catalog: any[]) {
+  const breakdown = recipe.ingredients.map((ingredient) => {
+    const candidates = catalog.map((item) => ({ item, normalized: normalizeFoodName(item.itemName || "") }));
+    const match = candidates
+      .map((candidate) => ({ ...candidate, score: Math.max(0, ...ingredient.aliases.map((alias) => candidate.normalized.includes(normalizeFoodName(alias)) ? normalizeFoodName(alias).length : 0)) }))
+      .filter((candidate) => candidate.score > 0)
+      .sort((a, b) => b.score - a.score)[0]?.item;
+    const catalogQuantity = match ? recipeQuantityInCatalogUnits(ingredient.quantity, ingredient.unit, match.costingUnit) : null;
+    const cost = match && catalogQuantity != null ? catalogQuantity * Number(match.costPerUnit) : null;
+    return { ingredient: ingredient.name, quantity: ingredient.quantity, unit: ingredient.unit, catalogItemId: match?.id || null, catalogItemName: match?.itemName || null, cost: cost == null ? null : Number(cost.toFixed(4)) };
+  });
+  const missingIngredients = breakdown.filter((item) => item.cost == null).map((item) => item.ingredient);
+  const servingCost = Number(breakdown.reduce((sum, item) => sum + (item.cost || 0), 0).toFixed(4));
+  return { id: recipe.id, name: recipe.name, sourceRecipe: recipe.sourceRecipe, servingCost, complete: missingIngredients.length === 0, missingIngredients, breakdown };
+}
 
 async function extractInvoiceText(buffer: Buffer) {
   const pdfParse = require("pdf-parse/lib/pdf-parse.js") as (input: Buffer) => Promise<{ text?: string }>;
@@ -3012,6 +3096,13 @@ export function registerTipsRoutes(app: Express) {
     } catch (error) { next(error); }
   });
 
+  router.get("/employee-meal-recipes", requireTipsGridAccess, async (_req: any, res, next) => {
+    try {
+      const catalog = await db.select().from(bistroFoodCostItems).where(eq(bistroFoodCostItems.active, true));
+      res.json({ recipes: EMPLOYEE_MEAL_RECIPES.map((recipe) => calculateEmployeeMealRecipe(recipe, catalog)) });
+    } catch (error) { next(error); }
+  });
+
   router.post("/food-cost-items/import", requireTipsAdmin, (req: any, res, next) => {
     invoiceUpload.single("invoice")(req, res, async (uploadError: any) => {
       try {
@@ -3081,12 +3172,24 @@ export function registerTipsRoutes(app: Express) {
     try {
       const parsed = foodWasteEntrySchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: "Enter a valid date, food item, quantity, reason, and total cost.", validation: parsed.error.format() });
+      let recipeCost: ReturnType<typeof calculateEmployeeMealRecipe> | null = null;
+      if (parsed.data.reason === "shift_meal") {
+        const recipe = EMPLOYEE_MEAL_RECIPES.find((candidate) => candidate.id === parsed.data.employeeMealRecipeId);
+        if (!recipe) return res.status(400).json({ error: "Select an employee meal from the menu." });
+        const catalog = await db.select().from(bistroFoodCostItems).where(eq(bistroFoodCostItems.active, true));
+        recipeCost = calculateEmployeeMealRecipe(recipe, catalog);
+        if (recipeCost.servingCost <= 0) return res.status(400).json({ error: "This meal does not have any matched invoice costs yet. Ask a manager to import or review the food-cost catalog." });
+      }
       const [entry] = await db.insert(bistroFoodWasteEntries).values({
         ...parsed.data,
+        foodItem: recipeCost?.name || parsed.data.foodItem,
         quantity: parsed.data.quantity.toFixed(2),
-        totalCost: parsed.data.totalCost.toFixed(2),
-        unitCost: parsed.data.unitCost == null ? null : parsed.data.unitCost.toFixed(4),
-        unit: parsed.data.unit || null,
+        totalCost: (recipeCost ? recipeCost.servingCost * parsed.data.quantity : parsed.data.totalCost).toFixed(2),
+        unitCost: recipeCost ? recipeCost.servingCost.toFixed(4) : parsed.data.unitCost == null ? null : parsed.data.unitCost.toFixed(4),
+        unit: recipeCost ? "meal" : parsed.data.unit || null,
+        catalogItemId: recipeCost ? null : parsed.data.catalogItemId,
+        employeeMealRecipeId: recipeCost?.id || null,
+        recipeCostBreakdown: recipeCost?.breakdown || null,
         notes: parsed.data.notes || null,
         recordedByUserId: req.tipsUser.id,
         updatedByUserId: req.tipsUser.id,
@@ -3104,12 +3207,24 @@ export function registerTipsRoutes(app: Express) {
       const [existing] = await db.select().from(bistroFoodWasteEntries).where(eq(bistroFoodWasteEntries.id, req.params.id)).limit(1);
       if (!existing) return res.status(404).json({ error: "Waste entry not found." });
       if (!isTipsManager(req.tipsUser) && existing.recordedByUserId !== req.tipsUser.id) return res.status(403).json({ error: "You can only edit entries you recorded." });
+      let recipeCost: ReturnType<typeof calculateEmployeeMealRecipe> | null = null;
+      if (parsed.data.reason === "shift_meal") {
+        const recipe = EMPLOYEE_MEAL_RECIPES.find((candidate) => candidate.id === parsed.data.employeeMealRecipeId);
+        if (!recipe) return res.status(400).json({ error: "Select an employee meal from the menu." });
+        const catalog = await db.select().from(bistroFoodCostItems).where(eq(bistroFoodCostItems.active, true));
+        recipeCost = calculateEmployeeMealRecipe(recipe, catalog);
+        if (recipeCost.servingCost <= 0) return res.status(400).json({ error: "This meal does not have any matched invoice costs yet. Ask a manager to import or review the food-cost catalog." });
+      }
       const [entry] = await db.update(bistroFoodWasteEntries).set({
         ...parsed.data,
+        foodItem: recipeCost?.name || parsed.data.foodItem,
         quantity: parsed.data.quantity.toFixed(2),
-        totalCost: parsed.data.totalCost.toFixed(2),
-        unitCost: parsed.data.unitCost == null ? null : parsed.data.unitCost.toFixed(4),
-        unit: parsed.data.unit || null,
+        totalCost: (recipeCost ? recipeCost.servingCost * parsed.data.quantity : parsed.data.totalCost).toFixed(2),
+        unitCost: recipeCost ? recipeCost.servingCost.toFixed(4) : parsed.data.unitCost == null ? null : parsed.data.unitCost.toFixed(4),
+        unit: recipeCost ? "meal" : parsed.data.unit || null,
+        catalogItemId: recipeCost ? null : parsed.data.catalogItemId,
+        employeeMealRecipeId: recipeCost?.id || null,
+        recipeCostBreakdown: recipeCost?.breakdown || null,
         notes: parsed.data.notes || null,
         updatedByUserId: req.tipsUser.id,
         updatedAt: new Date(),

@@ -2121,11 +2121,14 @@ type FoodWasteEntry = {
   totalCost: string;
   unitCost: string | null;
   catalogItemId: string | null;
+  employeeMealRecipeId: string | null;
+  recipeCostBreakdown: Array<{ ingredient: string; quantity: number; unit: string; catalogItemName: string | null; cost: number | null }> | null;
   notes: string | null;
   recordedByName: string;
   canEdit: boolean;
 };
 type FoodCostItem = { id: string; vendor: string; vendorItemNumber: string | null; itemName: string; packSize: string | null; costingUnit: string; unitsPerPack: string; packCost: string; costPerUnit: string; invoiceNumber: string | null; invoiceDate: string | null };
+type EmployeeMealRecipe = { id: string; name: string; sourceRecipe: string; servingCost: number; complete: boolean; missingIngredients: string[]; breakdown: Array<{ ingredient: string; quantity: number; unit: string; catalogItemName: string | null; cost: number | null }> };
 
 const WASTE_REASON_LABELS = { expired: "Expired", spoiled: "Spoiled", shift_meal: "Shift Meal" } as const;
 const blankWasteForm = () => ({
@@ -2137,6 +2140,7 @@ const blankWasteForm = () => ({
   totalCost: "",
   unitCost: null as number | null,
   catalogItemId: null as string | null,
+  employeeMealRecipeId: null as string | null,
   notes: "",
 });
 const wasteMoney = (value: string | number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(Number(value || 0));
@@ -2158,6 +2162,9 @@ function BistroFoodWasteLog({ currentUser }: { currentUser: TipsUser }) {
   const entries = wasteQuery.data?.entries || [];
   const costItemsQuery = useQuery<{ items: FoodCostItem[] }>({ queryKey: ["/api/tips/food-cost-items"], queryFn: () => fetchJson("/api/tips/food-cost-items") });
   const costItems = costItemsQuery.data?.items || [];
+  const mealRecipesQuery = useQuery<{ recipes: EmployeeMealRecipe[] }>({ queryKey: ["/api/tips/employee-meal-recipes"], queryFn: () => fetchJson("/api/tips/employee-meal-recipes") });
+  const mealRecipes = mealRecipesQuery.data?.recipes || [];
+  const selectedMeal = mealRecipes.find((recipe) => recipe.id === form.employeeMealRecipeId);
   const reasonTotal = (reason: FoodWasteEntry["reason"]) => entries.filter((entry) => entry.reason === reason).reduce((sum, entry) => sum + Number(entry.totalCost || 0), 0);
   const totalCost = entries.reduce((sum, entry) => sum + Number(entry.totalCost || 0), 0);
   const openNew = () => {
@@ -2167,7 +2174,7 @@ function BistroFoodWasteLog({ currentUser }: { currentUser: TipsUser }) {
   };
   const openEdit = (entry: FoodWasteEntry) => {
     setEditingId(entry.id);
-    setForm({ entryDate: entry.entryDate, foodItem: entry.foodItem, quantity: entry.quantity, unit: entry.unit || "", reason: entry.reason, totalCost: entry.totalCost, unitCost: entry.unitCost == null ? null : Number(entry.unitCost), catalogItemId: entry.catalogItemId || null, notes: entry.notes || "" });
+    setForm({ entryDate: entry.entryDate, foodItem: entry.foodItem, quantity: entry.quantity, unit: entry.unit || "", reason: entry.reason, totalCost: entry.totalCost, unitCost: entry.unitCost == null ? null : Number(entry.unitCost), catalogItemId: entry.catalogItemId || null, employeeMealRecipeId: entry.employeeMealRecipeId || null, notes: entry.notes || "" });
     setDialogOpen(true);
   };
   const save = useMutation({
@@ -2199,6 +2206,7 @@ function BistroFoodWasteLog({ currentUser }: { currentUser: TipsUser }) {
     },
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ["/api/tips/food-cost-items"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/tips/employee-meal-recipes"] });
       setInvoiceFile(null);
       toast({ title: result.imported ? `${result.imported} food costs imported` : "No product costs imported", description: result.warning || `${result.vendor} pricing is now available for waste calculations.` });
     },
@@ -2209,7 +2217,7 @@ function BistroFoodWasteLog({ currentUser }: { currentUser: TipsUser }) {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["/api/tips/food-cost-items"] }); setEditingCostItem(null); toast({ title: "Food cost updated" }); },
     onError: (error: Error) => toast({ title: "Unable to update food cost", description: error.message, variant: "destructive" }),
   });
-  const valid = /^\d{4}-\d{2}-\d{2}$/.test(form.entryDate) && form.foodItem.trim() && Number(form.quantity) > 0 && Number(form.totalCost) >= 0 && form.totalCost !== "";
+  const valid = /^\d{4}-\d{2}-\d{2}$/.test(form.entryDate) && form.foodItem.trim() && Number(form.quantity) > 0 && Number(form.totalCost) >= 0 && form.totalCost !== "" && (form.reason !== "shift_meal" || Boolean(form.employeeMealRecipeId));
 
   return (
     <div className="space-y-6">
@@ -2274,12 +2282,18 @@ function BistroFoodWasteLog({ currentUser }: { currentUser: TipsUser }) {
           <DialogHeader><DialogTitle>{editingId ? "Edit waste entry" : "Record food waste"}</DialogTitle><DialogDescription className={C.muted}>Enter the total cost lost for this waste event, matching the original Bistro log.</DialogDescription></DialogHeader>
           <div className="grid gap-4 sm:grid-cols-2">
             <div><Label>Date</Label><Input type="date" className={`mt-1 ${C.field}`} value={form.entryDate} onChange={(event) => setForm({ ...form, entryDate: event.target.value })} /></div>
-            <div><Label>Reason</Label><Select value={form.reason} onValueChange={(reason: FoodWasteEntry["reason"]) => setForm({ ...form, reason })}><SelectTrigger className={`mt-1 ${C.field}`}><SelectValue /></SelectTrigger><SelectContent className={C.menu}>{Object.entries(WASTE_REASON_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div>
+            <div><Label>Reason</Label><Select value={form.reason} onValueChange={(reason: FoodWasteEntry["reason"]) => setForm(reason === "shift_meal" ? { ...form, reason, foodItem: "", unit: "meal", totalCost: "", unitCost: null, catalogItemId: null, employeeMealRecipeId: null } : { ...form, reason, employeeMealRecipeId: null })}><SelectTrigger className={`mt-1 ${C.field}`}><SelectValue /></SelectTrigger><SelectContent className={C.menu}>{Object.entries(WASTE_REASON_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div>
+            {form.reason === "shift_meal" && <>
+              <div className="sm:col-span-2"><Label>Employee meal consumed</Label><Select value={form.employeeMealRecipeId || ""} onValueChange={(id) => { const recipe = mealRecipes.find((candidate) => candidate.id === id); if (recipe) setForm({ ...form, employeeMealRecipeId: recipe.id, foodItem: recipe.name, unit: "meal", unitCost: recipe.servingCost, totalCost: (Number(form.quantity || 1) * recipe.servingCost).toFixed(2), catalogItemId: null }); }}><SelectTrigger className={`mt-1 ${C.field}`}><SelectValue placeholder="Select the menu item" /></SelectTrigger><SelectContent className={C.menu}>{mealRecipes.map((recipe) => <SelectItem key={recipe.id} value={recipe.id}>{recipe.name} — {wasteMoney(recipe.servingCost)}</SelectItem>)}</SelectContent></Select></div>
+              <div className="sm:col-span-2 rounded-lg border border-[#bdd5c3] bg-[#edf5ef] p-3 text-sm text-[#173c25]"><div><strong>Associate:</strong> {currentUser.employeeDisplayName}</div>{selectedMeal && <><div><strong>Cost basis:</strong> {selectedMeal.sourceRecipe} from the supplied Bistro use records</div><div><strong>Calculated cost:</strong> {wasteMoney(selectedMeal.servingCost)} per meal</div>{!selectedMeal.complete && <div className="mt-1 text-[#755118]"><strong>Catalog review:</strong> The current cost excludes unmatched ingredients: {selectedMeal.missingIngredients.join(", ")}.</div>}</>}</div>
+            </>}
+            {form.reason !== "shift_meal" && <>
             <div className="sm:col-span-2"><Label>Invoice cost item</Label><Select value={form.catalogItemId || "manual"} onValueChange={(id) => { const item = costItems.find((candidate) => candidate.id === id); setForm(item ? { ...form, catalogItemId: item.id, foodItem: item.itemName, unit: item.costingUnit, unitCost: Number(item.costPerUnit), totalCost: form.quantity ? (Number(form.quantity) * Number(item.costPerUnit)).toFixed(2) : "" } : { ...form, catalogItemId: null, unitCost: null }); }}><SelectTrigger className={`mt-1 ${C.field}`}><SelectValue /></SelectTrigger><SelectContent className={`${C.menu} max-h-72`}><SelectItem value="manual">Manual item / cost</SelectItem>{costItems.map((item) => <SelectItem key={item.id} value={item.id}>{item.itemName} — {wasteMoney(item.costPerUnit)}/{item.costingUnit}</SelectItem>)}</SelectContent></Select></div>
             <div className="sm:col-span-2"><Label>Food item</Label><Input className={`mt-1 ${C.field}`} value={form.foodItem} onChange={(event) => setForm({ ...form, foodItem: event.target.value, catalogItemId: null, unitCost: null })} placeholder="Example: oranges" /></div>
+            </>}
             <div><Label>Quantity</Label><Input type="number" min="0" step="0.01" className={`mt-1 ${C.field}`} value={form.quantity} onChange={(event) => { const quantity = event.target.value; setForm({ ...form, quantity, totalCost: form.unitCost != null && quantity ? (Number(quantity) * form.unitCost).toFixed(2) : form.totalCost }); }} /></div>
-            <div><Label>Unit</Label><Input className={`mt-1 ${C.field}`} value={form.unit} onChange={(event) => setForm({ ...form, unit: event.target.value })} placeholder="each, lb, tray..." /></div>
-            <div className="sm:col-span-2"><Label>Total waste cost {form.unitCost != null ? `(${wasteMoney(form.unitCost)} × ${form.quantity || 0})` : ""}</Label><Input type="number" min="0" step="0.01" className={`mt-1 ${C.field}`} value={form.totalCost} onChange={(event) => setForm({ ...form, totalCost: event.target.value })} placeholder="0.00" /></div>
+            <div><Label>Unit</Label><Input disabled={form.reason === "shift_meal"} className={`mt-1 ${C.field}`} value={form.unit} onChange={(event) => setForm({ ...form, unit: event.target.value })} placeholder="each, lb, tray..." /></div>
+            <div className="sm:col-span-2"><Label>Total waste cost {form.unitCost != null ? `(${wasteMoney(form.unitCost)} × ${form.quantity || 0})` : ""}</Label><Input type="number" min="0" step="0.01" readOnly={form.reason === "shift_meal"} className={`mt-1 ${C.field}`} value={form.totalCost} onChange={(event) => setForm({ ...form, totalCost: event.target.value })} placeholder="0.00" /></div>
             <div className="sm:col-span-2"><Label>Notes</Label><Textarea className={`mt-1 ${C.field}`} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder="Optional details or corrective action" /></div>
           </div>
           <div className="flex justify-end gap-2"><Button variant="outline" className={C.outline} onClick={() => setDialogOpen(false)}>Cancel</Button><Button className={C.green} disabled={!valid || save.isPending} onClick={() => save.mutate()}>{save.isPending ? "Saving..." : "Save entry"}</Button></div>

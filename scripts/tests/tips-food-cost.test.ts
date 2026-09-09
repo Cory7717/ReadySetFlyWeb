@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildBlankFoodWasteLogPdf, parseVendorInvoice } from "../../server/routes/tips";
+import { buildBlankFoodWasteLogPdf, calculateEmployeeMealRecipe, EMPLOYEE_MEAL_RECIPES, parseVendorInvoice } from "../../server/routes/tips";
 
 test("US Foods invoice lines map pack pricing to a per-unit food cost", () => {
   const parsed = parseVendorInvoice(`
@@ -64,4 +64,17 @@ test("printable food-waste form produces a valid PDF document", async () => {
   const pdf = await buildBlankFoodWasteLogPdf();
   assert.equal(pdf.subarray(0, 5).toString("ascii"), "%PDF-");
   assert.ok(pdf.length > 2_000);
+});
+
+test("employee meal recipes calculate ingredient cost from current catalog units", () => {
+  const recipe = EMPLOYEE_MEAL_RECIPES.find((item) => item.id === "breakfast-croissant");
+  assert.ok(recipe);
+  const result = calculateEmployeeMealRecipe(recipe, [
+    { id: "1", itemName: "Butter Croissant", costingUnit: "each", costPerUnit: "1.50" },
+    { id: "2", itemName: "Cage Free Egg Shell", costingUnit: "each", costPerUnit: "0.20" },
+    { id: "3", itemName: "White Cheddar Slice", costingUnit: "each", costPerUnit: "0.30" },
+    { id: "4", itemName: "Ham Sliced", costingUnit: "lb", costPerUnit: "4.00" },
+  ]);
+  assert.equal(result.complete, true);
+  assert.equal(result.servingCost, 2.5);
 });

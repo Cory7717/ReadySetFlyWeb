@@ -214,6 +214,20 @@ const admin = (user: any) =>
   user?.role === "super_admin" || user?.role === "manager";
 const canManageMeetingCalendar = (req: any) =>
   admin(req.salesUser) || Boolean(req.session?.salesIntelligenceUnlocked);
+const safeNonnegativeNumber = (value: any, maximum = 9999999999) => { const number = Number(value || 0); return Number.isFinite(number) ? Math.min(maximum, Math.max(0, number)) : 0; };
+const cleanServiceItems = (value: any) => (Array.isArray(value) ? value : []).map((item: any) => ({
+  name: String(item?.name || "").trim().slice(0, 160), serviceDates: String(item?.serviceDates || "All event dates").trim().slice(0, 200),
+  chargeMethod: ["per_event", "per_day", "per_person", "per_person_per_day", "per_unit", "actual_consumption", "complimentary"].includes(item?.chargeMethod) ? item.chargeMethod : "per_event",
+  quantity: safeNonnegativeNumber(item?.quantity), unitPrice: safeNonnegativeNumber(item?.unitPrice), includedQuantity: safeNonnegativeNumber(item?.includedQuantity), refillPrice: safeNonnegativeNumber(item?.refillPrice), instructions: String(item?.instructions || "").trim().slice(0, 1000),
+})).filter((item: any) => item.name).slice(0, 50);
+const serviceItemTotal = (item: any, attendance: number, eventDays: number) => {
+  if (item.chargeMethod === "complimentary") return 0;
+  if (item.chargeMethod === "per_person") return attendance * item.unitPrice;
+  if (item.chargeMethod === "per_person_per_day") return attendance * eventDays * item.unitPrice;
+  if (item.chargeMethod === "per_day") return item.quantity * eventDays * item.unitPrice;
+  return item.quantity * item.unitPrice;
+};
+const cleanGratuityAllocations = (value: any) => (Array.isArray(value) ? value : []).map((item: any) => ({ associateName: String(item?.associateName || "").trim().slice(0, 120), workPerformed: String(item?.workPerformed || "").trim().slice(0, 300), percentage: safeNonnegativeNumber(item?.percentage, 100) })).filter((item: any) => item.associateName).slice(0, 30);
 function meetingEventWriteValues(body: any, holdExpiresAt: Date | null, eventDays = 1) {
   const {
     id: _id,
@@ -224,18 +238,25 @@ function meetingEventWriteValues(body: any, holdExpiresAt: Date | null, eventDay
     eventEndDate: _eventEndDate,
     ...formValues
   } = body || {};
-  const revenueFields = ["roomRentalRevenue", "avRevenue", "otherRevenue"];
+  const serviceItemsJson = cleanServiceItems(body?.serviceItemsJson);
+  const attendance = Number(body?.attendance || 0);
+  const detailedServicesTotal = serviceItemsJson.reduce((sum: number, item: any) => sum + serviceItemTotal(item, attendance, eventDays), 0);
+  const revenueFields = ["roomRentalRevenue", "avRevenue"];
   const revenue = Object.fromEntries(revenueFields.map((field) => [field, Number(body?.[field] || 0).toFixed(2)]));
   const breakfastPerPerson = Number(body?.breakfastPerPerson || 0);
   const lunchDinnerPerPerson = Number(body?.lunchDinnerPerPerson || 0);
   const cateringRevenue = Number(body?.attendance || 0) * eventDays * (breakfastPerPerson + lunchDinnerPerPerson);
   const roomTaxPercent = 6, roomServiceFeePercent = 21, fbTaxPercent = 8.25, fbGratuityPercent = 18;
   const roomRental = Number(body?.roomRentalRevenue || 0);
-  const fbSubtotal = cateringRevenue + Number(body?.otherRevenue || 0);
+  const otherRevenue = serviceItemsJson.length ? detailedServicesTotal : Number(body?.otherRevenue || 0);
+  const fbSubtotal = cateringRevenue + otherRevenue;
   const expectedRevenue = (roomRental + (roomRental * roomTaxPercent / 100) + (roomRental * roomServiceFeePercent / 100) + fbSubtotal + (fbSubtotal * fbTaxPercent / 100) + (fbSubtotal * fbGratuityPercent / 100) + Number(body?.avRevenue || 0)).toFixed(2);
   return {
     ...formValues,
     ...revenue,
+    otherRevenue: otherRevenue.toFixed(2),
+    serviceItemsJson,
+    gratuityAllocationsJson: cleanGratuityAllocations(body?.gratuityAllocationsJson),
     cateringRevenue: cateringRevenue.toFixed(2),
     breakfastPerPerson: breakfastPerPerson.toFixed(2),
     lunchDinnerPerPerson: lunchDinnerPerPerson.toFixed(2),
@@ -255,6 +276,8 @@ function meetingRevenueValidationError(body: any) {
     if (!Number.isFinite(value) || value < 0 || value > 9999999999) return "Revenue amounts must be valid non-negative numbers.";
   }
   if (body?.meetingRoom && !["pecan", "cedar", "full_room"].includes(String(body.meetingRoom))) return "Choose a valid meeting room.";
+  const allocations = cleanGratuityAllocations(body?.gratuityAllocationsJson);
+  if (allocations.length && Math.abs(allocations.reduce((sum: number, item: any) => sum + item.percentage, 0) - 100) > 0.01) return "Internal gratuity allocations must total exactly 100%.";
   return null;
 }
 const GROUP_ROOM_STATUSES = ["prospect", "tentative", "definite", "in_house", "completed", "cancelled"];
@@ -817,14 +840,17 @@ async function createAdvisorPdf(analysis: any, hotelName: string) {
   return pdf.save();
 }
 
-async function createMeetingBeoPdf(event: any, seriesEvents: any[], spaceName: string) {
+export async function createMeetingBeoPdf(event: any, seriesEvents: any[], spaceName: string) {
   const pdf = await PDFDocument.create();
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
   const bold = await pdf.embedFont(StandardFonts.HelveticaBold);
   const gold = rgb(0.85, 0.55, 0.05), ink = rgb(0.14, 0.14, 0.14), muted = rgb(0.38, 0.36, 0.34), pale = rgb(0.97, 0.96, 0.93), white = rgb(1, 1, 1);
   const dates = seriesEvents.map((item) => item.eventDate).sort();
+  const serviceItems = cleanServiceItems(event.serviceItemsJson);
+  const allocations = cleanGratuityAllocations(event.gratuityAllocationsJson);
   const money = (value: any) => `$${Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-  const roomRental = Number(event.roomRentalRevenue || 0), fbSubtotal = Number(event.cateringRevenue || 0) + Number(event.otherRevenue || 0);
+  const serviceTotal = serviceItems.length ? serviceItems.reduce((sum: number, item: any) => sum + serviceItemTotal(item, Number(event.attendance || 0), dates.length), 0) : Number(event.otherRevenue || 0);
+  const roomRental = Number(event.roomRentalRevenue || 0), fbSubtotal = Number(event.cateringRevenue || 0) + serviceTotal;
   const roomTax = roomRental * 0.06, roomService = roomRental * 0.21, fbTax = fbSubtotal * 0.0825, fbGratuity = fbSubtotal * 0.18;
   const dateLabel = dates.length > 1 ? `${dates[0]} through ${dates[dates.length - 1]}` : dates[0];
   let page: any, y = 0;
@@ -851,20 +877,39 @@ async function createMeetingBeoPdf(event: any, seriesEvents: any[], spaceName: s
   row("Setup / Attendance", `${String(event.roomSetup || "Not specified").replaceAll("_", " ")} / ${event.attendance ?? "Not specified"} attendees per day`);
   section("Operational timeline");
   row("Setup begins", String(event.setupStartTime || "").slice(0, 5)); row("Guest arrival", String(event.guestStartTime || "").slice(0, 5)); row("Guest event ends", String(event.guestEndTime || "").slice(0, 5)); row("Breakdown complete", String(event.breakdownEndTime || "").slice(0, 5));
+  section("Daily function schedule");
+  for (const item of seriesEvents.sort((a, b) => String(a.eventDate).localeCompare(String(b.eventDate)))) row(item.eventDate, `Setup ${String(item.setupStartTime || "").slice(0, 5)} | Guests ${String(item.guestStartTime || "").slice(0, 5)}-${String(item.guestEndTime || "").slice(0, 5)} | Breakdown ${String(item.breakdownEndTime || "").slice(0, 5)} | GTD ${item.attendance ?? event.attendance ?? "-"}`);
   section("Catering and services");
   row("Breakfast", `${money(event.breakfastPerPerson)} per person x ${event.attendance || 0} x ${dates.length} day(s)`);
   row("Lunch / Dinner", `${money(event.lunchDinnerPerPerson)} per person x ${event.attendance || 0} x ${dates.length} day(s)`);
-  row("Calculated in-house catering", money(event.cateringRevenue)); row("A/V add-ons", money(event.avRevenue)); row("Drink / coffee / incidentals", money(event.otherRevenue));
+  row("Calculated in-house catering", money(event.cateringRevenue)); row("A/V add-ons", money(event.avRevenue));
+  if (serviceItems.length) {
+    const methodLabel: Record<string, string> = { per_event: "per event", per_day: "per day", per_person: "per person", per_person_per_day: "per person/day", per_unit: "per unit", actual_consumption: "actual consumption", complimentary: "complimentary" };
+    for (const item of serviceItems) {
+      const amount = serviceItemTotal(item, Number(event.attendance || 0), dates.length);
+      row(item.name, `${item.serviceDates} | ${methodLabel[item.chargeMethod]} | Qty ${item.quantity} @ ${money(item.unitPrice)} | ${money(amount)}`);
+      if (item.includedQuantity || item.refillPrice) note("Included / refill terms", `${item.includedQuantity || 0} included; additional refill/unit ${money(item.refillPrice || 0)}. ${item.instructions || ""}`);
+      else note("Service instructions", item.instructions);
+    }
+    row("Itemized coffee, drinks and services", money(serviceTotal));
+  } else row("Drink / coffee / incidentals", money(event.otherRevenue));
   note("Catering and incidental details", event.cateringNotes);
   section("Contacts");
   row("Sales owner", event.salesOwner || "Not assigned"); row("Client contact", event.clientName || "Not provided"); row("Email / Phone", [event.clientEmail, event.clientPhone].filter(Boolean).join("  |  ") || "Not provided");
+  note("Billing instructions", event.billingInstructions);
   section("Revenue summary");
-  row("Meeting room rental", money(event.roomRentalRevenue)); row("In-house catering", money(event.cateringRevenue)); row("A/V and incidentals", money(Number(event.avRevenue || 0) + Number(event.otherRevenue || 0)));
+  row("Meeting room rental", money(event.roomRentalRevenue)); row("In-house catering", money(event.cateringRevenue)); row("Itemized F&B services", money(serviceTotal)); row("A/V add-ons", money(event.avRevenue));
   row("Meeting room tax (6%)", money(roomTax)); row("Room service fee (21%)", money(roomService)); row("F&B tax (8.25%)", money(fbTax)); row("F&B gratuity (18%)", money(fbGratuity));
   ensure(32); page.drawRectangle({ x: 46, y: y - 24, width: 520, height: 30, color: ink }); page.drawText("TOTAL EVENT REVENUE", { x: 54, y: y - 13, size: 10, font: bold, color: white }); page.drawText(money(event.expectedRevenue), { x: 470, y: y - 13, size: 11, font: bold, color: gold }); y -= 43;
   section("Operational notes");
-  note("Internal / setup notes", event.internalNotes); note("Audio / visual", event.avNotes); note("Accessibility", event.accessibilityNotes);
+  note("Setup and breakdown", event.setupNotes); note("Food and beverage", event.cateringNotes); note("Audio / visual", event.avNotes); note("Event decor and restrictions", event.decorNotes); note("Damage / condition", event.damageNotes); note("Accessibility", event.accessibilityNotes); note("Internal notes", event.internalNotes);
   ensure(90); page.drawText("TEAM CONFIRMATION", { x: 46, y, size: 10, font: bold, color: gold }); y -= 28; page.drawText("Setup completed by: ______________________________   Time: __________", { x: 52, y, size: 9, font: regular, color: ink }); y -= 25; page.drawText("Breakdown completed by: __________________________   Time: __________", { x: 52, y, size: 9, font: regular, color: ink });
+  section("Internal F&B gratuity closeout");
+  row("F&B gratuity pool", money(fbGratuity));
+  if (allocations.length) for (const allocation of allocations) row(allocation.associateName, `${allocation.workPerformed || "Work performed not entered"} | ${allocation.percentage.toFixed(2)}% | ${money(fbGratuity * allocation.percentage / 100)}`);
+  else { row("Associate / work / allocation", "____________________________________________________________"); row("Associate / work / allocation", "____________________________________________________________"); row("Associate / work / allocation", "____________________________________________________________"); }
+  row("Allocation validation", `${allocations.reduce((sum: number, item: any) => sum + item.percentage, 0).toFixed(2)}% allocated (must total 100%)`);
+  ensure(55); page.drawText("Manager approval: __________________________   Date: __________", { x: 52, y, size: 9, font: regular, color: ink }); y -= 24; page.drawText("Associate initials: __________________________________________________", { x: 52, y, size: 9, font: regular, color: ink });
   pdf.getPages().forEach((item, index) => { item.drawText("Courtyard by Marriott Austin Northwest/Lakeline  |  12833 Ranch Road 620 N  |  Austin, TX 78750", { x: 46, y: 28, size: 7.5, font: regular, color: muted }); item.drawText(`Page ${index + 1}`, { x: 530, y: 28, size: 8, font: regular, color: muted }); });
   return pdf.save();
 }

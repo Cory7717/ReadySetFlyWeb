@@ -55,7 +55,7 @@ const key = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const money = (value: unknown) => Number(value || 0).toLocaleString("en-US", { style: "currency", currency: "USD" });
 const eventDayCount = (value: any) => {
-  if (!value?.eventDate || !value?.eventEndDate) return 1;
+  if (!value?.eventDate || !value?.eventEndDate) return Math.max(1, Number(value?.bookingSeriesDayCount || 1));
   const start = new Date(`${value.eventDate}T12:00:00Z`), end = new Date(`${value.eventEndDate}T12:00:00Z`);
   return Math.max(1, Math.round((end.getTime() - start.getTime()) / 86400000) + 1);
 };
@@ -64,7 +64,9 @@ const cateringValue = (value: any) => value?.eventEndDate !== undefined
   : Number(value?.cateringRevenue || 0);
 const roomTaxValue = (value: any) => Number(value?.roomRentalRevenue || 0) * 0.06;
 const roomServiceFeeValue = (value: any) => Number(value?.roomRentalRevenue || 0) * 0.21;
-const fbSubtotal = (value: any) => cateringValue(value) + Number(value?.otherRevenue || 0);
+const serviceItemAmount = (item: any, value: any) => item.chargeMethod === "complimentary" ? 0 : item.chargeMethod === "per_person" ? Number(value?.attendance || 0) * Number(item.unitPrice || 0) : item.chargeMethod === "per_person_per_day" ? Number(value?.attendance || 0) * eventDayCount(value) * Number(item.unitPrice || 0) : item.chargeMethod === "per_day" ? Number(item.quantity || 0) * eventDayCount(value) * Number(item.unitPrice || 0) : Number(item.quantity || 0) * Number(item.unitPrice || 0);
+const serviceItemsValue = (value: any) => Array.isArray(value?.serviceItemsJson) && value.serviceItemsJson.length ? value.serviceItemsJson.reduce((sum: number, item: any) => sum + serviceItemAmount(item, value), 0) : Number(value?.otherRevenue || 0);
+const fbSubtotal = (value: any) => cateringValue(value) + serviceItemsValue(value);
 const fbTaxValue = (value: any) => fbSubtotal(value) * 0.0825;
 const fbGratuityValue = (value: any) => fbSubtotal(value) * 0.18;
 const eventRevenueTotal = (value: any) => Number(value?.roomRentalRevenue || 0) + roomTaxValue(value) + roomServiceFeeValue(value) + fbSubtotal(value) + fbTaxValue(value) + fbGratuityValue(value) + Number(value?.avRevenue || 0);
@@ -114,6 +116,12 @@ const empty = {
   accountKey: "",
   opportunityId: "",
   conflictOverrideReason: "",
+  serviceItemsJson: [] as any[],
+  gratuityAllocationsJson: [] as any[],
+  billingInstructions: "",
+  setupNotes: "",
+  decorNotes: "",
+  damageNotes: "",
 };
 const emptyGroupRoom = {
   groupName: "", projectName: "", arrivalDate: "", departureDate: "", status: "prospect",
@@ -614,7 +622,7 @@ export default function CourtyardMeetingCalendar() {
         )}
       </main>
       <Dialog open={open} onOpenChange={(isOpen) => { setOpen(isOpen); if (!isOpen) setEditingEventId(null); }}>
-        <DialogContent className="max-h-[92dvh] max-w-3xl overflow-y-auto bg-white text-[#201814]">
+        <DialogContent className="max-h-[92dvh] max-w-5xl overflow-y-auto bg-white text-[#201814]">
           <DialogHeader>
             <DialogTitle>{editingEventId ? "Edit meeting-space event" : "New meeting-space event"}</DialogTitle>
           </DialogHeader>
@@ -779,7 +787,7 @@ export default function CourtyardMeetingCalendar() {
             <div className="md:col-span-2 rounded-xl border border-[#deceba] bg-[#fffaf2] p-4">
               <div className="mb-3 flex items-center justify-between gap-3"><div><h3 className="font-semibold">Event revenue</h3><p className="text-xs text-[#5f5247]">Meeting-room and food-and-beverage charges are calculated separately.</p></div><div className="text-2xl font-bold text-[#2f5f46]">{money(eventRevenueTotal(form))}</div></div>
               <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                {[["Room rental", "roomRentalRevenue"], ["AV add-ons", "avRevenue"], ["Drink, coffee & incidental add-ons", "otherRevenue"]].map(([label, field]) => <div key={field}><Label>{label}</Label><Input type="number" min="0" step="0.01" value={form[field]} onChange={(event) => setForm({ ...form, [field]: event.target.value })} /></div>)}
+                {[["Room rental", "roomRentalRevenue"], ["AV add-ons", "avRevenue"]].map(([label, field]) => <div key={field}><Label>{label}</Label><Input type="number" min="0" step="0.01" value={form[field]} onChange={(event) => setForm({ ...form, [field]: event.target.value })} /></div>)}
                 <div><Label>Breakfast per person</Label><Input type="number" min="0" step="0.01" value={form.breakfastPerPerson} onChange={(event) => setForm({ ...form, breakfastPerPerson: event.target.value })} /></div>
                 <div><Label>Lunch / dinner per person</Label><Input type="number" min="0" step="0.01" value={form.lunchDinnerPerPerson} onChange={(event) => setForm({ ...form, lunchDinnerPerPerson: event.target.value })} /><p className="mt-1 text-xs text-[#5f5247]">Catering: {form.attendance || 0} attendees × {eventDayCount(form)} day{eventDayCount(form) === 1 ? "" : "s"} = {money(cateringValue(form))}</p></div>
                 <div className="rounded-lg border border-[#deceba] bg-white p-3"><div className="text-xs font-semibold uppercase text-[#8a6b3f]">Meeting room charges</div><div className="mt-1 text-sm">6% room tax: <strong>{money(roomTaxValue(form))}</strong></div><div className="text-sm">21% service fee: <strong>{money(roomServiceFeeValue(form))}</strong></div><p className="mt-1 text-xs text-[#5f5247]">Applied only to room rental.</p></div>
@@ -787,6 +795,13 @@ export default function CourtyardMeetingCalendar() {
                 <div className="sm:col-span-2 lg:col-span-3"><Label>Catering and incidental service details</Label><Textarea placeholder="Example: coffee service for 20, assorted sodas, bottled water, delivery timing, dietary notes…" value={form.cateringNotes} onChange={(event) => setForm({ ...form, cateringNotes: event.target.value })} /></div>
               </div>
             </div>
+            <div className="md:col-span-2 rounded-xl border border-[#deceba] bg-[#fffaf2] p-4">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-semibold">Itemized F&amp;B services</h3><p className="text-xs text-[#5f5247]">Coffee, drinks, snacks, refills, and consumption-based services print as separate BEO charges.</p></div><Button type="button" variant="outline" onClick={() => setForm({ ...form, serviceItemsJson: [...(form.serviceItemsJson || []), { name: "", serviceDates: "All event dates", chargeMethod: "per_event", quantity: 1, unitPrice: 0, includedQuantity: 0, refillPrice: 0, instructions: "" }] })}><Plus className="mr-2 h-4 w-4" />Add service</Button></div>
+              <div className="space-y-3">{(form.serviceItemsJson || []).map((item: any, index: number) => <div key={index} className="rounded-lg border border-[#deceba] bg-white p-3"><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-6"><div className="lg:col-span-2"><Label>Service</Label><Input placeholder="Fresh coffee service" value={item.name} onChange={(e) => { const rows=[...form.serviceItemsJson]; rows[index]={...item,name:e.target.value}; setForm({...form,serviceItemsJson:rows}); }} /></div><div><Label>Charge method</Label><Select value={item.chargeMethod} onValueChange={(chargeMethod) => { const rows=[...form.serviceItemsJson]; rows[index]={...item,chargeMethod}; setForm({...form,serviceItemsJson:rows}); }}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{[["per_event","Per event"],["per_day","Per day"],["per_person","Per person"],["per_person_per_day","Per person/day"],["per_unit","Per unit"],["actual_consumption","Actual consumption"],["complimentary","Complimentary"]].map(([value,label])=><SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div><div><Label>Quantity</Label><Input type="number" min="0" step="0.01" value={item.quantity} onChange={(e) => { const rows=[...form.serviceItemsJson]; rows[index]={...item,quantity:e.target.value}; setForm({...form,serviceItemsJson:rows}); }} /></div><div><Label>Unit price</Label><Input type="number" min="0" step="0.01" value={item.unitPrice} onChange={(e) => { const rows=[...form.serviceItemsJson]; rows[index]={...item,unitPrice:e.target.value}; setForm({...form,serviceItemsJson:rows}); }} /></div><div className="flex items-end justify-between gap-2"><strong className="pb-2">{money(serviceItemAmount(item, form))}</strong><Button type="button" size="icon" variant="outline" className="border-red-200 text-red-700" onClick={() => setForm({...form,serviceItemsJson:form.serviceItemsJson.filter((_:any,rowIndex:number)=>rowIndex!==index)})}><Trash2 className="h-4 w-4" /></Button></div><div className="sm:col-span-2"><Label>Service dates</Label><Input placeholder="All event dates or selected dates" value={item.serviceDates} onChange={(e) => { const rows=[...form.serviceItemsJson]; rows[index]={...item,serviceDates:e.target.value}; setForm({...form,serviceItemsJson:rows}); }} /></div><div><Label>Included qty</Label><Input type="number" min="0" value={item.includedQuantity || ""} onChange={(e) => { const rows=[...form.serviceItemsJson]; rows[index]={...item,includedQuantity:e.target.value}; setForm({...form,serviceItemsJson:rows}); }} /></div><div><Label>Refill/unit price</Label><Input type="number" min="0" step="0.01" value={item.refillPrice || ""} onChange={(e) => { const rows=[...form.serviceItemsJson]; rows[index]={...item,refillPrice:e.target.value}; setForm({...form,serviceItemsJson:rows}); }} /></div><div className="sm:col-span-2"><Label>Service instructions</Label><Input placeholder="One fresh pot; refill as requested" value={item.instructions} onChange={(e) => { const rows=[...form.serviceItemsJson]; rows[index]={...item,instructions:e.target.value}; setForm({...form,serviceItemsJson:rows}); }} /></div></div></div>)}</div>
+              <div className="mt-3 text-right font-semibold">Itemized service total: {money(serviceItemsValue(form))}</div>
+            </div>
+            <div className="md:col-span-2 rounded-xl border border-[#deceba] bg-white p-4"><h3 className="font-semibold">BEO operational details</h3><div className="mt-3 grid gap-3 md:grid-cols-2"><div><Label>Setup and breakdown instructions</Label><Textarea value={form.setupNotes} onChange={(e)=>setForm({...form,setupNotes:e.target.value})} /></div><div><Label>Billing instructions</Label><Textarea value={form.billingInstructions} onChange={(e)=>setForm({...form,billingInstructions:e.target.value})} /></div><div><Label>Event décor / restrictions</Label><Textarea value={form.decorNotes} onChange={(e)=>setForm({...form,decorNotes:e.target.value})} /></div><div><Label>Damage / condition notes</Label><Textarea value={form.damageNotes} onChange={(e)=>setForm({...form,damageNotes:e.target.value})} /></div></div></div>
+            <div className="md:col-span-2 rounded-xl border border-[#deceba] bg-[#f4f8fb] p-4"><div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><h3 className="font-semibold">Internal gratuity closeout</h3><p className="text-xs text-[#5f5247]">Associate allocations print on the internal closeout page. Percentages should total 100%.</p></div><Button type="button" variant="outline" onClick={()=>setForm({...form,gratuityAllocationsJson:[...(form.gratuityAllocationsJson||[]),{associateName:"",workPerformed:"",percentage:0}]})}><Plus className="mr-2 h-4 w-4" />Add associate</Button></div>{(form.gratuityAllocationsJson||[]).map((item:any,index:number)=><div key={index} className="mb-2 grid gap-2 sm:grid-cols-12"><Input className="sm:col-span-3" placeholder="Associate" value={item.associateName} onChange={(e)=>{const rows=[...form.gratuityAllocationsJson];rows[index]={...item,associateName:e.target.value};setForm({...form,gratuityAllocationsJson:rows})}}/><Input className="sm:col-span-5" placeholder="Work performed" value={item.workPerformed} onChange={(e)=>{const rows=[...form.gratuityAllocationsJson];rows[index]={...item,workPerformed:e.target.value};setForm({...form,gratuityAllocationsJson:rows})}}/><Input className="sm:col-span-2" type="number" min="0" max="100" placeholder="%" value={item.percentage} onChange={(e)=>{const rows=[...form.gratuityAllocationsJson];rows[index]={...item,percentage:e.target.value};setForm({...form,gratuityAllocationsJson:rows})}}/><div className="flex items-center justify-between sm:col-span-2"><strong>{money(fbGratuityValue(form)*Number(item.percentage||0)/100)}</strong><Button type="button" size="icon" variant="outline" className="border-red-200 text-red-700" onClick={()=>setForm({...form,gratuityAllocationsJson:form.gratuityAllocationsJson.filter((_:any,rowIndex:number)=>rowIndex!==index)})}><Trash2 className="h-4 w-4" /></Button></div></div>)}<div className="mt-2 text-right text-sm font-semibold">Allocation total: {(form.gratuityAllocationsJson||[]).reduce((sum:number,item:any)=>sum+Number(item.percentage||0),0)}% · F&amp;B gratuity pool {money(fbGratuityValue(form))}</div></div>
             {form.status === "courtesy_hold" && (
               <div>
                 <Label>Hold expires</Label>
@@ -874,6 +889,8 @@ export default function CourtyardMeetingCalendar() {
                 </div>
               </section>
 
+              {Array.isArray(selectedEvent.serviceItemsJson) && selectedEvent.serviceItemsJson.length > 0 && <section><h3 className="mb-2 font-semibold">Itemized F&amp;B services</h3><div className="space-y-2">{selectedEvent.serviceItemsJson.map((item:any,index:number)=><div key={`${item.name}-${index}`} className="rounded-lg border border-[#deceba] bg-[#fffaf2] p-3"><div className="flex flex-wrap justify-between gap-2"><strong>{item.name}</strong><strong>{money(serviceItemAmount(item, selectedEvent))}</strong></div><div className="mt-1 text-sm text-[#5f5247]">{item.serviceDates} · {String(item.chargeMethod).replaceAll("_"," ")} · Qty {item.quantity} @ {money(item.unitPrice)}</div>{(item.instructions||item.refillPrice)&&<div className="mt-1 text-sm">{item.instructions}{item.refillPrice ? ` Additional refill/unit: ${money(item.refillPrice)}` : ""}</div>}</div>)}</div></section>}
+
               {(selectedEvent.salesOwner || selectedEvent.clientName || selectedEvent.clientEmail || selectedEvent.clientPhone) && (
                 <section>
                   <h3 className="mb-2 font-semibold">Contacts</h3>
@@ -887,11 +904,11 @@ export default function CourtyardMeetingCalendar() {
               )}
               {selectedEvent.groupBookingId && groupRoomBlocks.some((block: any) => block.groupBookingId === selectedEvent.groupBookingId) && <section className="rounded-xl border border-[#bfd0df] bg-[#f4f8fb] p-4"><div className="text-xs font-bold uppercase text-[#315f86]">Linked group rooms</div>{groupRoomBlocks.filter((block: any) => block.groupBookingId === selectedEvent.groupBookingId).map((block: any) => <div key={block.id} className="mt-2 flex flex-wrap gap-2"><button className="min-w-56 flex-1 rounded-lg border bg-white p-3 text-left hover:border-[#315f86]" onClick={() => { setSelectedEvent(null); setSelectedGroupRoom(block); }}><b>{block.groupName}</b><div className="text-sm">{block.arrivalDate}–{block.departureDate} · {block.totalRoomNights || 0} room nights</div></button><Button variant="outline" className="border-red-300 text-red-700 hover:bg-red-50 hover:text-red-800" onClick={() => confirmDeleteGroup(block)}><Trash2 className="mr-2 h-4 w-4" />Delete group</Button></div>)}</section>}
 
-              {(selectedEvent.cateringNotes || selectedEvent.avNotes || selectedEvent.accessibilityNotes || selectedEvent.internalNotes) && (
+              {(selectedEvent.setupNotes || selectedEvent.cateringNotes || selectedEvent.avNotes || selectedEvent.decorNotes || selectedEvent.damageNotes || selectedEvent.billingInstructions || selectedEvent.accessibilityNotes || selectedEvent.internalNotes) && (
                 <section>
                   <h3 className="mb-2 font-semibold">Operational notes</h3>
                   <div className="space-y-2">
-                    {[["Catering", selectedEvent.cateringNotes], ["Audio / visual", selectedEvent.avNotes], ["Accessibility", selectedEvent.accessibilityNotes], ["Internal notes", selectedEvent.internalNotes]].filter(([, value]) => value).map(([label, value]) => (
+                    {[["Setup / breakdown", selectedEvent.setupNotes], ["Catering", selectedEvent.cateringNotes], ["Audio / visual", selectedEvent.avNotes], ["Event décor", selectedEvent.decorNotes], ["Damage / condition", selectedEvent.damageNotes], ["Billing", selectedEvent.billingInstructions], ["Accessibility", selectedEvent.accessibilityNotes], ["Internal notes", selectedEvent.internalNotes]].filter(([, value]) => value).map(([label, value]) => (
                       <div key={label} className="rounded-lg border border-[#deceba] bg-[#fffaf2] p-3">
                         <div className="text-xs font-semibold uppercase text-[#8a6b3f]">{label}</div>
                         <p className="mt-1 whitespace-pre-wrap text-sm">{value}</p>

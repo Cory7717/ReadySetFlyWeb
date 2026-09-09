@@ -262,6 +262,7 @@ function meetingEventWriteValues(body: any, holdExpiresAt: Date | null, eventDay
     roomRentalChargeMethod,
     serviceItemsJson,
     gratuityAllocationsJson: cleanGratuityAllocations(body?.gratuityAllocationsJson),
+    banquetChairsPerTable: Math.min(8, Math.max(1, Math.round(Number(body?.banquetChairsPerTable || 8)))),
     setupOrientation: body?.setupOrientation === "widthwise" ? "widthwise" : "lengthwise",
     setupLayoutJson: (Array.isArray(body?.setupLayoutJson) ? body.setupLayoutJson : []).map((item: any, index: number) => ({ id: String(item?.id || `item-${index}`).slice(0, 80), x: safeNonnegativeNumber(item?.x, 1), y: safeNonnegativeNumber(item?.y, 1), type: String(item?.type || "").slice(0, 40) || undefined, label: String(item?.label || "").trim().slice(0, 80) || undefined, rotation: Math.round(safeNonnegativeNumber(item?.rotation, 270) / 90) * 90 % 360 })).slice(0, 150),
     cateringRevenue: cateringRevenue.toFixed(2),
@@ -896,8 +897,8 @@ export async function createMeetingBeoPdf(event: any, seriesEvents: any[], space
     page.drawText(presentationVertical ? "FRONT" : "PRESENTATION / FRONT", { x: presentation.x - (presentationVertical ? 14 : 52), y: presentation.y - 3, size: presentationVertical ? 6.5 : 8, font: bold, color: white });
     const chair = (x: number, yy: number) => page.drawCircle({ x, y: yy, size: 4, color: rgb(0.19, 0.37, 0.53) });
     if (setup === "banquet") {
-      const tables = Math.ceil(guests / 8), cols = Math.min(5, Math.ceil(Math.sqrt(tables * 1.5)));
-      for (let i=0;i<tables;i++){const pos=placed(i,125+(i%cols)*(370/Math.max(1,cols-1)),520-Math.floor(i/cols)*88);page.drawCircle({x:pos.x,y:pos.y,size:roundTableRadius,color:rgb(0.92,0.87,0.8),borderColor:muted,borderWidth:1});page.drawText('60"',{x:pos.x-8,y:pos.y-3,size:7,font:bold,color:ink});}
+      const chairsPerTable = Math.min(8, Math.max(1, Number(event.banquetChairsPerTable || 8))), tables = Math.ceil(guests / chairsPerTable), cols = Math.min(5, Math.ceil(Math.sqrt(tables * 1.5)));
+      for (let i=0;i<tables;i++){const pos=placed(i,125+(i%cols)*(370/Math.max(1,cols-1)),520-Math.floor(i/cols)*88),tableChairs=Math.min(chairsPerTable,guests-i*chairsPerTable);page.drawCircle({x:pos.x,y:pos.y,size:roundTableRadius,color:rgb(0.92,0.87,0.8),borderColor:muted,borderWidth:1});page.drawText('60"',{x:pos.x-8,y:pos.y-3,size:7,font:bold,color:ink});for(let seat=0;seat<tableChairs;seat++){const angle=-Math.PI/2+seat*(Math.PI*2/tableChairs);chair(pos.x+Math.cos(angle)*(roundTableRadius+8),pos.y+Math.sin(angle)*(roundTableRadius+8));}}
     } else if (setup === "classroom") {
       const tables=Math.ceil(guests/3),cols=Math.min(8,Math.max(1,Math.ceil(Math.sqrt(tables*1.7))));for(let i=0;i<tables;i++){const pos=placed(i,110+(i%cols)*(390/Math.max(1,cols)),540-Math.floor(i/cols)*58),tw=lengthwise?rectangleShort:rectangleLong,th=lengthwise?rectangleLong:rectangleShort;page.drawRectangle({x:pos.x-tw/2,y:pos.y-th/2,width:tw,height:th,color:rgb(0.92,0.87,0.8),borderColor:muted,borderWidth:.7});if(lengthwise){chair(pos.x-tw/2-7,pos.y-th*.3);chair(pos.x-tw/2-7,pos.y);chair(pos.x-tw/2-7,pos.y+th*.3);}else{chair(pos.x-tw*.3,pos.y-th/2-7);chair(pos.x,pos.y-th/2-7);chair(pos.x+tw*.3,pos.y-th/2-7);}}
     } else if (setup === "theater") {

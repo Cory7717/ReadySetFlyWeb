@@ -862,8 +862,10 @@ export async function createMeetingBeoPdf(event: any, seriesEvents: any[], space
     return page;
   };
   const ensure = (height: number) => { if (y - height < 58) addPage(); };
-  const section = (title: string) => { ensure(30); page.drawText(title.toUpperCase(), { x: 46, y, size: 12, font: bold, color: gold }); y -= 7; page.drawLine({ start: { x: 46, y }, end: { x: 566, y }, thickness: 1, color: gold }); y -= 18; };
-  const row = (label: string, value: any, height = 22) => { ensure(height); page.drawRectangle({ x: 46, y: y - height + 6, width: 520, height, color: pale, borderColor: rgb(0.84, 0.82, 0.78), borderWidth: 0.5 }); page.drawText(label, { x: 54, y: y - 8, size: 8.5, font: bold, color: ink }); const text = String(value ?? "Not specified"); const clipped = text.length > 74 ? `${text.slice(0, 71)}...` : text; page.drawText(clipped, { x: 210, y: y - 8, size: 8.5, font: regular, color: ink }); y -= height; };
+  const fitText = (value: any, font: any, size: number, maxWidth: number) => { const text = String(value ?? "Not specified"); if (font.widthOfTextAtSize(text, size) <= maxWidth) return text; let clipped = text; while (clipped.length > 3 && font.widthOfTextAtSize(`${clipped}...`, size) > maxWidth) clipped = clipped.slice(0, -1); return `${clipped.trim()}...`; };
+  const section = (title: string) => { ensure(40); y -= 9; page.drawText(title.toUpperCase(), { x: 46, y, size: 11, font: bold, color: gold }); y -= 8; page.drawLine({ start: { x: 46, y }, end: { x: 566, y }, thickness: 1, color: gold }); y -= 18; };
+  const row = (label: string, value: any, height = 22) => { ensure(height + 5); page.drawRectangle({ x: 46, y: y - height + 6, width: 520, height, color: pale, borderColor: rgb(0.84, 0.82, 0.78), borderWidth: 0.5 }); page.drawText(fitText(label, bold, 8.3, 145), { x: 54, y: y - 8, size: 8.3, font: bold, color: ink }); page.drawText(fitText(value, regular, 8.3, 344), { x: 210, y: y - 8, size: 8.3, font: regular, color: ink }); y -= height + 5; };
+  const summaryPanel = (x: number, width: number, title: string, rows: Array<[string, any]>) => { const top = 622, titleHeight = 28, rowHeight = 27, totalHeight = titleHeight + rows.length * rowHeight; page.drawRectangle({ x, y: top - totalHeight, width, height: totalHeight, color: pale, borderColor: rgb(0.78, 0.74, 0.68), borderWidth: 0.8 }); page.drawRectangle({ x, y: top - titleHeight, width, height: titleHeight, color: ink }); page.drawText(title.toUpperCase(), { x: x + 10, y: top - 18, size: 9.5, font: bold, color: white }); rows.forEach(([label, value], index) => { const rowTop = top - titleHeight - index * rowHeight; if (index) page.drawLine({ start: { x, y: rowTop }, end: { x: x + width, y: rowTop }, thickness: 0.5, color: rgb(0.82, 0.79, 0.73) }); page.drawText(fitText(label, bold, 7.5, width * 0.38), { x: x + 9, y: rowTop - 17, size: 7.5, font: bold, color: ink }); page.drawText(fitText(value, regular, 7.5, width * 0.53), { x: x + width * 0.43, y: rowTop - 17, size: 7.5, font: regular, color: ink }); }); return top - totalHeight; };
   const note = (label: string, value: any) => { if (!value) return; const text = String(value); const lines: string[] = []; let current = ""; for (const word of text.split(/\s+/)) { if (`${current} ${word}`.trim().length > 92) { lines.push(current); current = word; } else current = `${current} ${word}`.trim(); } if (current) lines.push(current); ensure(28 + lines.length * 11); page.drawText(label, { x: 52, y, size: 9, font: bold, color: ink }); y -= 13; for (const line of lines) { page.drawText(line, { x: 52, y, size: 8.5, font: regular, color: muted }); y -= 11; } y -= 7; };
   const drawSetupPlanPage = () => {
     addPage();
@@ -897,18 +899,16 @@ export async function createMeetingBeoPdf(event: any, seriesEvents: any[], space
   page.drawText("BANQUET EVENT ORDER", { x: 46, y: 690, size: 20, font: bold, color: ink });
   page.drawText(`${event.groupName}  |  ${dateLabel}`, { x: 46, y: 671, size: 11, font: bold, color: gold });
   page.drawText(`Status: ${String(event.status || "inquiry").replaceAll("_", " ").toUpperCase()}  |  BEO generated ${new Date().toLocaleDateString("en-US")}`, { x: 46, y: 653, size: 8, font: regular, color: muted });
-  y = 624;
-  section("Event overview");
-  row("Event / Project", event.eventName);
-  row("Meeting dates", `${dateLabel} (${dates.length} day${dates.length === 1 ? "" : "s"})`);
-  row("Meeting room", event.meetingRoom === "pecan" ? "Pecan - 560 sq. ft." : event.meetingRoom === "cedar" ? "Cedar - 1,575 sq. ft." : event.meetingRoom === "full_room" ? "Full Room - 2,135 sq. ft." : spaceName);
-  row("Setup / Attendance", `${String(event.roomSetup || "Not specified").replaceAll("_", " ")} / ${event.attendance ?? "Not specified"} attendees per day`);
-  section("Operational timeline");
-  row("Setup begins", String(event.setupStartTime || "").slice(0, 5)); row("Guest arrival", String(event.guestStartTime || "").slice(0, 5)); row("Guest event ends", String(event.guestEndTime || "").slice(0, 5)); row("Breakdown complete", String(event.breakdownEndTime || "").slice(0, 5));
+  const roomLabel = event.meetingRoom === "pecan" ? "Pecan - 560 sq. ft." : event.meetingRoom === "cedar" ? "Cedar - 1,575 sq. ft." : event.meetingRoom === "full_room" ? "Full Room - 2,135 sq. ft." : spaceName;
+  const overviewBottom = summaryPanel(46, 254, "Event overview", [["Event / Project", event.eventName], ["Meeting dates", `${dateLabel} (${dates.length} day${dates.length === 1 ? "" : "s"})`], ["Meeting room", roomLabel], ["Setup / GTD", `${String(event.roomSetup || "Not specified").replaceAll("_", " ")} / ${event.attendance ?? "-"}`]]);
+  summaryPanel(312, 254, "Operational timeline", [["Setup begins", String(event.setupStartTime || "").slice(0, 5)], ["Guest arrival", String(event.guestStartTime || "").slice(0, 5)], ["Event ends", String(event.guestEndTime || "").slice(0, 5)], ["Breakdown complete", String(event.breakdownEndTime || "").slice(0, 5)]]);
+  y = overviewBottom - 3;
+  section("Daily function schedule");
+  const sortedSeries = [...seriesEvents].sort((a, b) => String(a.eventDate).localeCompare(String(b.eventDate)));
+  for (const item of sortedSeries.slice(0, 10)) row(item.eventDate, `Setup ${String(item.setupStartTime || "").slice(0, 5)} | Guests ${String(item.guestStartTime || "").slice(0, 5)}-${String(item.guestEndTime || "").slice(0, 5)} | Breakdown ${String(item.breakdownEndTime || "").slice(0, 5)} | GTD ${item.attendance ?? event.attendance ?? "-"}`, 19);
   drawSetupPlanPage();
   addPage();
-  section("Daily function schedule");
-  for (const item of seriesEvents.sort((a, b) => String(a.eventDate).localeCompare(String(b.eventDate)))) row(item.eventDate, `Setup ${String(item.setupStartTime || "").slice(0, 5)} | Guests ${String(item.guestStartTime || "").slice(0, 5)}-${String(item.guestEndTime || "").slice(0, 5)} | Breakdown ${String(item.breakdownEndTime || "").slice(0, 5)} | GTD ${item.attendance ?? event.attendance ?? "-"}`);
+  if (sortedSeries.length > 10) { section("Daily function schedule - continued"); for (const item of sortedSeries.slice(10)) row(item.eventDate, `Setup ${String(item.setupStartTime || "").slice(0, 5)} | Guests ${String(item.guestStartTime || "").slice(0, 5)}-${String(item.guestEndTime || "").slice(0, 5)} | Breakdown ${String(item.breakdownEndTime || "").slice(0, 5)} | GTD ${item.attendance ?? event.attendance ?? "-"}`, 19); }
   section("Catering and services");
   row("Breakfast", `${money(event.breakfastPerPerson)} per person x ${event.attendance || 0} x ${dates.length} day(s)`);
   row("Lunch / Dinner", `${money(event.lunchDinnerPerPerson)} per person x ${event.attendance || 0} x ${dates.length} day(s)`);

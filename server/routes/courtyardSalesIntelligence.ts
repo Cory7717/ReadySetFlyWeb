@@ -863,7 +863,7 @@ export async function createMeetingBeoPdf(event: any, seriesEvents: any[], space
   const dateLabel = dates.length > 1 ? `${dates[0]} through ${dates[dates.length - 1]}` : dates[0];
   let page: any, y = 0;
   const addPage = () => {
-    page = pdf.addPage([612, 792]); y = 730;
+    page = pdf.addPage([612, 792]); y = 690;
     page.drawText("COURTYARD", { x: 205, y: 746, size: 25, font: bold, color: gold, characterSpacing: 4 });
     page.drawText("BY MARRIOTT", { x: 268, y: 730, size: 8, font: bold, color: gold, characterSpacing: 2 });
     page.drawLine({ start: { x: 46, y: 716 }, end: { x: 566, y: 716 }, thickness: 1.2, color: gold });
@@ -944,7 +944,8 @@ export async function createMeetingBeoPdf(event: any, seriesEvents: any[], space
   const contactTop = overviewBottom - 12;
   const contactBottom = summaryPanel(46, 254, "Client & sales", [["Client contact", event.clientName || "Not provided"], ["Email", event.clientEmail || "Not provided"], ["Phone", event.clientPhone || "Not provided"], ["Sales owner", event.salesOwner || "Not assigned"]], contactTop, 23);
   summaryPanel(312, 254, "Billing & account", [["Account / Group", event.groupName], ["Billing", event.billingInstructions || "Review contract"], [roomRentalChargeMethod === "per_day" ? `Room rental (${dates.length} days)` : "Room rental", money(roomRental)], ["Est. total", money(event.expectedRevenue)]], contactTop, 23);
-  y = contactBottom - 2;
+  // Give the next section title clear breathing room below the paired summary panels.
+  y = contactBottom - 16;
   section("Daily function schedule");
   const sortedSeries = [...seriesEvents].sort((a, b) => String(a.eventDate).localeCompare(String(b.eventDate)));
   for (const item of sortedSeries.slice(0, 5)) row(item.eventDate, `Setup ${String(item.setupStartTime || "").slice(0, 5)} | Guests ${String(item.guestStartTime || "").slice(0, 5)}-${String(item.guestEndTime || "").slice(0, 5)} | Breakdown ${String(item.breakdownEndTime || "").slice(0, 5)} | GTD ${item.attendance ?? event.attendance ?? "-"}`, 18);
@@ -967,7 +968,8 @@ export async function createMeetingBeoPdf(event: any, seriesEvents: any[], space
     ...(event.damageNotes?[{heading:"Room condition",detail:String(event.damageNotes)}]:[]),
     ...(event.accessibilityNotes?[{heading:"Accessibility",detail:String(event.accessibilityNotes)}]:[]),
   ];
-  const panelTop=y, panelHeight=300;
+  // Keep content below the branded page header and separated from any continued schedule rows.
+  const panelTop=Math.min(690, y - 14), panelHeight=300;
   narrativePanel(46,254,"Food & beverage",foodEntries,panelTop,panelHeight);
   narrativePanel(312,254,"Setup & AV",setupEntries,panelTop,panelHeight);
   y=panelTop-panelHeight-2;
@@ -976,7 +978,7 @@ export async function createMeetingBeoPdf(event: any, seriesEvents: any[], space
   row(`Meeting room tax (${roomTaxPercent}%)`, money(roomTax)); row(`Room service fee (${roomServicePercent}%)`, money(roomService)); row(`F&B tax (${fbTaxPercent}%)`, money(fbTax)); row(`F&B gratuity (${fbGratuityPercent}%)`, money(fbGratuity));
   ensure(32); page.drawRectangle({ x: 46, y: y - 24, width: 520, height: 30, color: ink }); page.drawText("TOTAL EVENT REVENUE", { x: 54, y: y - 13, size: 10, font: bold, color: white }); page.drawText(money(event.expectedRevenue), { x: 470, y: y - 13, size: 11, font: bold, color: gold }); y -= 43;
   if(event.internalNotes){section("Internal notes");note("Manager / operations",event.internalNotes);}
-  ensure(90); page.drawText("TEAM CONFIRMATION", { x: 46, y, size: 10, font: bold, color: gold }); y -= 28; page.drawText("Setup completed by: ______________________________   Time: __________", { x: 52, y, size: 9, font: regular, color: ink }); y -= 25; page.drawText("Breakdown completed by: __________________________   Time: __________", { x: 52, y, size: 9, font: regular, color: ink });
+  ensure(110); page.drawText("TEAM CONFIRMATION", { x: 46, y, size: 10, font: bold, color: gold }); y -= 28; page.drawText("Setup completed by: ______________________________   Time: __________", { x: 52, y, size: 9, font: regular, color: ink }); y -= 25; page.drawText("Breakdown completed by: __________________________   Time: __________", { x: 52, y, size: 9, font: regular, color: ink }); y -= 18;
   section("Internal F&B gratuity closeout");
   row("F&B gratuity pool", money(fbGratuity));
   if (allocations.length) for (const allocation of allocations) row(allocation.associateName, `${allocation.workPerformed || "Work performed not entered"} | ${allocation.percentage.toFixed(2)}% | ${money(fbGratuity * allocation.percentage / 100)}`);

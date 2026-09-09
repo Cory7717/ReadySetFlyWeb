@@ -147,6 +147,33 @@ function CalendarLegend() {
   return <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-[#4f443b]">{statusLegend.map(([label, swatch]) => <span key={label} className="inline-flex items-center gap-1.5"><span className={`h-3 w-3 rounded-sm border ${swatch}`} />{label}</span>)}<span className="mx-1 hidden h-4 border-l border-[#cdbda8] lg:block" /><BookingTypeBadge type="rooms" /><BookingTypeBadge type="event" /><BookingTypeBadge type="both" /></div>;
 }
 
+const ROOM_LAYOUTS: Record<string, { name: string; squareFeet: number; widthFeet: number; lengthFeet: number }> = {
+  pecan: { name: "Pecan", squareFeet: 560, widthFeet: 20, lengthFeet: 28 },
+  cedar: { name: "Cedar", squareFeet: 1575, widthFeet: 35, lengthFeet: 45 },
+  full_room: { name: "Full Room", squareFeet: 2135, widthFeet: 35, lengthFeet: 61 },
+};
+function MeetingSetupDiagram({ meetingRoom, roomSetup, attendance }: { meetingRoom: string; roomSetup: string; attendance: number | string }) {
+  const room = ROOM_LAYOUTS[meetingRoom] || ROOM_LAYOUTS.full_room, guests = Math.max(1, Number(attendance || 1));
+  const chairs = Math.min(guests, 120), elements: any[] = [];
+  if (roomSetup === "banquet") {
+    const tables = Math.ceil(guests / 8), cols = Math.ceil(Math.sqrt(tables * 1.5));
+    for (let i=0;i<tables;i++){const cx=105+(i%cols)*(390/Math.max(1,cols-1)),cy=85+Math.floor(i/cols)*70;elements.push(<g key={i}><circle cx={cx} cy={cy} r="22" fill="#eadfce" stroke="#7b684f" strokeWidth="2"/><text x={cx} y={cy+4} textAnchor="middle" fontSize="10" fill="#201814">8</text></g>);}
+  } else if (roomSetup === "classroom") {
+    const tables=Math.ceil(guests/3),cols=Math.min(8,Math.max(1,Math.ceil(Math.sqrt(tables*1.7))));for(let i=0;i<tables;i++){const x=65+(i%cols)*(470/Math.max(1,cols)),y=75+Math.floor(i/cols)*50;elements.push(<g key={i}><rect x={x} y={y} width="48" height="16" rx="2" fill="#eadfce" stroke="#7b684f"/><circle cx={x+9} cy={y+25} r="3.5" fill="#315f86"/><circle cx={x+24} cy={y+25} r="3.5" fill="#315f86"/><circle cx={x+39} cy={y+25} r="3.5" fill="#315f86"/></g>);}
+  } else if (roomSetup === "theater") {
+    const cols=Math.min(12,Math.ceil(Math.sqrt(chairs*1.8)));for(let i=0;i<chairs;i++){elements.push(<circle key={i} cx={90+(i%cols)*(410/Math.max(1,cols-1))} cy={80+Math.floor(i/cols)*24} r="5" fill="#315f86"/>);}
+  } else if (roomSetup === "u_shape") {
+    elements.push(<path key="u" d="M145 90 L145 260 L455 260 L455 90" fill="none" stroke="#7b684f" strokeWidth="24"/>);for(let i=0;i<Math.min(chairs,30);i++){const side=i%3,pos=Math.floor(i/3);elements.push(<circle key={i} cx={side===0?120:side===1?480:170+pos*28} cy={side===2?290:105+pos*20} r="5" fill="#315f86"/>);}
+  } else if (roomSetup === "conference") {
+    elements.push(<rect key="table" x="155" y="115" width="290" height="120" rx="12" fill="#eadfce" stroke="#7b684f" strokeWidth="2"/>);for(let i=0;i<Math.min(chairs,24);i++){const top=i<12;elements.push(<circle key={i} cx={175+(i%12)*23} cy={top?98:252} r="5" fill="#315f86"/>);}
+  } else if (roomSetup === "reception") {
+    const tables=Math.max(3,Math.ceil(guests/12));for(let i=0;i<tables;i++){elements.push(<circle key={i} cx={105+(i%5)*98} cy={95+Math.floor(i/5)*82} r="15" fill="#eadfce" stroke="#7b684f"/>);}
+  }
+  const setupLabel=String(roomSetup||"custom").replaceAll("_"," ");
+  const equipmentSummary = roomSetup === "banquet" ? `${Math.ceil(guests/8)} rounds · up to 8 seats each` : roomSetup === "classroom" ? `${Math.ceil(guests/3)} classroom tables · up to 3 seats each` : roomSetup === "theater" ? `${guests} theater chairs` : roomSetup === "u_shape" ? `U-shape tables · ${guests} chairs` : roomSetup === "conference" ? `Conference table · ${guests} chairs` : roomSetup === "reception" ? `${Math.max(3,Math.ceil(guests/12))} cocktail tables` : "Equipment placement defined in setup notes";
+  return <div className="rounded-xl border border-[#deceba] bg-[#fffaf2] p-4"><div className="mb-2 flex flex-wrap justify-between gap-2"><div><h3 className="font-semibold capitalize">{setupLabel} setup plan</h3><p className="text-xs text-[#5f5247]">{room.name} · approximately {room.widthFeet}' × {room.lengthFeet}' · {room.squareFeet.toLocaleString()} sq. ft.</p><p className="text-xs font-semibold text-[#315f86]">{equipmentSummary}</p></div><Badge variant="outline">{guests} guests</Badge></div><svg viewBox="0 0 600 350" className="w-full rounded-lg bg-white" role="img" aria-label={`${setupLabel} overhead room setup for ${guests} guests`}><rect x="35" y="35" width="530" height="280" rx="4" fill="#faf8f4" stroke="#243746" strokeWidth="4"/><rect x="245" y="42" width="110" height="24" rx="3" fill="#243746"/><text x="300" y="58" textAnchor="middle" fontSize="11" fill="white">PRESENTATION / FRONT</text>{elements}<path d="M35 270 h28 v45" fill="none" stroke="#2f5f46" strokeWidth="5"/><text x="72" y="304" fontSize="10" fill="#2f5f46">ENTRY / EXIT</text>{roomSetup === "custom"&&<text x="300" y="175" textAnchor="middle" fontSize="18" fill="#5f5247">Custom setup — refer to setup notes</text>}</svg><p className="mt-2 text-xs text-[#5f5247]">Conceptual operational layout only. Confirm measurements, accessibility, fire-code capacity, and unobstructed exits onsite before setup.</p></div>;
+}
+
 export default function CourtyardMeetingCalendar() {
   const { toast } = useToast(),
     qc = useQueryClient();
@@ -751,6 +778,7 @@ export default function CourtyardMeetingCalendar() {
                 </SelectContent>
               </Select>
             </div>
+            <div className="md:col-span-2"><MeetingSetupDiagram meetingRoom={form.meetingRoom} roomSetup={form.roomSetup} attendance={form.attendance} /></div>
             <Input
               placeholder="Sales owner"
               value={form.salesOwner}
@@ -881,6 +909,8 @@ export default function CourtyardMeetingCalendar() {
                 <div><div className="text-xs font-semibold uppercase text-[#8a6b3f]">Attendance</div><div>{selectedEvent.attendance ?? "Not specified"}</div></div>
                 <div><div className="text-xs font-semibold uppercase text-[#8a6b3f]">Space required</div><div>{selectedEvent.squareFeetRequired ? `${selectedEvent.squareFeetRequired.toLocaleString()} sq. ft.` : "Not specified"}</div></div>
               </section>
+
+              <MeetingSetupDiagram meetingRoom={selectedEvent.meetingRoom} roomSetup={selectedEvent.roomSetup} attendance={selectedEvent.attendance} />
 
               <section>
                 <div className="mb-2 flex items-center justify-between gap-3"><h3 className="font-semibold">Event revenue</h3><div className="text-2xl font-bold text-[#2f5f46]">{money(selectedEvent.expectedRevenue)}</div></div>

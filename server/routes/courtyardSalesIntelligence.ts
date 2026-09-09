@@ -865,6 +865,34 @@ export async function createMeetingBeoPdf(event: any, seriesEvents: any[], space
   const section = (title: string) => { ensure(30); page.drawText(title.toUpperCase(), { x: 46, y, size: 12, font: bold, color: gold }); y -= 7; page.drawLine({ start: { x: 46, y }, end: { x: 566, y }, thickness: 1, color: gold }); y -= 18; };
   const row = (label: string, value: any, height = 22) => { ensure(height); page.drawRectangle({ x: 46, y: y - height + 6, width: 520, height, color: pale, borderColor: rgb(0.84, 0.82, 0.78), borderWidth: 0.5 }); page.drawText(label, { x: 54, y: y - 8, size: 8.5, font: bold, color: ink }); const text = String(value ?? "Not specified"); const clipped = text.length > 74 ? `${text.slice(0, 71)}...` : text; page.drawText(clipped, { x: 210, y: y - 8, size: 8.5, font: regular, color: ink }); y -= height; };
   const note = (label: string, value: any) => { if (!value) return; const text = String(value); const lines: string[] = []; let current = ""; for (const word of text.split(/\s+/)) { if (`${current} ${word}`.trim().length > 92) { lines.push(current); current = word; } else current = `${current} ${word}`.trim(); } if (current) lines.push(current); ensure(28 + lines.length * 11); page.drawText(label, { x: 52, y, size: 9, font: bold, color: ink }); y -= 13; for (const line of lines) { page.drawText(line, { x: 52, y, size: 8.5, font: regular, color: muted }); y -= 11; } y -= 7; };
+  const drawSetupPlanPage = () => {
+    addPage();
+    const rooms: any = { pecan: { name: "Pecan", area: 560, width: 20, length: 28 }, cedar: { name: "Cedar", area: 1575, width: 35, length: 45 }, full_room: { name: "Full Room", area: 2135, width: 35, length: 61 } };
+    const room = rooms[event.meetingRoom] || rooms.full_room, guests = Math.max(1, Number(event.attendance || 1)), setup = String(event.roomSetup || "custom");
+    page.drawText("ROOM SETUP PLAN", { x: 46, y: 684, size: 20, font: bold, color: ink });
+    page.drawText(`${room.name} | Approx. ${room.width}' x ${room.length}' | ${room.area.toLocaleString()} sq. ft. | ${guests} guests | ${setup.replaceAll("_", " ").toUpperCase()}`, { x: 46, y: 665, size: 9, font: bold, color: gold });
+    const left = 66, bottom = 235, width = 480, height = 390;
+    page.drawRectangle({ x: left, y: bottom, width, height, color: rgb(0.985, 0.975, 0.955), borderColor: ink, borderWidth: 2 });
+    page.drawRectangle({ x: 246, y: 588, width: 120, height: 23, color: ink }); page.drawText("PRESENTATION / FRONT", { x: 254, y: 596, size: 8, font: bold, color: white });
+    const chair = (x: number, yy: number) => page.drawCircle({ x, y: yy, size: 4, color: rgb(0.19, 0.37, 0.53) });
+    if (setup === "banquet") {
+      const tables = Math.ceil(guests / 8), cols = Math.min(5, Math.ceil(Math.sqrt(tables * 1.5)));
+      for (let i=0;i<tables;i++){const cx=125+(i%cols)*(370/Math.max(1,cols-1)),cy=520-Math.floor(i/cols)*88;page.drawCircle({x:cx,y:cy,size:24,color:rgb(0.92,0.87,0.8),borderColor:muted,borderWidth:1});page.drawText("8",{x:cx-4,y:cy-3,size:8,font:bold,color:ink});}
+    } else if (setup === "classroom") {
+      const tables=Math.ceil(guests/3),cols=Math.min(8,Math.max(1,Math.ceil(Math.sqrt(tables*1.7))));for(let i=0;i<tables;i++){const xx=88+(i%cols)*(430/Math.max(1,cols)),yy=540-Math.floor(i/cols)*58;page.drawRectangle({x:xx,y:yy,width:42,height:14,color:rgb(0.92,0.87,0.8),borderColor:muted,borderWidth:.7});chair(xx+8,yy-8);chair(xx+21,yy-8);chair(xx+34,yy-8);}
+    } else if (setup === "theater") {
+      const count=Math.min(guests,120),cols=Math.min(12,Math.ceil(Math.sqrt(count*1.8)));for(let i=0;i<count;i++)chair(105+(i%cols)*(390/Math.max(1,cols-1)),540-Math.floor(i/cols)*30);
+    } else if (setup === "u_shape") {
+      page.drawLine({start:{x:165,y:535},end:{x:165,y:335},thickness:18,color:rgb(0.72,0.62,0.5)});page.drawLine({start:{x:165,y:335},end:{x:445,y:335},thickness:18,color:rgb(0.72,0.62,0.5)});page.drawLine({start:{x:445,y:335},end:{x:445,y:535},thickness:18,color:rgb(0.72,0.62,0.5)});for(let i=0;i<Math.min(guests,30);i++){const side=i%3,pos=Math.floor(i/3);chair(side===0?140:side===1?470:190+pos*25,side===2?307:515-pos*20);}
+    } else if (setup === "conference") {
+      page.drawRectangle({x:165,y:360,width:280,height:135,color:rgb(0.92,0.87,0.8),borderColor:muted,borderWidth:1});for(let i=0;i<Math.min(guests,24);i++)chair(185+(i%12)*22,i<12?515:340);
+    } else if (setup === "reception") {
+      const tables=Math.max(3,Math.ceil(guests/12));for(let i=0;i<tables;i++)page.drawCircle({x:125+(i%5)*90,y:520-Math.floor(i/5)*95,size:16,color:rgb(0.92,0.87,0.8),borderColor:muted,borderWidth:1});
+    } else page.drawText("CUSTOM SETUP - REFER TO SETUP NOTES", { x: 175, y: 430, size: 13, font: bold, color: muted });
+    page.drawLine({ start: { x: left, y: bottom + 45 }, end: { x: left + 28, y: bottom + 45 }, thickness: 5, color: rgb(0.18, 0.37, 0.27) }); page.drawText("ENTRY / EXIT", { x: 100, y: bottom + 40, size: 8, font: bold, color: rgb(0.18, 0.37, 0.27) });
+    page.drawText("Conceptual operational layout only. Confirm measurements, ADA access, fire-code capacity, and unobstructed exits onsite.", { x: 66, y: 205, size: 8, font: regular, color: muted });
+    page.drawText("Setup lead approval: ______________________________   Date / time: __________________", { x: 66, y: 170, size: 9, font: regular, color: ink });
+  };
   addPage();
   page.drawText("BANQUET EVENT ORDER", { x: 46, y: 690, size: 20, font: bold, color: ink });
   page.drawText(`${event.groupName}  |  ${dateLabel}`, { x: 46, y: 671, size: 11, font: bold, color: gold });
@@ -877,6 +905,8 @@ export async function createMeetingBeoPdf(event: any, seriesEvents: any[], space
   row("Setup / Attendance", `${String(event.roomSetup || "Not specified").replaceAll("_", " ")} / ${event.attendance ?? "Not specified"} attendees per day`);
   section("Operational timeline");
   row("Setup begins", String(event.setupStartTime || "").slice(0, 5)); row("Guest arrival", String(event.guestStartTime || "").slice(0, 5)); row("Guest event ends", String(event.guestEndTime || "").slice(0, 5)); row("Breakdown complete", String(event.breakdownEndTime || "").slice(0, 5));
+  drawSetupPlanPage();
+  addPage();
   section("Daily function schedule");
   for (const item of seriesEvents.sort((a, b) => String(a.eventDate).localeCompare(String(b.eventDate)))) row(item.eventDate, `Setup ${String(item.setupStartTime || "").slice(0, 5)} | Guests ${String(item.guestStartTime || "").slice(0, 5)}-${String(item.guestEndTime || "").slice(0, 5)} | Breakdown ${String(item.breakdownEndTime || "").slice(0, 5)} | GTD ${item.attendance ?? event.attendance ?? "-"}`);
   section("Catering and services");

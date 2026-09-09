@@ -62,13 +62,13 @@ const eventDayCount = (value: any) => {
 const cateringValue = (value: any) => value?.eventEndDate !== undefined
   ? Number(value?.attendance || 0) * eventDayCount(value) * (Number(value?.breakfastPerPerson || 0) + Number(value?.lunchDinnerPerPerson || 0))
   : Number(value?.cateringRevenue || 0);
-const roomTaxValue = (value: any) => Number(value?.roomRentalRevenue || 0) * 0.06;
-const roomServiceFeeValue = (value: any) => Number(value?.roomRentalRevenue || 0) * 0.21;
+const roomTaxValue = (value: any) => Number(value?.roomRentalRevenue || 0) * Number(value?.roomTaxPercent ?? 6) / 100;
+const roomServiceFeeValue = (value: any) => Number(value?.roomRentalRevenue || 0) * Number(value?.roomServiceFeePercent ?? 21) / 100;
 const serviceItemAmount = (item: any, value: any) => item.chargeMethod === "complimentary" ? 0 : item.chargeMethod === "per_person" ? Number(value?.attendance || 0) * Number(item.unitPrice || 0) : item.chargeMethod === "per_person_per_day" ? Number(value?.attendance || 0) * eventDayCount(value) * Number(item.unitPrice || 0) : item.chargeMethod === "per_day" ? Number(item.quantity || 0) * eventDayCount(value) * Number(item.unitPrice || 0) : Number(item.quantity || 0) * Number(item.unitPrice || 0);
 const serviceItemsValue = (value: any) => Array.isArray(value?.serviceItemsJson) && value.serviceItemsJson.length ? value.serviceItemsJson.reduce((sum: number, item: any) => sum + serviceItemAmount(item, value), 0) : Number(value?.otherRevenue || 0);
 const fbSubtotal = (value: any) => cateringValue(value) + serviceItemsValue(value);
-const fbTaxValue = (value: any) => fbSubtotal(value) * 0.0825;
-const fbGratuityValue = (value: any) => fbSubtotal(value) * 0.18;
+const fbTaxValue = (value: any) => fbSubtotal(value) * Number(value?.fbTaxPercent ?? 8.25) / 100;
+const fbGratuityValue = (value: any) => fbSubtotal(value) * Number(value?.fbGratuityPercent ?? 18) / 100;
 const eventRevenueTotal = (value: any) => Number(value?.roomRentalRevenue || 0) + roomTaxValue(value) + roomServiceFeeValue(value) + fbSubtotal(value) + fbTaxValue(value) + fbGratuityValue(value) + Number(value?.avRevenue || 0);
 const colors: any = {
   inquiry: "bg-slate-100 text-slate-800",
@@ -116,6 +116,12 @@ const empty = {
   accountKey: "",
   opportunityId: "",
   conflictOverrideReason: "",
+  roomTaxPercent: "6",
+  roomServiceFeePercent: "21",
+  fbTaxPercent: "8.25",
+  fbGratuityPercent: "18",
+  setupOrientation: "lengthwise",
+  setupLayoutJson: [] as any[],
   serviceItemsJson: [] as any[],
   gratuityAllocationsJson: [] as any[],
   billingInstructions: "",
@@ -148,30 +154,32 @@ function CalendarLegend() {
 }
 
 const ROOM_LAYOUTS: Record<string, { name: string; squareFeet: number; widthFeet: number; lengthFeet: number }> = {
-  pecan: { name: "Pecan", squareFeet: 560, widthFeet: 20, lengthFeet: 28 },
+  pecan: { name: "Pecan", squareFeet: 560, widthFeet: 14, lengthFeet: 40 },
   cedar: { name: "Cedar", squareFeet: 1575, widthFeet: 35, lengthFeet: 45 },
-  full_room: { name: "Full Room", squareFeet: 2135, widthFeet: 35, lengthFeet: 61 },
+  full_room: { name: "Full Room", squareFeet: 2135, widthFeet: 49, lengthFeet: 43.6 },
 };
-function MeetingSetupDiagram({ meetingRoom, roomSetup, attendance }: { meetingRoom: string; roomSetup: string; attendance: number | string }) {
+function MeetingSetupDiagram({ meetingRoom, roomSetup, attendance, orientation = "lengthwise", layout = [], onLayoutChange }: { meetingRoom: string; roomSetup: string; attendance: number | string; orientation?: string; layout?: any[]; onLayoutChange?: (layout: any[]) => void }) {
   const room = ROOM_LAYOUTS[meetingRoom] || ROOM_LAYOUTS.full_room, guests = Math.max(1, Number(attendance || 1));
   const chairs = Math.min(guests, 120), elements: any[] = [];
+  const position = (id: string, x: number, y: number) => { const saved = layout.find((item:any) => item.id === id); return saved ? { x: 55 + Number(saved.x) * 490, y: 72 + Number(saved.y) * 220 } : { x, y }; };
+  const drag = (id: string) => onLayoutChange ? { style: { cursor: "grab" }, onPointerDown: (event:any) => event.currentTarget.setPointerCapture(event.pointerId), onPointerMove: (event:any) => { if (!event.currentTarget.hasPointerCapture(event.pointerId)) return; const svg = event.currentTarget.ownerSVGElement, bounds = svg.getBoundingClientRect(); const x = Math.max(0, Math.min(1, ((event.clientX-bounds.left)/bounds.width*600-55)/490)), y = Math.max(0, Math.min(1, ((event.clientY-bounds.top)/bounds.height*350-72)/220)); onLayoutChange([...layout.filter((item:any)=>item.id!==id),{id,x,y}]); }, onPointerUp: (event:any) => event.currentTarget.releasePointerCapture(event.pointerId) } : {};
   if (roomSetup === "banquet") {
     const tables = Math.ceil(guests / 8), cols = Math.ceil(Math.sqrt(tables * 1.5));
-    for (let i=0;i<tables;i++){const cx=105+(i%cols)*(390/Math.max(1,cols-1)),cy=85+Math.floor(i/cols)*70;elements.push(<g key={i}><circle cx={cx} cy={cy} r="22" fill="#eadfce" stroke="#7b684f" strokeWidth="2"/><text x={cx} y={cy+4} textAnchor="middle" fontSize="10" fill="#201814">8</text></g>);}
+    for (let i=0;i<tables;i++){const id=`table-${i}`,p=position(id,105+(i%cols)*(390/Math.max(1,cols-1)),85+Math.floor(i/cols)*70);elements.push(<g key={i} {...drag(id)}><circle cx={p.x} cy={p.y} r="22" fill="#eadfce" stroke="#7b684f" strokeWidth="2"/><text x={p.x} y={p.y+4} textAnchor="middle" fontSize="10" fill="#201814">8</text></g>);}
   } else if (roomSetup === "classroom") {
-    const tables=Math.ceil(guests/3),cols=Math.min(8,Math.max(1,Math.ceil(Math.sqrt(tables*1.7))));for(let i=0;i<tables;i++){const x=65+(i%cols)*(470/Math.max(1,cols)),y=75+Math.floor(i/cols)*50;elements.push(<g key={i}><rect x={x} y={y} width="48" height="16" rx="2" fill="#eadfce" stroke="#7b684f"/><circle cx={x+9} cy={y+25} r="3.5" fill="#315f86"/><circle cx={x+24} cy={y+25} r="3.5" fill="#315f86"/><circle cx={x+39} cy={y+25} r="3.5" fill="#315f86"/></g>);}
+    const tables=Math.ceil(guests/3),cols=orientation==="lengthwise"?Math.min(4,Math.max(1,Math.ceil(Math.sqrt(tables)))):Math.min(8,Math.max(1,Math.ceil(Math.sqrt(tables*1.7))));for(let i=0;i<tables;i++){const id=`table-${i}`,p=position(id,orientation==="lengthwise"?180+(i%cols)*85:85+(i%cols)*60,orientation==="lengthwise"?95+Math.floor(i/cols)*78:90+Math.floor(i/cols)*50),tw=orientation==="lengthwise"?16:48,th=orientation==="lengthwise"?48:16;elements.push(<g key={i} {...drag(id)}><rect x={p.x-tw/2} y={p.y-th/2} width={tw} height={th} rx="2" fill="#eadfce" stroke="#7b684f"/>{orientation==="lengthwise"?<><circle cx={p.x-13} cy={p.y-14} r="3.5" fill="#315f86"/><circle cx={p.x-13} cy={p.y} r="3.5" fill="#315f86"/><circle cx={p.x-13} cy={p.y+14} r="3.5" fill="#315f86"/></>:<><circle cx={p.x-15} cy={p.y+17} r="3.5" fill="#315f86"/><circle cx={p.x} cy={p.y+17} r="3.5" fill="#315f86"/><circle cx={p.x+15} cy={p.y+17} r="3.5" fill="#315f86"/></>}</g>);}
   } else if (roomSetup === "theater") {
     const cols=Math.min(12,Math.ceil(Math.sqrt(chairs*1.8)));for(let i=0;i<chairs;i++){elements.push(<circle key={i} cx={90+(i%cols)*(410/Math.max(1,cols-1))} cy={80+Math.floor(i/cols)*24} r="5" fill="#315f86"/>);}
   } else if (roomSetup === "u_shape") {
     elements.push(<path key="u" d="M145 90 L145 260 L455 260 L455 90" fill="none" stroke="#7b684f" strokeWidth="24"/>);for(let i=0;i<Math.min(chairs,30);i++){const side=i%3,pos=Math.floor(i/3);elements.push(<circle key={i} cx={side===0?120:side===1?480:170+pos*28} cy={side===2?290:105+pos*20} r="5" fill="#315f86"/>);}
   } else if (roomSetup === "conference") {
-    elements.push(<rect key="table" x="155" y="115" width="290" height="120" rx="12" fill="#eadfce" stroke="#7b684f" strokeWidth="2"/>);for(let i=0;i<Math.min(chairs,24);i++){const top=i<12;elements.push(<circle key={i} cx={175+(i%12)*23} cy={top?98:252} r="5" fill="#315f86"/>);}
+    const p=position("table-0",300,175);elements.push(<g key="conference" {...drag("table-0")}><rect x={p.x-(orientation==="lengthwise"?60:145)} y={p.y-(orientation==="lengthwise"?145:60)} width={orientation==="lengthwise"?120:290} height={orientation==="lengthwise"?290:120} rx="12" fill="#eadfce" stroke="#7b684f" strokeWidth="2"/>{Array.from({length:Math.min(chairs,24)},(_,i)=>orientation==="lengthwise"?<circle key={i} cx={i<12?p.x-77:p.x+77} cy={p.y-126+(i%12)*23} r="5" fill="#315f86"/>:<circle key={i} cx={p.x-126+(i%12)*23} cy={i<12?p.y-77:p.y+77} r="5" fill="#315f86"/>)}</g>);
   } else if (roomSetup === "reception") {
-    const tables=Math.max(3,Math.ceil(guests/12));for(let i=0;i<tables;i++){elements.push(<circle key={i} cx={105+(i%5)*98} cy={95+Math.floor(i/5)*82} r="15" fill="#eadfce" stroke="#7b684f"/>);}
+    const tables=Math.max(3,Math.ceil(guests/12));for(let i=0;i<tables;i++){const id=`table-${i}`,p=position(id,105+(i%5)*98,95+Math.floor(i/5)*82);elements.push(<circle key={i} {...drag(id)} cx={p.x} cy={p.y} r="15" fill="#eadfce" stroke="#7b684f"/>);}
   }
   const setupLabel=String(roomSetup||"custom").replaceAll("_"," ");
   const equipmentSummary = roomSetup === "banquet" ? `${Math.ceil(guests/8)} rounds · up to 8 seats each` : roomSetup === "classroom" ? `${Math.ceil(guests/3)} classroom tables · up to 3 seats each` : roomSetup === "theater" ? `${guests} theater chairs` : roomSetup === "u_shape" ? `U-shape tables · ${guests} chairs` : roomSetup === "conference" ? `Conference table · ${guests} chairs` : roomSetup === "reception" ? `${Math.max(3,Math.ceil(guests/12))} cocktail tables` : "Equipment placement defined in setup notes";
-  return <div className="rounded-xl border border-[#deceba] bg-[#fffaf2] p-4"><div className="mb-2 flex flex-wrap justify-between gap-2"><div><h3 className="font-semibold capitalize">{setupLabel} setup plan</h3><p className="text-xs text-[#5f5247]">{room.name} · approximately {room.widthFeet}' × {room.lengthFeet}' · {room.squareFeet.toLocaleString()} sq. ft.</p><p className="text-xs font-semibold text-[#315f86]">{equipmentSummary}</p></div><Badge variant="outline">{guests} guests</Badge></div><svg viewBox="0 0 600 350" className="w-full rounded-lg bg-white" role="img" aria-label={`${setupLabel} overhead room setup for ${guests} guests`}><rect x="35" y="35" width="530" height="280" rx="4" fill="#faf8f4" stroke="#243746" strokeWidth="4"/><rect x="245" y="42" width="110" height="24" rx="3" fill="#243746"/><text x="300" y="58" textAnchor="middle" fontSize="11" fill="white">PRESENTATION / FRONT</text>{elements}<path d="M35 270 h28 v45" fill="none" stroke="#2f5f46" strokeWidth="5"/><text x="72" y="304" fontSize="10" fill="#2f5f46">ENTRY / EXIT</text>{roomSetup === "custom"&&<text x="300" y="175" textAnchor="middle" fontSize="18" fill="#5f5247">Custom setup — refer to setup notes</text>}</svg><p className="mt-2 text-xs text-[#5f5247]">Conceptual operational layout only. Confirm measurements, accessibility, fire-code capacity, and unobstructed exits onsite before setup.</p></div>;
+  return <div className="rounded-xl border border-[#deceba] bg-[#fffaf2] p-4"><div className="mb-2 flex flex-wrap justify-between gap-2"><div><h3 className="font-semibold capitalize">{setupLabel} setup plan</h3><p className="text-xs text-[#5f5247]">{room.name} · approximately {room.widthFeet}' × {room.lengthFeet}' · {room.squareFeet.toLocaleString()} sq. ft. · {orientation}</p><p className="text-xs font-semibold text-[#315f86]">{equipmentSummary}</p></div><Badge variant="outline">{guests} guests</Badge></div><svg viewBox="0 0 600 350" className="w-full touch-none select-none rounded-lg bg-white" role="img" aria-label={`${setupLabel} overhead room setup for ${guests} guests`}><rect x="35" y="35" width="530" height="280" rx="4" fill="#faf8f4" stroke="#243746" strokeWidth="4"/><rect x="245" y="42" width="110" height="24" rx="3" fill="#243746"/><text x="300" y="58" textAnchor="middle" fontSize="11" fill="white">PRESENTATION / FRONT</text>{elements}<path d="M35 270 h28 v45" fill="none" stroke="#2f5f46" strokeWidth="5"/><text x="72" y="304" fontSize="10" fill="#2f5f46">ENTRY / EXIT</text>{roomSetup === "custom"&&<text x="300" y="175" textAnchor="middle" fontSize="18" fill="#5f5247">Custom setup — refer to setup notes</text>}</svg><p className="mt-2 text-xs text-[#5f5247]">{onLayoutChange ? "Drag tables to place them manually. " : ""}Conceptual operational layout only. Confirm measurements, accessibility, fire-code capacity, and unobstructed exits onsite before setup.</p></div>;
 }
 
 export default function CourtyardMeetingCalendar() {
@@ -425,6 +433,12 @@ export default function CourtyardMeetingCalendar() {
       breakfastPerPerson: event.breakfastPerPerson ?? "",
       lunchDinnerPerPerson: event.lunchDinnerPerPerson ?? "",
       otherRevenue: event.otherRevenue ?? "",
+      roomTaxPercent: event.roomTaxPercent ?? "6",
+      roomServiceFeePercent: event.roomServiceFeePercent ?? "21",
+      fbTaxPercent: event.fbTaxPercent ?? "8.25",
+      fbGratuityPercent: event.fbGratuityPercent ?? "18",
+      setupOrientation: event.setupOrientation || "lengthwise",
+      setupLayoutJson: Array.isArray(event.setupLayoutJson) ? event.setupLayoutJson : [],
     });
     setOpen(true);
   };
@@ -743,7 +757,7 @@ export default function CourtyardMeetingCalendar() {
             </div>
             <div>
               <Label>Meeting room</Label>
-              <Select value={form.meetingRoom} onValueChange={(meetingRoom) => setForm({ ...form, meetingRoom, squareFeetRequired: meetingRoom === "pecan" ? "560" : meetingRoom === "cedar" ? "1575" : "2135" })}>
+              <Select value={form.meetingRoom} onValueChange={(meetingRoom) => setForm({ ...form, meetingRoom, squareFeetRequired: meetingRoom === "pecan" ? "560" : meetingRoom === "cedar" ? "1575" : "2135", setupLayoutJson: [] })}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="pecan">Pecan · 560 sq. ft.</SelectItem>
@@ -756,7 +770,7 @@ export default function CourtyardMeetingCalendar() {
               <Label>Room setup</Label>
               <Select
                 value={form.roomSetup}
-                onValueChange={(roomSetup) => setForm({ ...form, roomSetup })}
+                onValueChange={(roomSetup) => setForm({ ...form, roomSetup, setupLayoutJson: [] })}
               >
                 <SelectTrigger>
                   <SelectValue />
@@ -778,7 +792,8 @@ export default function CourtyardMeetingCalendar() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="md:col-span-2"><MeetingSetupDiagram meetingRoom={form.meetingRoom} roomSetup={form.roomSetup} attendance={form.attendance} /></div>
+            <div className="flex flex-wrap items-end gap-2 md:col-span-2"><div className="min-w-48"><Label>Table orientation</Label><Select value={form.setupOrientation} onValueChange={(setupOrientation)=>setForm({...form,setupOrientation,setupLayoutJson:[]})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="lengthwise">Lengthwise</SelectItem><SelectItem value="widthwise">Widthwise</SelectItem></SelectContent></Select></div><Button type="button" variant="outline" onClick={()=>setForm({...form,setupLayoutJson:[]})}>Reset automatic layout</Button></div>
+            <div className="md:col-span-2"><MeetingSetupDiagram meetingRoom={form.meetingRoom} roomSetup={form.roomSetup} attendance={form.attendance} orientation={form.setupOrientation} layout={form.setupLayoutJson||[]} onLayoutChange={(setupLayoutJson)=>setForm((current:any)=>({...current,setupLayoutJson}))} /></div>
             <Input
               placeholder="Sales owner"
               value={form.salesOwner}
@@ -818,8 +833,8 @@ export default function CourtyardMeetingCalendar() {
                 {[["Room rental", "roomRentalRevenue"], ["AV add-ons", "avRevenue"]].map(([label, field]) => <div key={field}><Label>{label}</Label><Input type="number" min="0" step="0.01" value={form[field]} onChange={(event) => setForm({ ...form, [field]: event.target.value })} /></div>)}
                 <div><Label>Breakfast per person</Label><Input type="number" min="0" step="0.01" value={form.breakfastPerPerson} onChange={(event) => setForm({ ...form, breakfastPerPerson: event.target.value })} /></div>
                 <div><Label>Lunch / dinner per person</Label><Input type="number" min="0" step="0.01" value={form.lunchDinnerPerPerson} onChange={(event) => setForm({ ...form, lunchDinnerPerPerson: event.target.value })} /><p className="mt-1 text-xs text-[#5f5247]">Catering: {form.attendance || 0} attendees × {eventDayCount(form)} day{eventDayCount(form) === 1 ? "" : "s"} = {money(cateringValue(form))}</p></div>
-                <div className="rounded-lg border border-[#deceba] bg-white p-3"><div className="text-xs font-semibold uppercase text-[#8a6b3f]">Meeting room charges</div><div className="mt-1 text-sm">6% room tax: <strong>{money(roomTaxValue(form))}</strong></div><div className="text-sm">21% service fee: <strong>{money(roomServiceFeeValue(form))}</strong></div><p className="mt-1 text-xs text-[#5f5247]">Applied only to room rental.</p></div>
-                <div className="rounded-lg border border-[#deceba] bg-white p-3"><div className="text-xs font-semibold uppercase text-[#8a6b3f]">Food & beverage charges</div><div className="mt-1 text-sm">8.25% F&amp;B tax: <strong>{money(fbTaxValue(form))}</strong></div><div className="text-sm">18% gratuity: <strong>{money(fbGratuityValue(form))}</strong></div><p className="mt-1 text-xs text-[#5f5247]">Applied only to catering and drink/coffee incidentals.</p></div>
+                <div className="rounded-lg border border-[#deceba] bg-white p-3"><div className="text-xs font-semibold uppercase text-[#8a6b3f]">Meeting room charges</div><div className="mt-2 grid grid-cols-2 gap-2"><div><Label className="text-xs">Room tax %</Label><Input type="number" min="0" max="100" step="0.01" value={form.roomTaxPercent} onChange={(e)=>setForm({...form,roomTaxPercent:e.target.value})}/></div><div><Label className="text-xs">Service fee %</Label><Input type="number" min="0" max="100" step="0.01" value={form.roomServiceFeePercent} onChange={(e)=>setForm({...form,roomServiceFeePercent:e.target.value})}/></div></div><div className="mt-2 text-sm">Tax: <strong>{money(roomTaxValue(form))}</strong> · Service fee: <strong>{money(roomServiceFeeValue(form))}</strong></div><p className="mt-1 text-xs text-[#5f5247]">Applied only to room rental.</p></div>
+                <div className="rounded-lg border border-[#deceba] bg-white p-3"><div className="text-xs font-semibold uppercase text-[#8a6b3f]">Food & beverage charges</div><div className="mt-2 grid grid-cols-2 gap-2"><div><Label className="text-xs">F&amp;B tax %</Label><Input type="number" min="0" max="100" step="0.01" value={form.fbTaxPercent} onChange={(e)=>setForm({...form,fbTaxPercent:e.target.value})}/></div><div><Label className="text-xs">Gratuity %</Label><Input type="number" min="0" max="100" step="0.01" value={form.fbGratuityPercent} onChange={(e)=>setForm({...form,fbGratuityPercent:e.target.value})}/></div></div><div className="mt-2 text-sm">Tax: <strong>{money(fbTaxValue(form))}</strong> · Gratuity: <strong>{money(fbGratuityValue(form))}</strong></div><p className="mt-1 text-xs text-[#5f5247]">Applied only to catering and itemized F&amp;B services.</p></div>
                 <div className="sm:col-span-2 lg:col-span-3"><Label>Catering and incidental service details</Label><Textarea placeholder="Example: coffee service for 20, assorted sodas, bottled water, delivery timing, dietary notes…" value={form.cateringNotes} onChange={(event) => setForm({ ...form, cateringNotes: event.target.value })} /></div>
               </div>
             </div>
@@ -910,12 +925,12 @@ export default function CourtyardMeetingCalendar() {
                 <div><div className="text-xs font-semibold uppercase text-[#8a6b3f]">Space required</div><div>{selectedEvent.squareFeetRequired ? `${selectedEvent.squareFeetRequired.toLocaleString()} sq. ft.` : "Not specified"}</div></div>
               </section>
 
-              <MeetingSetupDiagram meetingRoom={selectedEvent.meetingRoom} roomSetup={selectedEvent.roomSetup} attendance={selectedEvent.attendance} />
+              <MeetingSetupDiagram meetingRoom={selectedEvent.meetingRoom} roomSetup={selectedEvent.roomSetup} attendance={selectedEvent.attendance} orientation={selectedEvent.setupOrientation} layout={selectedEvent.setupLayoutJson||[]} />
 
               <section>
                 <div className="mb-2 flex items-center justify-between gap-3"><h3 className="font-semibold">Event revenue</h3><div className="text-2xl font-bold text-[#2f5f46]">{money(selectedEvent.expectedRevenue)}</div></div>
                 <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {[["Room rental", selectedEvent.roomRentalRevenue], ["Meeting room tax (6%)", roomTaxValue(selectedEvent)], ["Room service fee (21%)", roomServiceFeeValue(selectedEvent)], [`Breakfast (${money(selectedEvent.breakfastPerPerson)}/person)`, Number(selectedEvent.attendance || 0) * Number(selectedEvent.breakfastPerPerson || 0)], [`Lunch / dinner (${money(selectedEvent.lunchDinnerPerPerson)}/person)`, Number(selectedEvent.attendance || 0) * Number(selectedEvent.lunchDinnerPerPerson || 0)], ["Total in-house catering", selectedEvent.cateringRevenue], ["Drink, coffee & incidental add-ons", selectedEvent.otherRevenue], ["F&B tax (8.25%)", fbTaxValue(selectedEvent)], ["F&B gratuity (18%)", fbGratuityValue(selectedEvent)], ["AV add-ons", selectedEvent.avRevenue]].map(([label, value]) => <div key={String(label)} className="flex justify-between rounded-lg border border-[#deceba] bg-[#fffaf2] p-3"><span className="text-sm text-[#5f5247]">{label}</span><strong>{money(value)}</strong></div>)}
+                  {[["Room rental", selectedEvent.roomRentalRevenue], [`Meeting room tax (${Number(selectedEvent.roomTaxPercent ?? 6)}%)`, roomTaxValue(selectedEvent)], [`Room service fee (${Number(selectedEvent.roomServiceFeePercent ?? 21)}%)`, roomServiceFeeValue(selectedEvent)], [`Breakfast (${money(selectedEvent.breakfastPerPerson)}/person)`, Number(selectedEvent.attendance || 0) * Number(selectedEvent.breakfastPerPerson || 0)], [`Lunch / dinner (${money(selectedEvent.lunchDinnerPerPerson)}/person)`, Number(selectedEvent.attendance || 0) * Number(selectedEvent.lunchDinnerPerPerson || 0)], ["Total in-house catering", selectedEvent.cateringRevenue], ["Drink, coffee & incidental add-ons", selectedEvent.otherRevenue], [`F&B tax (${Number(selectedEvent.fbTaxPercent ?? 8.25)}%)`, fbTaxValue(selectedEvent)], [`F&B gratuity (${Number(selectedEvent.fbGratuityPercent ?? 18)}%)`, fbGratuityValue(selectedEvent)], ["AV add-ons", selectedEvent.avRevenue]].map(([label, value]) => <div key={String(label)} className="flex justify-between rounded-lg border border-[#deceba] bg-[#fffaf2] p-3"><span className="text-sm text-[#5f5247]">{label}</span><strong>{money(value)}</strong></div>)}
                 </div>
               </section>
 

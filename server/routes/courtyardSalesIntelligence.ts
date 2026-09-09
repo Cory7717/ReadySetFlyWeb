@@ -246,7 +246,8 @@ function meetingEventWriteValues(body: any, holdExpiresAt: Date | null, eventDay
   const breakfastPerPerson = Number(body?.breakfastPerPerson || 0);
   const lunchDinnerPerPerson = Number(body?.lunchDinnerPerPerson || 0);
   const cateringRevenue = Number(body?.attendance || 0) * eventDays * (breakfastPerPerson + lunchDinnerPerPerson);
-  const roomTaxPercent = 6, roomServiceFeePercent = 21, fbTaxPercent = 8.25, fbGratuityPercent = 18;
+  const percentage = (field: string, fallback: number) => body?.[field] === "" || body?.[field] == null ? fallback : safeNonnegativeNumber(body[field], 100);
+  const roomTaxPercent = percentage("roomTaxPercent", 6), roomServiceFeePercent = percentage("roomServiceFeePercent", 21), fbTaxPercent = percentage("fbTaxPercent", 8.25), fbGratuityPercent = percentage("fbGratuityPercent", 18);
   const roomRental = Number(body?.roomRentalRevenue || 0);
   const otherRevenue = serviceItemsJson.length ? detailedServicesTotal : Number(body?.otherRevenue || 0);
   const fbSubtotal = cateringRevenue + otherRevenue;
@@ -257,6 +258,8 @@ function meetingEventWriteValues(body: any, holdExpiresAt: Date | null, eventDay
     otherRevenue: otherRevenue.toFixed(2),
     serviceItemsJson,
     gratuityAllocationsJson: cleanGratuityAllocations(body?.gratuityAllocationsJson),
+    setupOrientation: body?.setupOrientation === "widthwise" ? "widthwise" : "lengthwise",
+    setupLayoutJson: (Array.isArray(body?.setupLayoutJson) ? body.setupLayoutJson : []).map((item: any, index: number) => ({ id: String(item?.id || `item-${index}`).slice(0, 80), x: safeNonnegativeNumber(item?.x, 1), y: safeNonnegativeNumber(item?.y, 1) })).slice(0, 150),
     cateringRevenue: cateringRevenue.toFixed(2),
     breakfastPerPerson: breakfastPerPerson.toFixed(2),
     lunchDinnerPerPerson: lunchDinnerPerPerson.toFixed(2),
@@ -271,7 +274,7 @@ function meetingEventWriteValues(body: any, holdExpiresAt: Date | null, eventDay
   };
 }
 function meetingRevenueValidationError(body: any) {
-  for (const field of ["roomRentalRevenue", "avRevenue", "otherRevenue", "breakfastPerPerson", "lunchDinnerPerPerson"]) {
+  for (const field of ["roomRentalRevenue", "avRevenue", "otherRevenue", "breakfastPerPerson", "lunchDinnerPerPerson", "roomTaxPercent", "roomServiceFeePercent", "fbTaxPercent", "fbGratuityPercent"]) {
     const value = Number(body?.[field] || 0);
     if (!Number.isFinite(value) || value < 0 || value > 9999999999) return "Revenue amounts must be valid non-negative numbers.";
   }
@@ -851,7 +854,8 @@ export async function createMeetingBeoPdf(event: any, seriesEvents: any[], space
   const money = (value: any) => `$${Number(value || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   const serviceTotal = serviceItems.length ? serviceItems.reduce((sum: number, item: any) => sum + serviceItemTotal(item, Number(event.attendance || 0), dates.length), 0) : Number(event.otherRevenue || 0);
   const roomRental = Number(event.roomRentalRevenue || 0), fbSubtotal = Number(event.cateringRevenue || 0) + serviceTotal;
-  const roomTax = roomRental * 0.06, roomService = roomRental * 0.21, fbTax = fbSubtotal * 0.0825, fbGratuity = fbSubtotal * 0.18;
+  const roomTaxPercent = Number(event.roomTaxPercent ?? 6), roomServicePercent = Number(event.roomServiceFeePercent ?? 21), fbTaxPercent = Number(event.fbTaxPercent ?? 8.25), fbGratuityPercent = Number(event.fbGratuityPercent ?? 18);
+  const roomTax = roomRental * roomTaxPercent / 100, roomService = roomRental * roomServicePercent / 100, fbTax = fbSubtotal * fbTaxPercent / 100, fbGratuity = fbSubtotal * fbGratuityPercent / 100;
   const dateLabel = dates.length > 1 ? `${dates[0]} through ${dates[dates.length - 1]}` : dates[0];
   let page: any, y = 0;
   const addPage = () => {
@@ -869,27 +873,29 @@ export async function createMeetingBeoPdf(event: any, seriesEvents: any[], space
   const note = (label: string, value: any) => { if (!value) return; const text = String(value); const lines: string[] = []; let current = ""; for (const word of text.split(/\s+/)) { if (`${current} ${word}`.trim().length > 92) { lines.push(current); current = word; } else current = `${current} ${word}`.trim(); } if (current) lines.push(current); ensure(28 + lines.length * 11); page.drawText(label, { x: 52, y, size: 9, font: bold, color: ink }); y -= 13; for (const line of lines) { page.drawText(line, { x: 52, y, size: 8.5, font: regular, color: muted }); y -= 11; } y -= 7; };
   const drawSetupPlanPage = () => {
     addPage();
-    const rooms: any = { pecan: { name: "Pecan", area: 560, width: 20, length: 28 }, cedar: { name: "Cedar", area: 1575, width: 35, length: 45 }, full_room: { name: "Full Room", area: 2135, width: 35, length: 61 } };
+    const rooms: any = { pecan: { name: "Pecan", area: 560, width: 14, length: 40 }, cedar: { name: "Cedar", area: 1575, width: 35, length: 45 }, full_room: { name: "Full Room", area: 2135, width: 49, length: 43.6 } };
     const room = rooms[event.meetingRoom] || rooms.full_room, guests = Math.max(1, Number(event.attendance || 1)), setup = String(event.roomSetup || "custom");
     page.drawText("ROOM SETUP PLAN", { x: 46, y: 684, size: 20, font: bold, color: ink });
-    page.drawText(`${room.name} | Approx. ${room.width}' x ${room.length}' | ${room.area.toLocaleString()} sq. ft. | ${guests} guests | ${setup.replaceAll("_", " ").toUpperCase()}`, { x: 46, y: 665, size: 9, font: bold, color: gold });
+    page.drawText(`${room.name} | Approx. ${room.width}' x ${room.length}' | ${room.area.toLocaleString()} sq. ft. | ${guests} guests | ${setup.replaceAll("_", " ").toUpperCase()} | ${String(event.setupOrientation || "lengthwise").toUpperCase()}`, { x: 46, y: 665, size: 8.5, font: bold, color: gold });
     const left = 66, bottom = 235, width = 480, height = 390;
+    const savedLayout = Array.isArray(event.setupLayoutJson) ? event.setupLayoutJson : [], lengthwise = event.setupOrientation !== "widthwise";
+    const placed = (index: number, autoX: number, autoY: number) => { const saved = savedLayout.find((item: any) => item.id === `table-${index}`); return saved ? { x: left + 30 + Number(saved.x) * (width - 60), y: bottom + 30 + (1 - Number(saved.y)) * (height - 60) } : { x: autoX, y: autoY }; };
     page.drawRectangle({ x: left, y: bottom, width, height, color: rgb(0.985, 0.975, 0.955), borderColor: ink, borderWidth: 2 });
     page.drawRectangle({ x: 246, y: 588, width: 120, height: 23, color: ink }); page.drawText("PRESENTATION / FRONT", { x: 254, y: 596, size: 8, font: bold, color: white });
     const chair = (x: number, yy: number) => page.drawCircle({ x, y: yy, size: 4, color: rgb(0.19, 0.37, 0.53) });
     if (setup === "banquet") {
       const tables = Math.ceil(guests / 8), cols = Math.min(5, Math.ceil(Math.sqrt(tables * 1.5)));
-      for (let i=0;i<tables;i++){const cx=125+(i%cols)*(370/Math.max(1,cols-1)),cy=520-Math.floor(i/cols)*88;page.drawCircle({x:cx,y:cy,size:24,color:rgb(0.92,0.87,0.8),borderColor:muted,borderWidth:1});page.drawText("8",{x:cx-4,y:cy-3,size:8,font:bold,color:ink});}
+      for (let i=0;i<tables;i++){const pos=placed(i,125+(i%cols)*(370/Math.max(1,cols-1)),520-Math.floor(i/cols)*88);page.drawCircle({x:pos.x,y:pos.y,size:24,color:rgb(0.92,0.87,0.8),borderColor:muted,borderWidth:1});page.drawText("8",{x:pos.x-4,y:pos.y-3,size:8,font:bold,color:ink});}
     } else if (setup === "classroom") {
-      const tables=Math.ceil(guests/3),cols=Math.min(8,Math.max(1,Math.ceil(Math.sqrt(tables*1.7))));for(let i=0;i<tables;i++){const xx=88+(i%cols)*(430/Math.max(1,cols)),yy=540-Math.floor(i/cols)*58;page.drawRectangle({x:xx,y:yy,width:42,height:14,color:rgb(0.92,0.87,0.8),borderColor:muted,borderWidth:.7});chair(xx+8,yy-8);chair(xx+21,yy-8);chair(xx+34,yy-8);}
+      const tables=Math.ceil(guests/3),cols=Math.min(8,Math.max(1,Math.ceil(Math.sqrt(tables*1.7))));for(let i=0;i<tables;i++){const pos=placed(i,110+(i%cols)*(390/Math.max(1,cols)),540-Math.floor(i/cols)*58),tw=lengthwise?14:42,th=lengthwise?42:14;page.drawRectangle({x:pos.x-tw/2,y:pos.y-th/2,width:tw,height:th,color:rgb(0.92,0.87,0.8),borderColor:muted,borderWidth:.7});if(lengthwise){chair(pos.x-12,pos.y+12);chair(pos.x-12,pos.y);chair(pos.x-12,pos.y-12);}else{chair(pos.x-14,pos.y-13);chair(pos.x,pos.y-13);chair(pos.x+14,pos.y-13);}}
     } else if (setup === "theater") {
       const count=Math.min(guests,120),cols=Math.min(12,Math.ceil(Math.sqrt(count*1.8)));for(let i=0;i<count;i++)chair(105+(i%cols)*(390/Math.max(1,cols-1)),540-Math.floor(i/cols)*30);
     } else if (setup === "u_shape") {
       page.drawLine({start:{x:165,y:535},end:{x:165,y:335},thickness:18,color:rgb(0.72,0.62,0.5)});page.drawLine({start:{x:165,y:335},end:{x:445,y:335},thickness:18,color:rgb(0.72,0.62,0.5)});page.drawLine({start:{x:445,y:335},end:{x:445,y:535},thickness:18,color:rgb(0.72,0.62,0.5)});for(let i=0;i<Math.min(guests,30);i++){const side=i%3,pos=Math.floor(i/3);chair(side===0?140:side===1?470:190+pos*25,side===2?307:515-pos*20);}
     } else if (setup === "conference") {
-      page.drawRectangle({x:165,y:360,width:280,height:135,color:rgb(0.92,0.87,0.8),borderColor:muted,borderWidth:1});for(let i=0;i<Math.min(guests,24);i++)chair(185+(i%12)*22,i<12?515:340);
+      const pos=placed(0,305,427);page.drawRectangle({x:pos.x-(lengthwise?68:140),y:pos.y-(lengthwise?140:68),width:lengthwise?136:280,height:lengthwise?280:136,color:rgb(0.92,0.87,0.8),borderColor:muted,borderWidth:1});for(let i=0;i<Math.min(guests,24);i++)chair(lengthwise?(i<12?pos.x-82:pos.x+82):pos.x-121+(i%12)*22,lengthwise?pos.y-121+(i%12)*22:(i<12?pos.y+82:pos.y-82));
     } else if (setup === "reception") {
-      const tables=Math.max(3,Math.ceil(guests/12));for(let i=0;i<tables;i++)page.drawCircle({x:125+(i%5)*90,y:520-Math.floor(i/5)*95,size:16,color:rgb(0.92,0.87,0.8),borderColor:muted,borderWidth:1});
+      const tables=Math.max(3,Math.ceil(guests/12));for(let i=0;i<tables;i++){const pos=placed(i,125+(i%5)*90,520-Math.floor(i/5)*95);page.drawCircle({x:pos.x,y:pos.y,size:16,color:rgb(0.92,0.87,0.8),borderColor:muted,borderWidth:1});}
     } else page.drawText("CUSTOM SETUP - REFER TO SETUP NOTES", { x: 175, y: 430, size: 13, font: bold, color: muted });
     page.drawLine({ start: { x: left, y: bottom + 45 }, end: { x: left + 28, y: bottom + 45 }, thickness: 5, color: rgb(0.18, 0.37, 0.27) }); page.drawText("ENTRY / EXIT", { x: 100, y: bottom + 40, size: 8, font: bold, color: rgb(0.18, 0.37, 0.27) });
     page.drawText("Conceptual operational layout only. Confirm measurements, ADA access, fire-code capacity, and unobstructed exits onsite.", { x: 66, y: 205, size: 8, font: regular, color: muted });
@@ -929,7 +935,7 @@ export async function createMeetingBeoPdf(event: any, seriesEvents: any[], space
   note("Billing instructions", event.billingInstructions);
   section("Revenue summary");
   row("Meeting room rental", money(event.roomRentalRevenue)); row("In-house catering", money(event.cateringRevenue)); row("Itemized F&B services", money(serviceTotal)); row("A/V add-ons", money(event.avRevenue));
-  row("Meeting room tax (6%)", money(roomTax)); row("Room service fee (21%)", money(roomService)); row("F&B tax (8.25%)", money(fbTax)); row("F&B gratuity (18%)", money(fbGratuity));
+  row(`Meeting room tax (${roomTaxPercent}%)`, money(roomTax)); row(`Room service fee (${roomServicePercent}%)`, money(roomService)); row(`F&B tax (${fbTaxPercent}%)`, money(fbTax)); row(`F&B gratuity (${fbGratuityPercent}%)`, money(fbGratuity));
   ensure(32); page.drawRectangle({ x: 46, y: y - 24, width: 520, height: 30, color: ink }); page.drawText("TOTAL EVENT REVENUE", { x: 54, y: y - 13, size: 10, font: bold, color: white }); page.drawText(money(event.expectedRevenue), { x: 470, y: y - 13, size: 11, font: bold, color: gold }); y -= 43;
   section("Operational notes");
   note("Setup and breakdown", event.setupNotes); note("Food and beverage", event.cateringNotes); note("Audio / visual", event.avNotes); note("Event decor and restrictions", event.decorNotes); note("Damage / condition", event.damageNotes); note("Accessibility", event.accessibilityNotes); note("Internal notes", event.internalNotes);

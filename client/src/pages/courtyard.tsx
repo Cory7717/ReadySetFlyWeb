@@ -904,6 +904,16 @@ export default function CourtyardPortalPage() {
         ]
       : []),
     {
+      href: "/courtyard/meeting-calendar",
+      icon: CalendarDays,
+      title: "Meeting & Group Calendar",
+      description:
+        "View upcoming meeting-space events and group room blocks, review event details, and prepare for arrivals, setup, and service.",
+      action: "Open meeting calendar",
+      tone: C.accent,
+      disabled: false,
+    },
+    {
       href: "/courtyard/sales-intelligence",
       icon: BarChart3,
       title: "Sales Intelligence",

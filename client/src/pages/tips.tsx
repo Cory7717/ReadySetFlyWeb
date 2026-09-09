@@ -19,6 +19,10 @@ import {
   Users,
   Ban,
   RotateCcw,
+  Pencil,
+  Plus,
+  Trash2,
+  Utensils,
 } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { apiRequest } from "@/lib/queryClient";
@@ -2107,9 +2111,147 @@ function StatCard({ label, value, tone = "neutral" }: { label: string; value: st
   );
 }
 
+type FoodWasteEntry = {
+  id: string;
+  entryDate: string;
+  foodItem: string;
+  quantity: string;
+  unit: string | null;
+  reason: "expired" | "spoiled" | "shift_meal";
+  totalCost: string;
+  notes: string | null;
+  recordedByName: string;
+  canEdit: boolean;
+};
+
+const WASTE_REASON_LABELS = { expired: "Expired", spoiled: "Spoiled", shift_meal: "Shift Meal" } as const;
+const blankWasteForm = () => ({
+  entryDate: new Date().toLocaleDateString("en-CA"),
+  foodItem: "",
+  quantity: "",
+  unit: "",
+  reason: "expired" as FoodWasteEntry["reason"],
+  totalCost: "",
+  notes: "",
+});
+const wasteMoney = (value: string | number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(Number(value || 0));
+
+function BistroFoodWasteLog() {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const currentMonth = new Date().toLocaleDateString("en-CA").slice(0, 7);
+  const [month, setMonth] = useState(currentMonth);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [form, setForm] = useState(blankWasteForm);
+  const wasteQuery = useQuery<{ month: string; entries: FoodWasteEntry[] }>({
+    queryKey: ["/api/tips/food-waste", month],
+    queryFn: () => fetchJson(`/api/tips/food-waste?month=${encodeURIComponent(month)}`),
+  });
+  const entries = wasteQuery.data?.entries || [];
+  const reasonTotal = (reason: FoodWasteEntry["reason"]) => entries.filter((entry) => entry.reason === reason).reduce((sum, entry) => sum + Number(entry.totalCost || 0), 0);
+  const totalCost = entries.reduce((sum, entry) => sum + Number(entry.totalCost || 0), 0);
+  const openNew = () => {
+    setEditingId(null);
+    setForm({ ...blankWasteForm(), entryDate: month === currentMonth ? new Date().toLocaleDateString("en-CA") : `${month}-01` });
+    setDialogOpen(true);
+  };
+  const openEdit = (entry: FoodWasteEntry) => {
+    setEditingId(entry.id);
+    setForm({ entryDate: entry.entryDate, foodItem: entry.foodItem, quantity: entry.quantity, unit: entry.unit || "", reason: entry.reason, totalCost: entry.totalCost, notes: entry.notes || "" });
+    setDialogOpen(true);
+  };
+  const save = useMutation({
+    mutationFn: async () => apiRequest(editingId ? "PATCH" : "POST", editingId ? `/api/tips/food-waste/${editingId}` : "/api/tips/food-waste", form),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tips/food-waste"] });
+      setDialogOpen(false);
+      toast({ title: editingId ? "Waste entry updated" : "Waste entry recorded" });
+    },
+    onError: (error: Error) => toast({ title: "Unable to save waste entry", description: error.message, variant: "destructive" }),
+  });
+  const remove = useMutation({
+    mutationFn: async (id: string) => apiRequest("DELETE", `/api/tips/food-waste/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/tips/food-waste"] });
+      toast({ title: "Waste entry deleted" });
+    },
+    onError: (error: Error) => toast({ title: "Unable to delete waste entry", description: error.message, variant: "destructive" }),
+  });
+  const valid = /^\d{4}-\d{2}-\d{2}$/.test(form.entryDate) && form.foodItem.trim() && Number(form.quantity) > 0 && Number(form.totalCost) >= 0 && form.totalCost !== "";
+
+  return (
+    <div className="space-y-6">
+      <Card className={C.shell}>
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <CardTitle className={`flex items-center gap-2 ${C.ink}`}><Utensils className="h-5 w-5 text-[#2f5f46]" />Bistro Food Waste Log</CardTitle>
+            <CardDescription className={C.muted}>Record expired food, spoilage, and shift meals. Cost is the total dollar loss for the waste event.</CardDescription>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Input type="month" className={`${C.field} sm:w-44`} value={month} onChange={(event) => setMonth(event.target.value)} />
+            <Button className={C.green} onClick={openNew}><Plus className="mr-2 h-4 w-4" />Record waste</Button>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <StatCard label="Total waste cost" value={wasteMoney(totalCost)} tone="green" />
+            <StatCard label="Expired" value={wasteMoney(reasonTotal("expired"))} />
+            <StatCard label="Spoiled" value={wasteMoney(reasonTotal("spoiled"))} />
+            <StatCard label="Shift meals" value={wasteMoney(reasonTotal("shift_meal"))} />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className={C.shell}>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[850px] text-sm">
+              <thead className="bg-[#243746] text-white"><tr>{["Date", "Food Item", "Quantity", "Reason", "Cost", "Recorded By", "Notes", "Actions"].map((label) => <th key={label} className="p-3 text-left font-semibold">{label}</th>)}</tr></thead>
+              <tbody>
+                {entries.map((entry) => (
+                  <tr key={entry.id} className="border-b border-[#eadcc9] bg-white text-[#201814] last:border-0">
+                    <td className="p-3 whitespace-nowrap">{entry.entryDate}</td>
+                    <td className="p-3 font-medium">{entry.foodItem}</td>
+                    <td className="p-3">{Number(entry.quantity).toLocaleString()} {entry.unit || ""}</td>
+                    <td className="p-3"><Badge variant="outline">{WASTE_REASON_LABELS[entry.reason]}</Badge></td>
+                    <td className="p-3 font-semibold">{wasteMoney(entry.totalCost)}</td>
+                    <td className="p-3">{entry.recordedByName}</td>
+                    <td className="max-w-64 p-3 text-[#5f5247]">{entry.notes || "—"}</td>
+                    <td className="p-3">{entry.canEdit && <div className="flex gap-1"><Button size="icon" variant="outline" className={`h-8 w-8 ${C.outline}`} onClick={() => openEdit(entry)} aria-label="Edit waste entry"><Pencil className="h-3.5 w-3.5" /></Button><Button size="icon" variant="outline" className="h-8 w-8 border-red-200 bg-white text-red-700 hover:bg-red-50" onClick={() => window.confirm(`Delete the waste entry for ${entry.foodItem}?`) && remove.mutate(entry.id)} aria-label="Delete waste entry"><Trash2 className="h-3.5 w-3.5" /></Button></div>}</td>
+                  </tr>
+                ))}
+                {!wasteQuery.isLoading && entries.length === 0 && <tr><td colSpan={8} className="p-8 text-center text-[#5f5247]">No food waste has been recorded for this month.</td></tr>}
+                {wasteQuery.isLoading && <tr><td colSpan={8} className="p-8 text-center text-[#5f5247]">Loading waste log...</td></tr>}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="max-h-[90vh] max-w-xl overflow-y-auto border-[#d7c8b5] bg-[#fffaf2] text-[#201814]">
+          <DialogHeader><DialogTitle>{editingId ? "Edit waste entry" : "Record food waste"}</DialogTitle><DialogDescription className={C.muted}>Enter the total cost lost for this waste event, matching the original Bistro log.</DialogDescription></DialogHeader>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div><Label>Date</Label><Input type="date" className={`mt-1 ${C.field}`} value={form.entryDate} onChange={(event) => setForm({ ...form, entryDate: event.target.value })} /></div>
+            <div><Label>Reason</Label><Select value={form.reason} onValueChange={(reason: FoodWasteEntry["reason"]) => setForm({ ...form, reason })}><SelectTrigger className={`mt-1 ${C.field}`}><SelectValue /></SelectTrigger><SelectContent className={C.menu}>{Object.entries(WASTE_REASON_LABELS).map(([value, label]) => <SelectItem key={value} value={value}>{label}</SelectItem>)}</SelectContent></Select></div>
+            <div className="sm:col-span-2"><Label>Food item</Label><Input className={`mt-1 ${C.field}`} value={form.foodItem} onChange={(event) => setForm({ ...form, foodItem: event.target.value })} placeholder="Example: chicken breast" /></div>
+            <div><Label>Quantity</Label><Input type="number" min="0" step="0.01" className={`mt-1 ${C.field}`} value={form.quantity} onChange={(event) => setForm({ ...form, quantity: event.target.value })} /></div>
+            <div><Label>Unit</Label><Input className={`mt-1 ${C.field}`} value={form.unit} onChange={(event) => setForm({ ...form, unit: event.target.value })} placeholder="each, lb, tray..." /></div>
+            <div className="sm:col-span-2"><Label>Total waste cost</Label><Input type="number" min="0" step="0.01" className={`mt-1 ${C.field}`} value={form.totalCost} onChange={(event) => setForm({ ...form, totalCost: event.target.value })} placeholder="0.00" /></div>
+            <div className="sm:col-span-2"><Label>Notes</Label><Textarea className={`mt-1 ${C.field}`} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder="Optional details or corrective action" /></div>
+          </div>
+          <div className="flex justify-end gap-2"><Button variant="outline" className={C.outline} onClick={() => setDialogOpen(false)}>Cancel</Button><Button className={C.green} disabled={!valid || save.isPending} onClick={() => save.mutate()}>{save.isPending ? "Saving..." : "Save entry"}</Button></div>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
 export default function TipsPage() {
   const queryClient = useQueryClient();
   const isAdminPath = typeof window !== "undefined" && window.location.pathname.startsWith("/tips/admin");
+  const isWastePath = typeof window !== "undefined" && window.location.pathname.startsWith("/tips/waste");
   const { data: auth, isLoading: authLoading } = useQuery<{ user: TipsUser | null }>({
     queryKey: ["/api/tips/auth/me"],
     queryFn: () => fetchJson("/api/tips/auth/me"),
@@ -2170,9 +2312,10 @@ export default function TipsPage() {
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-3">
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.24em] text-[#8a6b3f]">Courtyard Austin Lakeline Bistro</div>
-            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Courtyard Tips Tracker</h1>
+            <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">{isWastePath ? "Bistro Food Waste Log" : "Courtyard Tips Tracker"}</h1>
           </div>
           <div className="flex items-center gap-2">
+            {!isAdminPath && <Button asChild size="sm" className={C.accent}><a href={isWastePath ? "/tips" : "/tips/waste"}>{isWastePath ? "Tips tracker" : "Food waste"}</a></Button>}
             {auth?.user?.isAdmin && <Button asChild size="sm" className={C.darkButton}><a href={isAdminPath ? "/tips" : "/tips/admin"}>{isAdminPath ? "Grid view" : "Admin"}</a></Button>}
             {auth?.user && (
               <Button variant="ghost" size="sm" className="text-[#5f5247]" onClick={() => logout.mutate()}>
@@ -2187,6 +2330,8 @@ export default function TipsPage() {
       <main className="mx-auto max-w-6xl space-y-6 px-4 py-6">
         {isAdminPath ? (
           auth?.user?.isAdmin ? <TipsAdmin currentUser={auth.user} /> : <Card className={C.shell}><CardContent className="p-6">Manager access is required.</CardContent></Card>
+        ) : isWastePath ? (
+          <BistroFoodWasteLog />
         ) : (
           <TipsGridTracker currentUser={auth?.user || null} />
         )}

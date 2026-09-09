@@ -12,6 +12,7 @@ import { createSoftAuthRateLimiter } from "../middleware/rateLimit";
 import { getUncachableResendClient } from "../resendClient";
 import {
   tipAdminActions,
+  bistroFoodWasteEntries,
   tipDailyReportAttachments,
   tipEntries,
   tipEntryAttachments,
@@ -30,6 +31,16 @@ const TIPS_SUPER_ADMIN_EMAILS = new Set(
     .map((email) => email.trim().toLowerCase())
     .filter(Boolean),
 );
+
+const foodWasteEntrySchema = z.object({
+  entryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  foodItem: z.string().trim().min(1).max(200),
+  quantity: z.coerce.number().positive().max(100000),
+  unit: z.string().trim().max(40).optional().default(""),
+  reason: z.enum(["expired", "spoiled", "shift_meal"]),
+  totalCost: z.coerce.number().min(0).max(1000000),
+  notes: z.string().trim().max(1000).optional().default(""),
+});
 
 // TODO: set the actual Courtyard Bistro current pay period start date in env/admin settings.
 const TIPS_PAY_PERIOD_SEED =
@@ -2903,6 +2914,86 @@ export function registerTipsRoutes(app: Express) {
       }
     },
   );
+
+  router.get("/food-waste", requireTipsGridAccess, async (req: any, res, next) => {
+    try {
+      const month = typeof req.query.month === "string" && /^\d{4}-\d{2}$/.test(req.query.month)
+        ? req.query.month
+        : new Date().toISOString().slice(0, 7);
+      const start = `${month}-01`;
+      const endDate = new Date(Date.UTC(Number(month.slice(0, 4)), Number(month.slice(5, 7)), 0));
+      const end = endDate.toISOString().slice(0, 10);
+      const rows = await db
+        .select({ entry: bistroFoodWasteEntries, recordedByName: tipsUsers.employeeDisplayName })
+        .from(bistroFoodWasteEntries)
+        .leftJoin(tipsUsers, eq(bistroFoodWasteEntries.recordedByUserId, tipsUsers.id))
+        .where(and(gte(bistroFoodWasteEntries.entryDate, start), lte(bistroFoodWasteEntries.entryDate, end)))
+        .orderBy(desc(bistroFoodWasteEntries.entryDate), desc(bistroFoodWasteEntries.createdAt));
+      res.json({
+        month,
+        entries: rows.map(({ entry, recordedByName }) => ({
+          ...entry,
+          recordedByName: recordedByName || "Former associate",
+          canEdit: isTipsManager(req.tipsUser) || entry.recordedByUserId === req.tipsUser.id,
+        })),
+      });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.post("/food-waste", requireTipsGridAccess, async (req: any, res, next) => {
+    try {
+      const parsed = foodWasteEntrySchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Enter a valid date, food item, quantity, reason, and total cost.", validation: parsed.error.format() });
+      const [entry] = await db.insert(bistroFoodWasteEntries).values({
+        ...parsed.data,
+        quantity: parsed.data.quantity.toFixed(2),
+        totalCost: parsed.data.totalCost.toFixed(2),
+        unit: parsed.data.unit || null,
+        notes: parsed.data.notes || null,
+        recordedByUserId: req.tipsUser.id,
+        updatedByUserId: req.tipsUser.id,
+      }).returning();
+      res.status(201).json({ entry });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.patch("/food-waste/:id", requireTipsGridAccess, async (req: any, res, next) => {
+    try {
+      const parsed = foodWasteEntrySchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: "Enter a valid date, food item, quantity, reason, and total cost.", validation: parsed.error.format() });
+      const [existing] = await db.select().from(bistroFoodWasteEntries).where(eq(bistroFoodWasteEntries.id, req.params.id)).limit(1);
+      if (!existing) return res.status(404).json({ error: "Waste entry not found." });
+      if (!isTipsManager(req.tipsUser) && existing.recordedByUserId !== req.tipsUser.id) return res.status(403).json({ error: "You can only edit entries you recorded." });
+      const [entry] = await db.update(bistroFoodWasteEntries).set({
+        ...parsed.data,
+        quantity: parsed.data.quantity.toFixed(2),
+        totalCost: parsed.data.totalCost.toFixed(2),
+        unit: parsed.data.unit || null,
+        notes: parsed.data.notes || null,
+        updatedByUserId: req.tipsUser.id,
+        updatedAt: new Date(),
+      }).where(eq(bistroFoodWasteEntries.id, existing.id)).returning();
+      res.json({ entry });
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  router.delete("/food-waste/:id", requireTipsGridAccess, async (req: any, res, next) => {
+    try {
+      const [existing] = await db.select().from(bistroFoodWasteEntries).where(eq(bistroFoodWasteEntries.id, req.params.id)).limit(1);
+      if (!existing) return res.status(404).json({ error: "Waste entry not found." });
+      if (!isTipsManager(req.tipsUser) && existing.recordedByUserId !== req.tipsUser.id) return res.status(403).json({ error: "You can only delete entries you recorded." });
+      await db.delete(bistroFoodWasteEntries).where(eq(bistroFoodWasteEntries.id, existing.id));
+      res.status(204).end();
+    } catch (error) {
+      next(error);
+    }
+  });
 
   router.get("/shared-pin/status", async (req: any, res, next) => {
     try {

@@ -548,6 +548,28 @@ export const tipsUsers = pgTable(
   (table) => [index("idx_tips_users_email").on(table.email)],
 );
 
+export const bistroFoodWasteEntries = pgTable(
+  "bistro_food_waste_entries",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    entryDate: date("entry_date").notNull(),
+    foodItem: text("food_item").notNull(),
+    quantity: numeric("quantity", { precision: 10, scale: 2 }).notNull(),
+    unit: text("unit"),
+    reason: text("reason").notNull(),
+    totalCost: numeric("total_cost", { precision: 12, scale: 2 }).notNull(),
+    notes: text("notes"),
+    recordedByUserId: varchar("recorded_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
+    updatedByUserId: varchar("updated_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").defaultNow(),
+    updatedAt: timestamp("updated_at").defaultNow(),
+  },
+  (table) => [
+    index("idx_bistro_food_waste_date").on(table.entryDate),
+    index("idx_bistro_food_waste_reason").on(table.reason),
+  ],
+);
+
 export const tipEntries = pgTable(
   "tip_entries",
   {

@@ -444,6 +444,7 @@ function Router() {
       <Route path="/thegrasp" component={TheGraspPage} />
       <Route path="/coryarmer" component={CoryArmer} />
       <Route path="/tips" component={TipsPage} />
+      <Route path="/tips/waste" component={TipsPage} />
       <Route path="/tips/admin" component={TipsPage} />
       <Route path="/courtyard" component={CourtyardPortalPage} />
       <Route path="/courtyard/budget" component={CourtyardBudgetPage} />

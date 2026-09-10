@@ -10,7 +10,7 @@ import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 import { trackEvent } from "@/lib/analytics";
 import { useToast } from "@/hooks/use-toast";
-import { ChevronDown, Download, ExternalLink, Mail, Shield } from "lucide-react";
+import { BookOpen, ChevronDown, Download, ExternalLink, Shield } from "lucide-react";
 
 const PDF_PATH = "/downloads/noise-and-fury-investor-v2.pdf";
 const HERO_IMAGE_PATH = "/downloads/noise-and-fury-hero.jpg";
@@ -23,7 +23,7 @@ const highlightStats = [
   { value: "8", label: "Prestige episodes", detail: "Season one mapped end-to-end" },
   { value: "7 of 8", label: "Scripts written", detail: "Series bible and scripts already underway" },
   { value: "2", label: "WGA registrations", detail: "#2317225 / #2333978" },
-  { value: "Open", label: "Strategic round", detail: "Packaging with pilot-financing flexibility" },
+  { value: "Active", label: "Development status", detail: "Creative and producing conversations underway" },
 ];
 
 const episodeRun = [
@@ -96,11 +96,9 @@ const episodeRun = [
 const characterCards = [
   { name: "Layne Staley", summary: "The voice. Funny, magnetic, and fully alive before the cost arrives." },
   { name: "Jerry Cantrell", summary: "The witness. The survivor. Still here. Still carrying the music." },
-  { name: "Demri Parrott", summary: "The season's moral center. Not a muse. Not a victim. A fully present person." },
-  {
-    name: "Sean Kinney and Mike Starr",
-    summary: "The rhythm section and emotional ballast of a band trying to stay intact while everything around it shifts.",
-  },
+  { name: "Sean Kinney", summary: "The pulse. Instinctive, irreverent, and essential to the chemistry that made four people sound like one." },
+  { name: "Mike Starr", summary: "The foundation of the original four—and a brother whose own struggle complicates every easy version of the story." },
+  { name: "Demri Parrott", summary: "An essential presence in their human orbit. Not a muse. Not a victim. A fully realized person with her own gravity." },
 ];
 
 const toneReferences = [
@@ -118,11 +116,11 @@ const safeguards = [
 ];
 
 const useOfFunds = [
-  "Showrunner and executive producer attachment support",
-  "Legal, clearances, and chain-of-title work",
-  "Pitch materials refinement",
-  "Travel and industry meetings",
-  "Administrative and development expenses",
+  "Complete the eight-episode first-season script package",
+  "Engage artists and participants who can strengthen authenticity",
+  "Attach the right showrunner and executive-producing partners",
+  "Advance music, legal, clearance, and chain-of-title strategy",
+  "Refine the buyer-facing series package and presentation materials",
 ];
 const teamProfiles = [
   {
@@ -199,7 +197,7 @@ export default function NoiseAndFuryPage() {
   }
 
   useEffect(() => {
-    trackEvent("noise_fury_investor_page_view", { page: "/noiseandfury" });
+    trackEvent("noise_fury_project_page_view", { page: "/noiseandfury" });
   }, []);
 
   const form = useForm<InvestorContactValues>({
@@ -208,8 +206,8 @@ export default function NoiseAndFuryPage() {
       firstName: "",
       lastName: "",
       email: "",
-      subject: "Noise & Fury investor inquiry",
-      message: "I am interested in discussing the Noise & Fury strategic round, investor materials, pilot-financing path, and next steps.",
+      subject: "Noise & Fury project inquiry",
+      message: "I am interested in hearing more about Noise & Fury and discussing a potential creative or strategic conversation.",
     },
   });
 
@@ -223,14 +221,14 @@ export default function NoiseAndFuryPage() {
       });
       toast({
         title: "Inquiry sent",
-        description: "Your Noise & Fury investor inquiry has been delivered.",
+        description: "Your Noise & Fury project inquiry has been delivered.",
       });
       form.reset({
         firstName: "",
         lastName: "",
         email: "",
-        subject: "Noise & Fury investor inquiry",
-        message: "I am interested in discussing the Noise & Fury strategic round, investor materials, pilot-financing path, and next steps.",
+        subject: "Noise & Fury project inquiry",
+        message: "I am interested in hearing more about Noise & Fury and discussing a potential creative or strategic conversation.",
       });
     },
     onError: (error: Error) => {
@@ -273,8 +271,8 @@ export default function NoiseAndFuryPage() {
                     Noise &amp; Fury
                   </h1>
                   <p className="max-w-3xl text-lg leading-8 text-[#F0E1D2] sm:text-xl">
-                    Season One: Alice in Chains. A prestige music drama designed to make audiences feel the era,
-                    the cultural pull, and the emotional cost in one hit.
+                    Four very different people created something bigger than themselves—and music that would
+                    outlive the moment, outgrow its creators, and endure long after all of us are gone.
                   </p>
                 </div>
 
@@ -284,8 +282,8 @@ export default function NoiseAndFuryPage() {
                     <div className="mt-2 max-w-[22rem] text-base font-semibold leading-7 text-white">Cory Armer and Cesar R. Ramirez</div>
                   </div>
                   <div className="border-l border-[#D3A869]/45 bg-black/28 px-4 py-3 backdrop-blur sm:min-h-[112px]">
-                    <div className="text-[11px] uppercase tracking-[0.28em] text-[#B89258]">STRATEGIC FUNDING ROUND</div>
-                    <div className="mt-2 max-w-[22rem] text-base font-semibold leading-7 text-white">Open for packaging and pilot financing</div>
+                    <div className="text-[11px] uppercase tracking-[0.28em] text-[#B89258]">ACTIVE DEVELOPMENT</div>
+                    <div className="mt-2 max-w-[22rem] text-base font-semibold leading-7 text-white">An eight-episode prestige drama about brotherhood, music, fame, loss, and change</div>
                   </div>
                 </div>
 
@@ -314,12 +312,12 @@ export default function NoiseAndFuryPage() {
                       onClick={() => trackDownload("noise_fury_download_pdf", PDF_PATH)}
                     >
                       <Download className="mr-2 h-4 w-4" />
-                      Download investor overview
+                      View project overview
                     </a>
                   </Button>
-                  <Button size="lg" variant="outline" className="border-white/15 bg-black/35 text-white hover:bg-black/50" onClick={() => scrollToSection("investor-contact")}>
-                    <Mail className="mr-2 h-4 w-4" />
-                    Contact us
+                  <Button size="lg" variant="outline" className="border-white/15 bg-black/35 text-white hover:bg-black/50" onClick={() => scrollToSection("series-promise")}>
+                    <BookOpen className="mr-2 h-4 w-4" />
+                    Explore the series
                   </Button>
                 </div>
 
@@ -341,7 +339,7 @@ export default function NoiseAndFuryPage() {
                     About the Season
                   </Button>
                   <div className="flex items-center text-xs uppercase tracking-[0.24em] text-[#A79278]">
-                    For investor and strategic partner conversations
+                    For creative, music-industry, producing, and strategic conversations
                   </div>
                 </div>
               </div>
@@ -350,8 +348,8 @@ export default function NoiseAndFuryPage() {
         </div>
       </section>
 
-      <main className="mx-auto max-w-7xl px-4 pb-16 pt-8 sm:px-6 sm:pb-24">
-        <section className="grid gap-px overflow-hidden rounded-[26px] border border-[#8E6B3B]/16 bg-[#2A2118]/40 md:grid-cols-4">
+      <main className="mx-auto flex max-w-7xl flex-col px-4 pb-16 pt-8 sm:px-6 sm:pb-24">
+        <section className="order-1 grid gap-px overflow-hidden rounded-[26px] border border-[#8E6B3B]/16 bg-[#2A2118]/40 md:grid-cols-4">
           {highlightStats.map((stat) => (
             <div key={stat.label} className="bg-[linear-gradient(180deg,rgba(14,12,11,0.96)_0%,rgba(10,10,11,0.98)_100%)] px-5 py-6">
               <div className="text-3xl font-semibold tracking-[-0.04em] text-[#D3A869]">{stat.value}</div>
@@ -361,43 +359,56 @@ export default function NoiseAndFuryPage() {
           ))}
         </section>
 
-        <section className="mt-10 grid gap-8 lg:grid-cols-[1.15fr_0.85fr]">
+        <section id="series-promise" className="order-2 mt-16 scroll-mt-24 border-y border-[#D3A869]/25 py-16 sm:py-20">
+          <div className="mx-auto max-w-5xl text-center">
+            <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[#C59A5E]">The Series Promise</div>
+            <h2 className="mt-6 font-display text-4xl font-semibold leading-[1.08] tracking-[-0.05em] text-white sm:text-6xl">
+              This is a story about brotherhood.
+            </h2>
+            <p className="mx-auto mt-7 max-w-4xl text-lg leading-9 text-[#E5D8CC] sm:text-2xl sm:leading-10">
+              Noise &amp; Fury is ultimately a story about brotherhood—about four very different people who created
+              something bigger than themselves; how that bond carried them through fame, loss, and change; and how
+              the music they made became something none of them could have fully understood at the time. Something
+              that outlived the moment, outgrew the people who created it, and will endure long after all of us are gone.
+            </p>
+          </div>
+        </section>
+
+        <section className="order-3 mt-10 grid gap-8 lg:grid-cols-[1.15fr_0.85fr]">
           <div className="space-y-6 rounded-[30px] border border-[#8E6B3B]/18 bg-[linear-gradient(180deg,rgba(17,14,12,0.94)_0%,rgba(8,8,9,0.98)_100%)] p-7 shadow-[0_18px_60px_rgba(0,0,0,0.25)] sm:p-9">
             <div className="space-y-3">
-              <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">Why This Can Matter Now</div>
+              <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">Why This Story Matters</div>
               <h2 className="font-display text-4xl font-semibold tracking-[-0.05em] text-white sm:text-5xl">
                 Not a rock poster. A human story with market gravity.
               </h2>
             </div>
             <div className="grid gap-5 text-[15px] leading-8 text-[#D7CCC2] md:grid-cols-2">
               <p>
-                This is not a nostalgia play. It is a modern prestige series about fame, addiction,
-                friendship, grief, ambition, and the emotional residue left after cultural movements burn
-                hot and disappear. Investors are backing a project designed to speak to both music-history
-                audiences and premium-drama buyers.
+                This is not a nostalgia play or a conventional rise-and-fall music biography. It is a modern
+                prestige drama about brotherhood, fame, addiction, friendship, grief, ambition, and the emotional
+                residue left after a cultural moment burns hot and disappears.
               </p>
               <p>
-                The package already carries meaningful momentum, with well-known showrunners and senior producing
-                voices expressing real interest in attaching at the right level. This round is structured to
-                support high-level packaging, legal refinement, premium buyer-facing materials, and to preserve
-                the option to finance a pilot or presentation asset internally if that becomes the strongest path
-                to market. For a project like this, the right attachment matters more than a fast attachment.
+                At its center are four distinct people whose chemistry created a sound none of them could have made
+                alone. The series treats that shared achievement—and the cost of carrying it—with emotional honesty,
+                cultural specificity, and respect for the people who lived it. The right voices and attachments matter
+                more than fast ones.
               </p>
             </div>
           </div>
 
           <div className="grid gap-4">
             <div className="rounded-[28px] border border-[#8E6B3B]/18 bg-black/45 p-6">
-              <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[#C59A5E]">Strategic Round</div>
-              <div className="mt-3 text-4xl font-semibold tracking-[-0.05em] text-white">Packaging + Pilot Flexibility</div>
+              <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[#C59A5E]">Development Status</div>
+              <div className="mt-3 text-4xl font-semibold tracking-[-0.05em] text-white">Written with purpose. Building the right circle.</div>
               <div className="mt-2 text-sm leading-7 text-[#CFC2B5]">
-                This raise is designed to position Noise & Fury from strength: secure the right creative
-                attachments, complete market-ready packaging, and preserve the ability to self-finance a pilot
-                or presentation asset if that creates the strongest leverage with buyers.
+                Seven of eight scripts are written, the season architecture is established, and the project is now
+                opening conversations with musicians, creative partners, showrunners, producers, and strategic allies
+                who understand both the music and the responsibility of telling this story.
               </div>
             </div>
             <div className="rounded-[28px] border border-[#8E6B3B]/18 bg-black/45 p-6">
-              <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[#C59A5E]">Use of Funds</div>
+              <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[#C59A5E]">Current Priorities</div>
               <div className="mt-4 space-y-3">
                 {useOfFunds.map((item) => (
                   <div key={item} className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-[#E4D7C9]">
@@ -409,50 +420,50 @@ export default function NoiseAndFuryPage() {
           </div>
         </section>
 
-        <section className="mt-16 scroll-mt-24">
+        <section className="order-7 mt-16 scroll-mt-24">
           <div className="rounded-[30px] border border-[#8E6B3B]/18 bg-[linear-gradient(180deg,rgba(17,14,12,0.94)_0%,rgba(8,8,9,0.98)_100%)] p-7 shadow-[0_18px_60px_rgba(0,0,0,0.22)] sm:p-9">
             <div className="mx-auto max-w-4xl text-center">
-              <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">How Participation Works</div>
+              <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">For Artists &amp; Creative Partners</div>
               <h2 className="mt-3 font-display text-4xl font-semibold tracking-[-0.05em] text-white sm:text-5xl">
-                A premium introduction designed to move qualified interest into direct conversation.
+                An invitation to help protect the truth, humanity, and musical integrity of the story.
               </h2>
               <p className="mt-4 text-base leading-8 text-[#CEC1B5] sm:text-lg">
-                Noise & Fury is in an early strategic development round. This page is intended to open serious investor
-                and strategic partner discussions around financing, packaging, and the project&apos;s next stage of
-                development momentum.
+                Noise &amp; Fury is being developed with respect for the artists, families, collaborators, and communities
+                connected to the history it portrays. We welcome conversations with people who can help the series feel
+                lived-in, honest, and worthy of the music at its center.
               </p>
             </div>
 
             <div className="mt-8 grid gap-4 lg:grid-cols-3">
               <div className="rounded-[24px] border border-white/10 bg-white/[0.03] px-5 py-5">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#B89258]">1. Initial Inquiry</div>
-                <div className="mt-3 text-lg font-semibold text-white">Start with the materials and a direct outreach.</div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#B89258]">1. Hear the Story</div>
+                <div className="mt-3 text-lg font-semibold text-white">Begin with the vision, season architecture, and emotional purpose.</div>
                 <div className="mt-3 text-sm leading-7 text-[#D8CCC0]">
-                  Review the investor overview, then connect through the inquiry form or direct email if there is serious
-                  interest in the project&apos;s strategic round and broader packaging path.
+                  Explore the project overview and episode guide, then connect directly if the story resonates or if your
+                  experience can add context, perspective, or authenticity.
                 </div>
               </div>
               <div className="rounded-[24px] border border-white/10 bg-white/[0.03] px-5 py-5">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#B89258]">2. Direct Discussion</div>
-                <div className="mt-3 text-lg font-semibold text-white">Continue the conversation privately with the team.</div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#B89258]">2. Share Perspective</div>
+                <div className="mt-3 text-lg font-semibold text-white">Continue the conversation privately with the creative team.</div>
                 <div className="mt-3 text-sm leading-7 text-[#D8CCC0]">
-                  Qualified interest moves into direct conversations covering packaging progress, development needs,
-                  strategic fit, and the structure of the opportunity at the appropriate level of detail.
+                  Conversations can center on the music, the era, lived experience, creative fit, or the responsibilities
+                  involved in portraying real people with honesty and dignity.
                 </div>
               </div>
               <div className="rounded-[24px] border border-white/10 bg-white/[0.03] px-5 py-5">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#B89258]">3. Next-Step Alignment</div>
-                <div className="mt-3 text-lg font-semibold text-white">Participation details are handled through private agreements.</div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#B89258]">3. Find the Right Role</div>
+                <div className="mt-3 text-lg font-semibold text-white">Any next step should reflect genuine alignment.</div>
                 <div className="mt-3 text-sm leading-7 text-[#D8CCC0]">
-                  This page is not a public offering portal. It is a premium first step for serious project discussions,
-                  with specific participation details handled directly once mutual alignment and interest are established.
+                  There is no predetermined ask. A conversation may lead to insight, an introduction, consultation,
+                  creative participation, or simply a better and more responsible version of the work.
                 </div>
               </div>
             </div>
           </div>
         </section>
 
-        <section id="season-overview" className="mt-16 scroll-mt-24">
+        <section id="season-overview" className="order-5 mt-16 scroll-mt-24">
           <div className="mx-auto max-w-3xl text-center">
             <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">Season One Overview</div>
             <h2 className="mt-3 font-display text-4xl font-semibold tracking-[-0.05em] text-white sm:text-5xl">
@@ -500,7 +511,7 @@ export default function NoiseAndFuryPage() {
           </div>
         </section>
 
-        <section id="team-section" className="mt-16 scroll-mt-24">
+        <section id="team-section" className="order-6 mt-16 scroll-mt-24">
           <div className="mx-auto max-w-3xl text-center">
             <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">Writer and Producer Bios</div>
             <h2 className="mt-3 font-display text-4xl font-semibold tracking-[-0.05em] text-white sm:text-5xl">
@@ -546,10 +557,10 @@ export default function NoiseAndFuryPage() {
           </div>
         </section>
 
-        <section className="mt-16 grid gap-8 lg:grid-cols-2">
+        <section className="order-4 mt-16 grid gap-8 lg:grid-cols-2">
           <div className="rounded-[30px] border border-[#8E6B3B]/18 bg-[linear-gradient(180deg,rgba(15,12,10,0.96)_0%,rgba(9,9,10,0.98)_100%)] p-7 sm:p-8">
-            <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">Character Core</div>
-            <h3 className="mt-3 font-display text-3xl font-semibold tracking-[-0.05em] text-white">The people at the center.</h3>
+            <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">The Human Core</div>
+            <h3 className="mt-3 font-display text-3xl font-semibold tracking-[-0.05em] text-white">The brotherhood—and the people held in its gravity.</h3>
             <div className="mt-6 grid gap-4">
               {characterCards.map((character) => (
                 <div key={character.name} className="rounded-[24px] border border-white/10 bg-white/[0.03] px-5 py-4">
@@ -587,22 +598,25 @@ export default function NoiseAndFuryPage() {
           </div>
         </section>
 
-        <section id="investor-contact" className="mt-16 grid gap-8 scroll-mt-24 lg:grid-cols-[0.95fr_1.05fr]">
+        <section id="investor-contact" className="order-8 mt-16 grid gap-8 scroll-mt-24 lg:grid-cols-[0.95fr_1.05fr]">
           <div className="space-y-6 rounded-[30px] border border-[#8E6B3B]/18 bg-[linear-gradient(180deg,rgba(15,12,10,0.96)_0%,rgba(9,9,10,0.98)_100%)] p-7 sm:p-8">
-            <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">Investor Contact</div>
-            <h3 className="font-display text-4xl font-semibold tracking-[-0.05em] text-white">Request the full package and continue the conversation.</h3>
+            <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">Continue the Conversation</div>
+            <h3 className="font-display text-4xl font-semibold tracking-[-0.05em] text-white">There are different ways into the project.</h3>
             <p className="text-base leading-8 text-[#D3C6BA]">
-              Inquiries are sent directly to coryarmer@gmail.com and copied to ceo@marcmovies.com so the team can respond quickly to investor and strategic partner interest tied to financing, packaging, and development conversations.
+              Inquiries are sent directly to Cory Armer and copied to the producing team. Musicians, artists, creative
+              collaborators, producers, and strategic partners are invited to identify the kind of conversation they want to have.
             </p>
             <p className="text-sm leading-7 text-[#BCAEA0]">
-              This page is intended for serious project discussions. Participation details, package materials, and next-step conversations are handled directly after inquiry.
+              Creative and music-industry conversations begin with the story and its authenticity. Financing and strategic
+              partnership conversations remain available as a separate, private development path.
             </p>
             <div className="rounded-[22px] border border-white/10 bg-white/[0.03] px-4 py-4 text-sm leading-7 text-[#E7DACD]">
-              Connect with the team to request the full package, discuss strategic fit, and continue the conversation around the round, active packaging momentum, and buyer-facing readiness.
+              Tell us what connects you to Noise &amp; Fury—its music, its people, its history, or its path toward the screen—and
+              the team will respond with the most relevant next step.
             </div>
             <div className="flex flex-wrap gap-3">
               <Button asChild variant="outline" className="border-white/15 bg-black/35 text-white hover:bg-black/50">
-                <a href="mailto:coryarmer@gmail.com?cc=ceo@marcmovies.com&subject=Noise%20%26%20Fury%20Investor%20Inquiry">
+                <a href="mailto:coryarmer@gmail.com?cc=ceo@marcmovies.com&subject=Noise%20%26%20Fury%20Project%20Conversation">
                   <ExternalLink className="mr-2 h-4 w-4" />
                   Email directly
                 </a>
@@ -685,7 +699,7 @@ export default function NoiseAndFuryPage() {
                 />
 
                 <Button type="submit" className="w-full bg-[#D3A869] text-[#141414] hover:bg-[#deb980]" disabled={sendInvestorContactMutation.isPending}>
-                  {sendInvestorContactMutation.isPending ? "Sending inquiry..." : "Send investor inquiry"}
+                  {sendInvestorContactMutation.isPending ? "Sending inquiry..." : "Start the conversation"}
                 </Button>
               </form>
             </Form>

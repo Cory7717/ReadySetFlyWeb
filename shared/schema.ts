@@ -2384,6 +2384,7 @@ export const courtyardGroupRoomBlocks = pgTable("courtyard_group_room_blocks", {
   primaryContactName: text("primary_contact_name"), primaryContactEmail: text("primary_contact_email"), primaryContactPhone: text("primary_contact_phone"), salesOwner: text("sales_owner"),
   billingInstructions: text("billing_instructions"), depositDueDate: date("deposit_due_date"), depositAmount: numeric("deposit_amount", { precision: 12, scale: 2 }),
   arrivalNotes: text("arrival_notes"), vipNotes: text("vip_notes"), transportationNotes: text("transportation_notes"), breakfastNotes: text("breakfast_notes"),
+  breakfastService: text("breakfast_service").notNull().default("none"), breakfastGuaranteedCount: integer("breakfast_guaranteed_count"), breakfastPricePerPerson: numeric("breakfast_price_per_person", { precision: 10, scale: 2 }), breakfastServiceDates: text("breakfast_service_dates"), breakfastServiceTime: text("breakfast_service_time"), breakfastLocation: text("breakfast_location"),
   frontDeskNotes: text("front_desk_notes"), housekeepingNotes: text("housekeeping_notes"), internalNotes: text("internal_notes"),
   createdByUserId: varchar("created_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }), updatedByUserId: varchar("updated_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
   createdAt: timestamp("created_at").defaultNow(), updatedAt: timestamp("updated_at").defaultNow(),

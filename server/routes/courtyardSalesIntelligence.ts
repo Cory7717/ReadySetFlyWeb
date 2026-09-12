@@ -296,6 +296,10 @@ function groupRoomWriteValues(body: any) {
   const totalRoomNights = body?.totalRoomNights === "" || body?.totalRoomNights == null ? null : Number(body.totalRoomNights);
   const groupRate = body?.groupRate === "" || body?.groupRate == null ? null : Number(body.groupRate);
   const depositAmount = body?.depositAmount === "" || body?.depositAmount == null ? null : Number(body.depositAmount);
+  const importedBreakfastRate = body?.breakfastPerPerson === "" || body?.breakfastPerPerson == null ? null : Number(body.breakfastPerPerson);
+  const breakfastPricePerPerson = body?.breakfastPricePerPerson === "" || body?.breakfastPricePerPerson == null ? importedBreakfastRate : Number(body.breakfastPricePerPerson);
+  const breakfastGuaranteedCount = body?.breakfastGuaranteedCount === "" || body?.breakfastGuaranteedCount == null ? null : Number(body.breakfastGuaranteedCount);
+  const breakfastService = ["none", "included", "contracted_buffet"].includes(String(body?.breakfastService)) ? String(body.breakfastService) : breakfastPricePerPerson != null && breakfastPricePerPerson > 0 ? "contracted_buffet" : "none";
   let roomAllocations: any[] = [];
   try { roomAllocations = Array.isArray(body?.roomAllocations) ? body.roomAllocations : body?.roomAllocationsJson ? JSON.parse(body.roomAllocationsJson) : []; } catch { roomAllocations = []; }
   roomAllocations = roomAllocations.filter((item) => item && String(item.roomType || "").trim()).map((item) => ({ roomType: String(item.roomType).trim(), roomsPerNight: Number(item.roomsPerNight || 0), roomNights: Number(item.roomNights || 0), rate: Number(item.rate || 0), revenue: Number(item.roomNights || 0) * Number(item.rate || 0) }));
@@ -309,6 +313,7 @@ function groupRoomWriteValues(body: any) {
     primaryContactName: String(body?.primaryContactName || "").trim() || null, primaryContactEmail: String(body?.primaryContactEmail || "").trim() || null, primaryContactPhone: String(body?.primaryContactPhone || "").trim() || null, salesOwner: String(body?.salesOwner || "").trim() || null,
     billingInstructions: String(body?.billingInstructions || "").trim() || null, depositDueDate: body?.depositDueDate || null, depositAmount: depositAmount == null ? null : depositAmount.toFixed(2),
     arrivalNotes: String(body?.arrivalNotes || "").trim() || null, vipNotes: String(body?.vipNotes || "").trim() || null, transportationNotes: String(body?.transportationNotes || "").trim() || null, breakfastNotes: String(body?.breakfastNotes || "").trim() || null,
+    breakfastService, breakfastGuaranteedCount, breakfastPricePerPerson: breakfastPricePerPerson == null ? null : breakfastPricePerPerson.toFixed(2), breakfastServiceDates: String(body?.breakfastServiceDates || "").trim() || null, breakfastServiceTime: String(body?.breakfastServiceTime || "").trim() || null, breakfastLocation: String(body?.breakfastLocation || "").trim() || null,
     frontDeskNotes: String(body?.frontDeskNotes || "").trim() || null, housekeepingNotes: String(body?.housekeepingNotes || "").trim() || null, internalNotes: String(body?.internalNotes || "").trim() || null,
   };
 }
@@ -318,7 +323,9 @@ function groupRoomValidationError(body: any) {
   if (body.departureDate <= body.arrivalDate) return "Departure must be after arrival.";
   if (!GROUP_ROOM_STATUSES.includes(String(body?.status || ""))) return "Choose a valid group status.";
   for (const field of ["peakRooms", "totalRoomNights"]) { const value = body?.[field]; if (value !== "" && value != null && (!Number.isInteger(Number(value)) || Number(value) < 0)) return "Room counts must be non-negative whole numbers."; }
-  for (const field of ["groupRate", "depositAmount"]) { const value = body?.[field]; if (value !== "" && value != null && (!Number.isFinite(Number(value)) || Number(value) < 0)) return "Rates and deposits must be valid non-negative amounts."; }
+  for (const field of ["groupRate", "depositAmount", "breakfastPricePerPerson"]) { const value = body?.[field]; if (value !== "" && value != null && (!Number.isFinite(Number(value)) || Number(value) < 0)) return "Rates and deposits must be valid non-negative amounts."; }
+  if (body?.breakfastGuaranteedCount !== "" && body?.breakfastGuaranteedCount != null && (!Number.isInteger(Number(body.breakfastGuaranteedCount)) || Number(body.breakfastGuaranteedCount) < 0)) return "Breakfast guaranteed count must be a non-negative whole number.";
+  if (body?.breakfastService && !["none", "included", "contracted_buffet"].includes(String(body.breakfastService))) return "Choose a valid breakfast service.";
   if (Array.isArray(body?.roomAllocations)) for (const allocation of body.roomAllocations) if (!String(allocation?.roomType || "").trim() || !Number.isFinite(Number(allocation?.rate)) || Number(allocation.rate) < 0 || !Number.isInteger(Number(allocation?.roomNights)) || Number(allocation.roomNights) < 0) return "Each room allocation needs a room type, valid rate, and whole-number room-night total.";
   return null;
 }
@@ -850,6 +857,29 @@ async function createAdvisorPdf(analysis: any, hotelName: string) {
   return pdf.save();
 }
 
+export async function createGroupResumePdf(block: any) {
+  const pdf = await PDFDocument.create();
+  const regular = await pdf.embedFont(StandardFonts.Helvetica), bold = await pdf.embedFont(StandardFonts.HelveticaBold);
+  const navy=rgb(0.12,0.20,0.27),blue=rgb(0.19,0.37,0.53),gold=rgb(0.85,0.55,0.05),pale=rgb(0.96,0.97,0.97),ink=rgb(0.12,0.12,0.12),muted=rgb(0.36,0.36,0.36),white=rgb(1,1,1);
+  let page:any,y=0;const pages:any[]=[];
+  const addPage=()=>{page=pdf.addPage([612,792]);pages.push(page);page.drawText("COURTYARD",{x:205,y:746,size:25,font:bold,color:gold,characterSpacing:4});page.drawText("BY MARRIOTT",{x:268,y:730,size:8,font:bold,color:gold,characterSpacing:2});page.drawLine({start:{x:46,y:716},end:{x:566,y:716},thickness:1.2,color:gold});y=690;};
+  const ensure=(height:number)=>{if(y-height<55)addPage();};
+  const linesFor=(value:any,max=88)=>wrapText(String(value||"Not specified"),max);
+  const section=(title:string)=>{ensure(38);y-=8;page.drawText(title.toUpperCase(),{x:46,y,size:11,font:bold,color:blue});y-=9;page.drawLine({start:{x:46,y},end:{x:566,y},thickness:1,color:blue});y-=18;};
+  const row=(label:string,value:any)=>{const lines=linesFor(value,72),height=Math.max(25,14+lines.length*10);ensure(height+4);page.drawRectangle({x:46,y:y-height+7,width:520,height,color:pale,borderColor:rgb(.78,.82,.84),borderWidth:.6});page.drawText(label,{x:54,y:y-9,size:8,font:bold,color:navy});let yy=y-9;for(const line of lines){page.drawText(line,{x:190,y:yy,size:8,font:regular,color:ink});yy-=10;}y-=height+4;};
+  const moneyValue=(value:any)=>Number(value||0).toLocaleString("en-US",{style:"currency",currency:"USD"});
+  let allocations:any[]=[];try{allocations=block.roomAllocationsJson?JSON.parse(block.roomAllocationsJson):[]}catch{allocations=[];}
+  const nights=Math.max(0,Math.round((new Date(`${block.departureDate}T12:00:00Z`).getTime()-new Date(`${block.arrivalDate}T12:00:00Z`).getTime())/86400000));
+  addPage();page.drawText("GROUP RESUME",{x:46,y:684,size:22,font:bold,color:navy});page.drawText(`${block.groupName}${block.projectName?` | ${block.projectName}`:""}`,{x:46,y:661,size:11,font:bold,color:gold});page.drawText(`Status: ${String(block.status||"prospect").replaceAll("_"," ").toUpperCase()}  |  Generated ${new Date().toLocaleDateString("en-US")}`,{x:46,y:643,size:8,font:regular,color:muted});y=614;
+  section("Stay overview");row("Arrival / departure",`${block.arrivalDate} through ${block.departureDate} | ${nights} night${nights===1?"":"s"}`);row("Room block",`${block.peakRooms||0} peak rooms | ${block.totalRoomNights||0} total room nights | ${block.roomTypeMix||"Room types not specified"}`);row("Group code / booking",`${block.groupCode||"Not specified"} | ${String(block.bookingMethod||"Not specified").replaceAll("_"," ")}`);row("Primary contact",`${block.primaryContactName||"Not specified"}${block.primaryContactPhone?` | ${block.primaryContactPhone}`:""}${block.primaryContactEmail?` | ${block.primaryContactEmail}`:""}`);row("Sales owner",block.salesOwner||"Not assigned");
+  if(allocations.length){section("Room types and rates");for(const item of allocations)row(String(item.roomType||"Room type"),`${item.roomsPerNight||0} peak/night | ${item.roomNights||0} room nights | ${moneyValue(item.rate)} rate | ${moneyValue(Number(item.roomNights||0)*Number(item.rate||0))} revenue`);row("Estimated room revenue",moneyValue(block.estimatedRoomRevenue));}
+  if(block.breakfastService&&block.breakfastService!=="none"||block.breakfastNotes){section("Breakfast service");row("Service",block.breakfastService==="contracted_buffet"?"Contracted breakfast buffet":block.breakfastService==="included"?"Breakfast included":"Breakfast details");row("Dates / time",`${block.breakfastServiceDates||"During group stay"} | ${block.breakfastServiceTime||"Time not specified"}`);row("Location",block.breakfastLocation||"Location not specified");row("Guaranteed count / price",`${block.breakfastGuaranteedCount??"Not specified"} guests | ${block.breakfastService==="included"?"Included":`${moneyValue(block.breakfastPricePerPerson)} per person`}`);if(block.breakfastNotes)row("Bistro instructions",block.breakfastNotes);}
+  section("Operational preparation");for(const [label,value] of [["Arrival / check-in",block.arrivalNotes],["VIP / accommodations",block.vipNotes],["Transportation",block.transportationNotes],["Front desk",block.frontDeskNotes],["Housekeeping",block.housekeepingNotes],["Billing",block.billingInstructions],["Internal notes",block.internalNotes]] as any[])if(value)row(label,value);
+  ensure(70);y-=10;page.drawText("DEPARTMENT ACKNOWLEDGEMENT",{x:46,y,size:10,font:bold,color:navy});y-=27;page.drawText("Front Desk: ____________________   Housekeeping: ____________________   Bistro: ____________________",{x:52,y,size:8.5,font:regular,color:ink});y-=24;page.drawText("Manager review: ______________________________   Date / time: __________________",{x:52,y,size:8.5,font:regular,color:ink});
+  pages.forEach((item,index)=>{item.drawRectangle({x:0,y:0,width:612,height:38,color:navy});item.drawText("COURTYARD AUSTIN NORTHWEST/LAKELINE | INTERNAL OPERATIONS",{x:46,y:15,size:7,font:bold,color:white});item.drawText(`Page ${index+1} of ${pages.length}`,{x:520,y:15,size:7,font:regular,color:white});});
+  return pdf.save();
+}
+
 export async function createMeetingBeoPdf(event: any, seriesEvents: any[], spaceName: string) {
   const pdf = await PDFDocument.create();
   const regular = await pdf.embedFont(StandardFonts.Helvetica);
@@ -1073,6 +1103,17 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
       const safeName = String(event.groupName || "event").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").slice(0, 60) || "event";
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `inline; filename="${safeName}-BEO.pdf"`);
+      res.send(Buffer.from(bytes));
+    } catch (error) { next(error); }
+  });
+  router.get("/meeting-calendar/group-rooms/:id/resume.pdf", async (req: any, res, next) => {
+    try {
+      const [block] = await db.select().from(courtyardGroupRoomBlocks).where(eq(courtyardGroupRoomBlocks.id, req.params.id)).limit(1);
+      if (!block || !hasHotel(req, block.hotelId)) return res.status(404).json({ error: "Group room block not found." });
+      const bytes = await createGroupResumePdf(block);
+      const safeName = String(block.groupName || "group").replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").slice(0, 60) || "group";
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `inline; filename="${safeName}-Group-Resume.pdf"`);
       res.send(Buffer.from(bytes));
     } catch (error) { next(error); }
   });

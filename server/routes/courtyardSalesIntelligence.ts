@@ -857,6 +857,14 @@ async function createAdvisorPdf(analysis: any, hotelName: string) {
   return pdf.save();
 }
 
+const pdfSingleLineText = (value: any, fallback = "Not specified") => {
+  const text = String(value ?? fallback)
+    .replace(/[\u0000-\u001f\u007f]+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  return text || fallback;
+};
+
 export async function createGroupResumePdf(block: any) {
   const pdf = await PDFDocument.create();
   const regular = await pdf.embedFont(StandardFonts.Helvetica), bold = await pdf.embedFont(StandardFonts.HelveticaBold);
@@ -870,7 +878,7 @@ export async function createGroupResumePdf(block: any) {
   const moneyValue=(value:any)=>Number(value||0).toLocaleString("en-US",{style:"currency",currency:"USD"});
   let allocations:any[]=[];try{allocations=block.roomAllocationsJson?JSON.parse(block.roomAllocationsJson):[]}catch{allocations=[];}
   const nights=Math.max(0,Math.round((new Date(`${block.departureDate}T12:00:00Z`).getTime()-new Date(`${block.arrivalDate}T12:00:00Z`).getTime())/86400000));
-  addPage();page.drawText("GROUP RESUME",{x:46,y:684,size:22,font:bold,color:navy});page.drawText(`${block.groupName}${block.projectName?` | ${block.projectName}`:""}`,{x:46,y:661,size:11,font:bold,color:gold});page.drawText(`Status: ${String(block.status||"prospect").replaceAll("_"," ").toUpperCase()}  |  Generated ${new Date().toLocaleDateString("en-US")}`,{x:46,y:643,size:8,font:regular,color:muted});y=614;
+  addPage();page.drawText("GROUP RESUME",{x:46,y:684,size:22,font:bold,color:navy});page.drawText(pdfSingleLineText(`${block.groupName}${block.projectName?` | ${block.projectName}`:""}`),{x:46,y:661,size:11,font:bold,color:gold});page.drawText(`Status: ${String(block.status||"prospect").replaceAll("_"," ").toUpperCase()}  |  Generated ${new Date().toLocaleDateString("en-US")}`,{x:46,y:643,size:8,font:regular,color:muted});y=614;
   section("Stay overview");row("Arrival / departure",`${block.arrivalDate} through ${block.departureDate} | ${nights} night${nights===1?"":"s"}`);row("Room block",`${block.peakRooms||0} peak rooms | ${block.totalRoomNights||0} total room nights | ${block.roomTypeMix||"Room types not specified"}`);row("Group code / booking",`${block.groupCode||"Not specified"} | ${String(block.bookingMethod||"Not specified").replaceAll("_"," ")}`);row("Primary contact",`${block.primaryContactName||"Not specified"}${block.primaryContactPhone?` | ${block.primaryContactPhone}`:""}${block.primaryContactEmail?` | ${block.primaryContactEmail}`:""}`);row("Sales owner",block.salesOwner||"Not assigned");
   if(allocations.length){section("Room types and rates");for(const item of allocations)row(String(item.roomType||"Room type"),`${item.roomsPerNight||0} peak/night | ${item.roomNights||0} room nights | ${moneyValue(item.rate)} rate | ${moneyValue(Number(item.roomNights||0)*Number(item.rate||0))} revenue`);row("Estimated room revenue",moneyValue(block.estimatedRoomRevenue));}
   if(block.breakfastService&&block.breakfastService!=="none"||block.breakfastNotes){section("Breakfast service");row("Service",block.breakfastService==="contracted_buffet"?"Contracted breakfast buffet":block.breakfastService==="included"?"Breakfast included":"Breakfast details");row("Dates / time",`${block.breakfastServiceDates||"During group stay"} | ${block.breakfastServiceTime||"Time not specified"}`);row("Location",block.breakfastLocation||"Location not specified");row("Guaranteed count / price",`${block.breakfastGuaranteedCount??"Not specified"} guests | ${block.breakfastService==="included"?"Included":`${moneyValue(block.breakfastPricePerPerson)} per person`}`);if(block.breakfastNotes)row("Bistro instructions",block.breakfastNotes);}
@@ -903,7 +911,7 @@ export async function createMeetingBeoPdf(event: any, seriesEvents: any[], space
     return page;
   };
   const ensure = (height: number) => { if (y - height < 58) addPage(); };
-  const fitText = (value: any, font: any, size: number, maxWidth: number) => { const text = String(value ?? "Not specified"); if (font.widthOfTextAtSize(text, size) <= maxWidth) return text; let clipped = text; while (clipped.length > 3 && font.widthOfTextAtSize(`${clipped}...`, size) > maxWidth) clipped = clipped.slice(0, -1); return `${clipped.trim()}...`; };
+  const fitText = (value: any, font: any, size: number, maxWidth: number) => { const text = pdfSingleLineText(value); if (font.widthOfTextAtSize(text, size) <= maxWidth) return text; let clipped = text; while (clipped.length > 3 && font.widthOfTextAtSize(`${clipped}...`, size) > maxWidth) clipped = clipped.slice(0, -1); return `${clipped.trim()}...`; };
   const section = (title: string) => { ensure(40); y -= 9; page.drawText(title.toUpperCase(), { x: 46, y, size: 11, font: bold, color: gold }); y -= 8; page.drawLine({ start: { x: 46, y }, end: { x: 566, y }, thickness: 1, color: gold }); y -= 18; };
   const row = (label: string, value: any, height = 22) => { ensure(height + 5); page.drawRectangle({ x: 46, y: y - height + 6, width: 520, height, color: pale, borderColor: rgb(0.84, 0.82, 0.78), borderWidth: 0.5 }); page.drawText(fitText(label, bold, 8.3, 145), { x: 54, y: y - 8, size: 8.3, font: bold, color: ink }); page.drawText(fitText(value, regular, 8.3, 344), { x: 210, y: y - 8, size: 8.3, font: regular, color: ink }); y -= height + 5; };
   const summaryPanel = (x: number, width: number, title: string, rows: Array<[string, any]>, top = 622, rowHeight = 27) => { const titleHeight = 28, totalHeight = titleHeight + rows.length * rowHeight; page.drawRectangle({ x, y: top - totalHeight, width, height: totalHeight, color: pale, borderColor: rgb(0.78, 0.74, 0.68), borderWidth: 0.8 }); page.drawRectangle({ x, y: top - titleHeight, width, height: titleHeight, color: ink }); page.drawText(title.toUpperCase(), { x: x + 10, y: top - 18, size: 9.5, font: bold, color: white }); rows.forEach(([label, value], index) => { const rowTop = top - titleHeight - index * rowHeight; if (index) page.drawLine({ start: { x, y: rowTop }, end: { x: x + width, y: rowTop }, thickness: 0.5, color: rgb(0.82, 0.79, 0.73) }); page.drawText(fitText(label, bold, 7.5, width * 0.38), { x: x + 9, y: rowTop - 17, size: 7.5, font: bold, color: ink }); page.drawText(fitText(value, regular, 7.5, width * 0.53), { x: x + width * 0.43, y: rowTop - 17, size: 7.5, font: regular, color: ink }); }); return top - totalHeight; };
@@ -968,7 +976,7 @@ export async function createMeetingBeoPdf(event: any, seriesEvents: any[], space
   };
   addPage();
   page.drawText("BANQUET EVENT ORDER", { x: 46, y: 690, size: 20, font: bold, color: ink });
-  page.drawText(`${event.groupName}  |  ${dateLabel}`, { x: 46, y: 671, size: 11, font: bold, color: gold });
+  page.drawText(pdfSingleLineText(`${event.groupName}  |  ${dateLabel}`), { x: 46, y: 671, size: 11, font: bold, color: gold });
   page.drawText(`Status: ${String(event.status || "inquiry").replaceAll("_", " ").toUpperCase()}  |  BEO generated ${new Date().toLocaleDateString("en-US")}`, { x: 46, y: 653, size: 8, font: regular, color: muted });
   page.drawText(`BEO #: ${String(event.id || "DRAFT").slice(0, 8).toUpperCase()}`, { x: 476, y: 690, size: 8.5, font: bold, color: ink });
   const roomLabel = event.meetingRoom === "pecan" ? "Pecan - 560 sq. ft." : event.meetingRoom === "cedar" ? "Cedar - 1,575 sq. ft." : event.meetingRoom === "full_room" ? "Full Room - 2,135 sq. ft." : spaceName;

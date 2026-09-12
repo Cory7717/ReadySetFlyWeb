@@ -67,6 +67,7 @@ import {
 } from "../courtyardSalesDemand";
 import { researchDemandEvents } from "../courtyardSalesDemandResearch";
 import { mergeDatScreenshotImports, parseDatScreenshot, parseDatWorkbook } from "../courtyardSalesDatImport";
+import { cateringSelectionsFromContract } from "@shared/courtyardCateringMenu";
 
 const DEFAULT_HOTEL_ID = "courtyard-austin-lakeline";
 const SHARED_SALES_PIN = "12833";
@@ -216,6 +217,7 @@ const canManageMeetingCalendar = (req: any) =>
   admin(req.salesUser) || Boolean(req.session?.salesIntelligenceUnlocked);
 const safeNonnegativeNumber = (value: any, maximum = 9999999999) => { const number = Number(value || 0); return Number.isFinite(number) ? Math.min(maximum, Math.max(0, number)) : 0; };
 const cleanServiceItems = (value: any) => (Array.isArray(value) ? value : []).map((item: any) => ({
+  templateId: String(item?.templateId || "").trim().slice(0, 80) || undefined, menuCategory: String(item?.menuCategory || "").trim().slice(0, 80) || undefined,
   name: String(item?.name || "").trim().slice(0, 160), serviceDates: String(item?.serviceDates || "All event dates").trim().slice(0, 200),
   chargeMethod: ["per_event", "per_day", "per_person", "per_person_per_day", "per_unit", "actual_consumption", "complimentary"].includes(item?.chargeMethod) ? item.chargeMethod : "per_event",
   quantity: safeNonnegativeNumber(item?.quantity), unitPrice: safeNonnegativeNumber(item?.unitPrice), includedQuantity: safeNonnegativeNumber(item?.includedQuantity), refillPrice: safeNonnegativeNumber(item?.refillPrice), instructions: String(item?.instructions || "").trim().slice(0, 1000),
@@ -401,8 +403,14 @@ function parseLegacyGroupContract(normalized: string) {
 }
 export function parseGroupContract(text: string) {
   const normalized = text.replace(/\u00a0/g, " ").replace(/[ \t]+/g, " ");
-  if (/GROUP ROOMS AGREEMENT/i.test(normalized) && /Rooms Per Night/i.test(normalized)) return parseModernRoomsContract(normalized);
-  if (/GUEST ROOMS ONLY AGREEMENT|GROUP SALES AGREEMENT/i.test(normalized)) return parseLegacyGroupContract(normalized);
+  const withCateringSelections = (draft: any) => {
+    const serviceItemsJson = cateringSelectionsFromContract(normalized);
+    if (draft.meeting && serviceItemsJson.length) draft.meeting.serviceItemsJson = serviceItemsJson;
+    if (serviceItemsJson.length) draft.warnings = [...(draft.warnings || []), `${serviceItemsJson.length} catering menu selection${serviceItemsJson.length === 1 ? " was" : "s were"} detected. Confirm service dates, attendance, and negotiated pricing before importing.`];
+    return draft;
+  };
+  if (/GROUP ROOMS AGREEMENT/i.test(normalized) && /Rooms Per Night/i.test(normalized)) return withCateringSelections(parseModernRoomsContract(normalized));
+  if (/GUEST ROOMS ONLY AGREEMENT|GROUP SALES AGREEMENT/i.test(normalized)) return withCateringSelections(parseLegacyGroupContract(normalized));
   const groupName = firstMatch(normalized, /(?:^|\n)Group(?! Rooms)\s*([^\n]+)/i) || firstMatch(normalized, /between[^\n]+and\s+([^\n(]+)\s*\("Group"\)/i);
   const arrivalDate = isoContractDate(firstMatch(normalized, /Guest Arrival\s*([^\n]+)/i));
   const departureDate = isoContractDate(firstMatch(normalized, /Guest Departure\s*([^\n]+)/i));
@@ -429,7 +437,7 @@ export function parseGroupContract(text: string) {
   if (!hasEnteredValue(firstMatch(normalized, /Setup Style\s*([^\n]+)/i))) warnings.push("Meeting setup style is blank; classroom is shown for review.");
   if (/Lunch Catering\s*TBD/i.test(normalized)) warnings.push("Lunch catering is TBD and was not added to revenue.");
   const primaryContactName = firstMatch(normalized, /Primary Contact\s*([^\n]+)/i), primaryContactEmail = firstMatch(normalized, /(?:^|\n)Email\s*([^\n]+)/i), primaryContactPhone = firstMatch(normalized, /(?:^|\n)Phone\s*([^\n]+)/i);
-  return { profile: "courtyard_group_agreement_v1", warnings, groupRoom: { groupName, projectName: groupName, arrivalDate, departureDate, status: "tentative", peakRooms, totalRoomNights, roomTypeMix: roomLine.replace(/^\d+\s*/, ""), groupRate: lodgingRate, packageRate, breakfastPerPerson: breakfastRate, primaryContactName, primaryContactEmail, primaryContactPhone, breakfastNotes: firstMatch(normalized, /(?:^|\n)Breakfast\s*([^\n]+)/i) }, meeting: meetingStartDate ? { groupName, eventName: `${groupName} Meeting`, eventDate: meetingStartDate, eventEndDate: meetingEndDate, status: "tentative", meetingRoom: /pecan/i.test(meetingRoomRaw) && /cedar/i.test(meetingRoomRaw) ? "full_room" : /pecan/i.test(meetingRoomRaw) ? "pecan" : "cedar", roomSetup: "classroom", setupStartTime: "08:00", guestStartTime: "09:00", guestEndTime: "17:00", breakdownEndTime: "18:00", roomRentalRevenue: meetingRental || 0, breakfastPerPerson: 0, lunchDinnerPerPerson: 0, otherRevenue: 0, avRevenue: 0, clientName: primaryContactName, clientEmail: primaryContactEmail, clientPhone: primaryContactPhone, cateringNotes: breakfastRate ? `Breakfast allocation in room package: $${breakfastRate.toFixed(2)} per person. Review service dates separately.` : "" } : null };
+  return withCateringSelections({ profile: "courtyard_group_agreement_v1", warnings, groupRoom: { groupName, projectName: groupName, arrivalDate, departureDate, status: "tentative", peakRooms, totalRoomNights, roomTypeMix: roomLine.replace(/^\d+\s*/, ""), groupRate: lodgingRate, packageRate, breakfastPerPerson: breakfastRate, primaryContactName, primaryContactEmail, primaryContactPhone, breakfastNotes: firstMatch(normalized, /(?:^|\n)Breakfast\s*([^\n]+)/i) }, meeting: meetingStartDate ? { groupName, eventName: `${groupName} Meeting`, eventDate: meetingStartDate, eventEndDate: meetingEndDate, status: "tentative", meetingRoom: /pecan/i.test(meetingRoomRaw) && /cedar/i.test(meetingRoomRaw) ? "full_room" : /pecan/i.test(meetingRoomRaw) ? "pecan" : "cedar", roomSetup: "classroom", setupStartTime: "08:00", guestStartTime: "09:00", guestEndTime: "17:00", breakdownEndTime: "18:00", roomRentalRevenue: meetingRental || 0, breakfastPerPerson: 0, lunchDinnerPerPerson: 0, otherRevenue: 0, avRevenue: 0, clientName: primaryContactName, clientEmail: primaryContactEmail, clientPhone: primaryContactPhone, cateringNotes: breakfastRate ? `Breakfast allocation in room package: $${breakfastRate.toFixed(2)} per person. Review service dates separately.` : "" } : null });
 }
 async function auth(req: any, res: any, next: any) {
   try {
@@ -1027,6 +1035,14 @@ export async function createMeetingBeoPdf(event: any, seriesEvents: any[], space
   else { row("Associate / work / allocation", "____________________________________________________________"); row("Associate / work / allocation", "____________________________________________________________"); row("Associate / work / allocation", "____________________________________________________________"); }
   row("Allocation validation", `${allocations.reduce((sum: number, item: any) => sum + item.percentage, 0).toFixed(2)}% allocated (must total 100%)`);
   ensure(55); page.drawText("Manager approval: __________________________   Date: __________", { x: 52, y, size: 9, font: regular, color: ink }); y -= 24; page.drawText("Associate initials: __________________________________________________", { x: 52, y, size: 9, font: regular, color: ink });
+  if (serviceItems.length) {
+    addPage();
+    section("Catering menu selections");
+    for (const item of serviceItems) {
+      note(`${item.name} - ${money(item.unitPrice)} ${methodLabel[item.chargeMethod] || String(item.chargeMethod).replaceAll("_", " ")}`, `${item.serviceDates}. ${item.instructions || "Confirm service details with the catering manager."}`);
+      row("Estimated selection charge", money(serviceItemTotal(item, Number(event.attendance || 0), dates.length)), 20);
+    }
+  }
   pdf.getPages().forEach((item, index) => { item.drawText("Courtyard by Marriott Austin Northwest/Lakeline  |  12833 Ranch Road 620 N  |  Austin, TX 78750", { x: 46, y: 28, size: 7.5, font: regular, color: muted }); item.drawText(`Page ${index + 1}`, { x: 530, y: 28, size: 8, font: regular, color: muted }); });
   return pdf.save();
 }

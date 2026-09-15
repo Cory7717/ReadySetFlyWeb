@@ -1647,15 +1647,21 @@ export default function OpsReportPage() {
     const weekVariance = priorScore && currentScore ? `${difference > 0 ? "+" : ""}${rowValue(difference, 1)}` : "";
     return { ...row, priorWeek: priorScore, weekVariance };
   }), [gssWaveRows, previousGssWaveRows]);
+  const previousReputationRows = (previousDraft.data?.draft?.payload?.reputationRows || []) as Row[];
   const reputationRowsWithVariance = useMemo(() => reputationRows.map((row) => {
     const hasScore = String(row.score || "").trim() !== "";
     const hasGoal = String(row.goal || "").trim() !== "";
     const variance = hasScore && hasGoal ? num(row.score) - num(row.goal) : null;
+    const prior = previousReputationRows.find((item) => String(item.label || "").trim().toLowerCase() === String(row.label || "").trim().toLowerCase());
+    const priorWeek = String(prior?.score || "").trim();
+    const weekDifference = hasScore && priorWeek ? num(row.score) - num(priorWeek) : null;
     return {
       ...row,
+      priorWeek,
+      weekVariance: weekDifference == null ? "" : `${weekDifference > 0 ? "+" : ""}${rowValue(weekDifference, 2)}`,
       variance: variance == null ? "" : `${variance > 0 ? "+" : ""}${rowValue(variance, 2)}`,
     };
-  }), [reputationRows]);
+  }), [reputationRows, previousReputationRows]);
   const currentMonthKey = useMemo(() => monthKeyFromDate(topMetrics.weekStart), [topMetrics.weekStart]);
   const updateCurrentMonthRows = (nextRows: Row[]) => {
     const normalizedRows = normalizeCurrentMonthRows(nextRows);
@@ -3074,9 +3080,9 @@ export default function OpsReportPage() {
             </Section>
             <Section title="Online Reputation">
               <EditableTable
-                columns={[{ key: "label", label: "Name", wide: true }, { key: "reviews", label: "Total Reviews" }, { key: "score", label: "Current Score" }, { key: "outOf", label: "Out Of" }, { key: "goal", label: "Goal Score" }, { key: "variance", label: "Variance to Goal", readOnly: true }, { key: "strategy", label: "Strategy / Action Plan", wide: true }]}
+                columns={[{ key: "label", label: "Name", wide: true }, { key: "reviews", label: "Total Reviews" }, { key: "score", label: "Current Score" }, { key: "priorWeek", label: "Prior Week", readOnly: true }, { key: "weekVariance", label: "+/- Prior", readOnly: true, visualVariance: true }, { key: "outOf", label: "Out Of" }, { key: "goal", label: "Goal Score" }, { key: "variance", label: "Variance to Goal", readOnly: true, visualVariance: true }, { key: "strategy", label: "Strategy / Action Plan", wide: true }]}
                 rows={reputationRowsWithVariance}
-                onChange={(rows) => setReputationRows(rows.map(({ variance, ...row }) => row))}
+                onChange={(rows) => setReputationRows(rows.map(({ variance, priorWeek, weekVariance, ...row }) => row))}
               />
             </Section>
             <div className="overflow-hidden rounded-xl border border-[#cdbda8] bg-[#fffaf2] shadow-[0_12px_30px_rgba(72,52,31,0.08)]">

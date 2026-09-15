@@ -2982,14 +2982,13 @@ export default function OpsReportPage() {
                   </Button>
                 </div>
               </div>
-              <div className="border-b border-[#e0d3c1] bg-[#f4f7f9] p-4">
-                <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
-                  <div>
-                    <div className="text-sm font-semibold text-[#201814]">Bistro outlet + event labor model</div>
-                    <p className="mt-1 max-w-3xl text-xs text-[#5f5247]">
-                      Base outlet hours follow the occupancy scale. Definite Meeting Calendar event labor is added for setup, guest service, and breakdown; tentative demand is shown separately.
-                    </p>
-                  </div>
+              <details className="group border-b border-[#e0d3c1] bg-[#f4f7f9]">
+                <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 p-4 [&::-webkit-details-marker]:hidden">
+                  <div><div className="flex items-center gap-2 text-sm font-semibold text-[#201814]"><span className="inline-block text-[#315f86] transition-transform group-open:rotate-90">▶</span>Bistro outlet + event labor model</div><p className="mt-1 text-xs text-[#5f5247]">Expected {fmtHours(bistroLaborSummary.expectedHours)} hrs · {fmtHours(bistroEventLabor.confirmedHours)} confirmed event hrs · {fmtHours(bistroLaborSummary.uncoveredHours)} uncovered</p></div>
+                  <span className="rounded-full border border-[#cbd5df] bg-white px-3 py-1 text-xs font-semibold text-[#425466]">Expand details</span>
+                </summary>
+                <div className="border-t border-[#d7e0e6] p-4 pt-3">
+                  <div className="mb-3 flex flex-wrap items-start justify-between gap-3"><p className="max-w-3xl text-xs text-[#5f5247]">Base outlet hours follow the occupancy scale. Definite Meeting Calendar event labor is added for setup, guest service, and breakdown; tentative demand is shown separately.</p>
                   <Button variant="outline" className={C.outline} onClick={() => bistroLaborEvents.refetch()} disabled={bistroLaborEvents.isFetching}>
                     {bistroLaborEvents.isFetching ? "Refreshing events..." : "Refresh events"}
                   </Button>
@@ -3030,7 +3029,8 @@ export default function OpsReportPage() {
                     ))}
                   </div>
                 </details>
-              </div>
+                </div>
+              </details>
               <div className="border-b border-[#e0d3c1] bg-[#fbf6ee] p-4">
                 <div className="mb-3">
                   <div className="text-sm font-semibold text-[#201814]">Housekeeping operational labor model</div>

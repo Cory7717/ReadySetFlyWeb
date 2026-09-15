@@ -244,7 +244,11 @@ function defaultGssRows(includePrevious = false) {
 }
 
 function normalizeGssRows(rows: Row[] | undefined | null) {
-  return (Array.isArray(rows) ? rows : []).filter((row) => isTrackedGssLabel(row.label));
+  return (Array.isArray(rows) ? rows : []).filter((row) => isTrackedGssLabel(row.label)).map((row) => {
+    const comments = String(row.comments || "").trim();
+    const isLegacyImportSummary = /^(?:[a-z]{3}|selected month);\s*(?:ytd|total responses)\s+-?[\d,.]+$/i.test(comments) || /^wave to date\s*\/\s*ytd$/i.test(comments);
+    return isLegacyImportSummary ? { ...row, comments: "" } : row;
+  });
 }
 
 function money(value: string | number) {

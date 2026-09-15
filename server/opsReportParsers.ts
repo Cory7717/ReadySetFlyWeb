@@ -571,7 +571,7 @@ function parseGss(file: Express.Multer.File, sheets: Array<{ name: string; rows:
       brand: String(round(benchmark, 1)),
       variance: String(round(mtd - benchmark, 1)),
       sply: String(round(difference, 1)),
-      comments: `${monthName || "Selected month"}; ${label === "# of Responses" ? "total responses" : "YTD"} ${round(total, 1)}`,
+      comments: "",
       waveHotel: String(round(total, 1)),
       waveBrand: String(round(benchmark, 1)),
       waveVariance: String(round(total - benchmark, 1)),
@@ -585,7 +585,7 @@ function parseGss(file: Express.Multer.File, sheets: Array<{ name: string; rows:
     brand: row.waveBrand,
     variance: row.waveVariance,
     sply: row.waveSply,
-    comments: "Wave to date / YTD",
+    comments: "",
   }));
   return { ...baseReport(file, "gss_scores", context, warnings), preview: gssRows.slice(0, 10), mapping: { gssRows, gssWaveRows } };
 }

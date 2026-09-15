@@ -3073,10 +3073,10 @@ export default function OpsReportPage() {
                 uploading={opsReportUpload.isPending}
                 onUpload={(files) => uploadSectionReports("Guest Satisfaction", files)}
               />
-              <EditableTable columns={[{ key: "label", label: "GSS MTD", wide: true }, { key: "hotel", label: "Hotel" }, { key: "priorWeek", label: "Prior Week" }, { key: "weekVariance", label: "+/- Prior", visualVariance: true }, { key: "brand", label: "Brand / Continent" }, { key: "variance", label: "Variance", visualVariance: true }, { key: "sply", label: "SPLY Variance", visualVariance: true }, { key: "comments", label: "Comments", wide: true }]} rows={gssRowsWithPrevious} onChange={(rows) => setGssRows(stripDerivedComparisonColumns(rows))} />
+              <EditableTable columns={[{ key: "label", label: "GSS MTD", wide: true }, { key: "hotel", label: "Hotel" }, { key: "priorWeek", label: "Prior Week" }, { key: "weekVariance", label: "+/- Prior", visualVariance: true }, { key: "brand", label: "Brand / Continent" }, { key: "variance", label: "Variance", visualVariance: true }, { key: "comments", label: "Comments", wide: true }]} rows={gssRowsWithPrevious} onChange={(rows) => setGssRows(stripDerivedComparisonColumns(rows))} />
             </Section>
             <Section title="GSS Wave To Date">
-              <EditableTable columns={[{ key: "label", label: "GSS Wave To Date", wide: true }, { key: "hotel", label: "Hotel" }, { key: "priorWeek", label: "Prior Week" }, { key: "weekVariance", label: "+/- Prior", visualVariance: true }, { key: "brand", label: "Brand / Continent" }, { key: "variance", label: "Variance", visualVariance: true }, { key: "sply", label: "SPLY Variance", visualVariance: true }, { key: "comments", label: "Comments", wide: true }]} rows={gssWaveRowsWithPrevious} onChange={(rows) => setGssWaveRows(stripDerivedComparisonColumns(rows))} />
+              <EditableTable columns={[{ key: "label", label: "GSS Wave To Date", wide: true }, { key: "hotel", label: "Hotel" }, { key: "priorWeek", label: "Prior Week" }, { key: "weekVariance", label: "+/- Prior", visualVariance: true }, { key: "brand", label: "Brand / Continent" }, { key: "variance", label: "Variance", visualVariance: true }, { key: "comments", label: "Comments", wide: true }]} rows={gssWaveRowsWithPrevious} onChange={(rows) => setGssWaveRows(stripDerivedComparisonColumns(rows))} />
             </Section>
             <Section title="Online Reputation">
               <EditableTable

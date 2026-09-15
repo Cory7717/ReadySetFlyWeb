@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type FocusEvent, type MouseEvent, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, FileSpreadsheet, FileText, LockKeyhole, LogOut, Plus, Trash2, Upload } from "lucide-react";
+import { ArrowDown, ArrowUp, Download, FileSpreadsheet, FileText, LockKeyhole, LogOut, Minus, Plus, Trash2, Upload } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -1041,10 +1041,10 @@ function EditableTable({
   allowRowActions = false,
   addRowLabel = "Add row",
 }: {
-  columns: Array<{ key: string; label: string; wide?: boolean; readOnly?: boolean }>;
+  columns: Array<{ key: string; label: string; wide?: boolean; readOnly?: boolean; visualVariance?: boolean }>;
   rows: Row[];
   onChange: (rows: Row[]) => void;
-  getCellPreview?: (row: Row, column: { key: string; label: string; wide?: boolean; readOnly?: boolean }) => { label: string; text: string } | null;
+  getCellPreview?: (row: Row, column: { key: string; label: string; wide?: boolean; readOnly?: boolean; visualVariance?: boolean }) => { label: string; text: string } | null;
   allowRowActions?: boolean;
   addRowLabel?: string;
 }) {
@@ -1062,7 +1062,7 @@ function EditableTable({
     const nextRows = rows.filter((_, index) => index !== rowIndex);
     onChange(renumberRows(nextRows.length ? nextRows : [editableColumns.reduce<Row>((row, column) => ({ ...row, [column.key]: column.key === "no" ? "1" : "" }), {})]));
   };
-  const showPreview = (event: MouseEvent<HTMLInputElement> | FocusEvent<HTMLInputElement>, row: Row, column: { key: string; label: string; wide?: boolean; readOnly?: boolean }) => {
+  const showPreview = (event: MouseEvent<HTMLInputElement> | FocusEvent<HTMLInputElement>, row: Row, column: { key: string; label: string; wide?: boolean; readOnly?: boolean; visualVariance?: boolean }) => {
     const customPreview = getCellPreview?.(row, column);
     const text = customPreview?.text || String(row[column.key] || "").trim();
     const label = customPreview?.label || column.label;
@@ -1085,11 +1085,22 @@ function EditableTable({
         <tbody>
           {rows.map((row, rowIndex) => (
             <tr key={rowIndex} className={`${row.__readOnly === "true" ? "bg-[#e8f0e9] font-semibold" : "odd:bg-white even:bg-[#fbf6ee]"}`}>
-              {columns.map((column) => (
-                <td key={column.key} className="border border-[#e0d3c1] p-1 align-top">
+              {columns.map((column) => {
+                const rawValue = String(row[column.key] || "").trim();
+                const varianceValue = num(rawValue);
+                const varianceClass = !rawValue || varianceValue === 0
+                  ? "!border-slate-200 !bg-slate-50 !text-slate-700"
+                  : varianceValue > 0
+                    ? "!border-emerald-300 !bg-emerald-50 !text-emerald-900"
+                    : "!border-rose-300 !bg-rose-50 !text-rose-900";
+                const VarianceIcon = varianceValue > 0 ? ArrowUp : varianceValue < 0 ? ArrowDown : Minus;
+                const readOnly = row.__readOnly === "true" || column.readOnly || column.key === "priorWeek" || column.key === "weekVariance";
+                return <td key={column.key} className="border border-[#e0d3c1] p-1 align-top">
+                  <div className="relative">
+                    {column.visualVariance && <VarianceIcon aria-hidden="true" className={`pointer-events-none absolute left-2 top-1/2 z-10 h-4 w-4 -translate-y-1/2 ${varianceValue > 0 ? "text-emerald-700" : varianceValue < 0 ? "text-rose-700" : "text-slate-500"}`} />}
                   <Input
-                    readOnly={row.__readOnly === "true" || column.readOnly || column.key === "priorWeek" || column.key === "weekVariance"}
-                    className={`h-9 border-transparent bg-transparent px-2 text-sm font-medium text-[#201814] placeholder:text-[#7c6e61] focus:border-[#b98435] focus:bg-white ${row.__readOnly === "true" || column.readOnly || column.key === "priorWeek" || column.key === "weekVariance" ? "!bg-[#f3efe7] !text-[#5f5247]" : ""}`}
+                    readOnly={readOnly}
+                    className={`h-9 border-transparent bg-transparent px-2 text-sm font-medium text-[#201814] placeholder:text-[#7c6e61] focus:border-[#b98435] focus:bg-white ${column.visualVariance ? `pl-8 font-bold ${varianceClass}` : readOnly ? "!bg-[#f3efe7] !text-[#5f5247]" : ""}`}
                     value={row[column.key] || ""}
                     onMouseEnter={(event) => showPreview(event, row, column)}
                     onMouseLeave={() => setPreview(null)}
@@ -1104,13 +1115,14 @@ function EditableTable({
                       onChange(next);
                     }}
                     onChange={(event) => {
-                      if (row.__readOnly === "true" || column.readOnly || column.key === "priorWeek" || column.key === "weekVariance") return;
+                      if (readOnly) return;
                       const next = rows.map((item, index) => index === rowIndex ? { ...item, [column.key]: event.target.value } : item);
                       onChange(next);
                     }}
                   />
+                  </div>
                 </td>
-              ))}
+              })}
               {allowRowActions && (
                 <td className="border border-[#e0d3c1] p-1 align-top">
                   <Button
@@ -1622,7 +1634,8 @@ export default function OpsReportPage() {
     const prior = previousGssRows.find((item) => item.label === row.label);
     const priorScore = prior?.hotel || "";
     const currentScore = row.hotel || "";
-    const weekVariance = priorScore && currentScore ? rowValue(num(currentScore) - num(priorScore), 1) : "";
+    const difference = num(currentScore) - num(priorScore);
+    const weekVariance = priorScore && currentScore ? `${difference > 0 ? "+" : ""}${rowValue(difference, 1)}` : "";
     return { ...row, priorWeek: priorScore, weekVariance };
   }), [gssRows, previousGssRows]);
   const previousGssWaveRows = (previousDraft.data?.draft?.payload?.gssWaveRows || []) as Row[];
@@ -1630,7 +1643,8 @@ export default function OpsReportPage() {
     const prior = previousGssWaveRows.find((item) => item.label === row.label);
     const priorScore = prior?.hotel || "";
     const currentScore = row.hotel || "";
-    const weekVariance = priorScore && currentScore ? rowValue(num(currentScore) - num(priorScore), 1) : "";
+    const difference = num(currentScore) - num(priorScore);
+    const weekVariance = priorScore && currentScore ? `${difference > 0 ? "+" : ""}${rowValue(difference, 1)}` : "";
     return { ...row, priorWeek: priorScore, weekVariance };
   }), [gssWaveRows, previousGssWaveRows]);
   const reputationRowsWithVariance = useMemo(() => reputationRows.map((row) => {
@@ -3053,10 +3067,10 @@ export default function OpsReportPage() {
                 uploading={opsReportUpload.isPending}
                 onUpload={(files) => uploadSectionReports("Guest Satisfaction", files)}
               />
-              <EditableTable columns={[{ key: "label", label: "GSS MTD", wide: true }, { key: "hotel", label: "Hotel" }, { key: "priorWeek", label: "Prior Week" }, { key: "weekVariance", label: "+/- Prior" }, { key: "brand", label: "Brand / Continent" }, { key: "variance", label: "Variance" }, { key: "sply", label: "SPLY Variance" }, { key: "comments", label: "Comments", wide: true }]} rows={gssRowsWithPrevious} onChange={(rows) => setGssRows(stripDerivedComparisonColumns(rows))} />
+              <EditableTable columns={[{ key: "label", label: "GSS MTD", wide: true }, { key: "hotel", label: "Hotel" }, { key: "priorWeek", label: "Prior Week" }, { key: "weekVariance", label: "+/- Prior", visualVariance: true }, { key: "brand", label: "Brand / Continent" }, { key: "variance", label: "Variance", visualVariance: true }, { key: "sply", label: "SPLY Variance", visualVariance: true }, { key: "comments", label: "Comments", wide: true }]} rows={gssRowsWithPrevious} onChange={(rows) => setGssRows(stripDerivedComparisonColumns(rows))} />
             </Section>
             <Section title="GSS Wave To Date">
-              <EditableTable columns={[{ key: "label", label: "GSS Wave To Date", wide: true }, { key: "hotel", label: "Hotel" }, { key: "priorWeek", label: "Prior Week" }, { key: "weekVariance", label: "+/- Prior" }, { key: "brand", label: "Brand / Continent" }, { key: "variance", label: "Variance" }, { key: "sply", label: "SPLY Variance" }, { key: "comments", label: "Comments", wide: true }]} rows={gssWaveRowsWithPrevious} onChange={(rows) => setGssWaveRows(stripDerivedComparisonColumns(rows))} />
+              <EditableTable columns={[{ key: "label", label: "GSS Wave To Date", wide: true }, { key: "hotel", label: "Hotel" }, { key: "priorWeek", label: "Prior Week" }, { key: "weekVariance", label: "+/- Prior", visualVariance: true }, { key: "brand", label: "Brand / Continent" }, { key: "variance", label: "Variance", visualVariance: true }, { key: "sply", label: "SPLY Variance", visualVariance: true }, { key: "comments", label: "Comments", wide: true }]} rows={gssWaveRowsWithPrevious} onChange={(rows) => setGssWaveRows(stripDerivedComparisonColumns(rows))} />
             </Section>
             <Section title="Online Reputation">
               <EditableTable

@@ -3096,9 +3096,6 @@ export default function OpsReportPage() {
             <Section title="Brand / Guest Relation Cases">
               <EditableTable columns={[{ key: "no", label: "S No" }, { key: "guest", label: "Guest Name" }, { key: "incidentType", label: "Incident Type" }, { key: "resolution", label: "Resolution / Compensation" }, { key: "comment", label: "Incident / Comment", wide: true }]} rows={cases} onChange={setCases} />
             </Section>
-            <Section title="GM Weekly Overview">
-              <BulletRowsEditor rows={gmOverviewRows} onChange={setGmOverviewRows} />
-            </Section>
             <Section title="Guest Satisfaction Scores" right={<GssScoreLegend />}>
               <SectionReportUpload
                 reports={reportGuideFor("GSS Scores")}
@@ -3132,6 +3129,9 @@ export default function OpsReportPage() {
                 <EditableTable columns={[{ key: "source", label: "Source" }, { key: "score", label: "Overall Score" }, { key: "comment", label: "Guest Comments", wide: true }]} rows={negativeReviews} onChange={setNegativeReviews} />
               </Section>
             </div>
+            <Section title="GM Weekly Overview">
+              <BulletRowsEditor rows={gmOverviewRows} onChange={setGmOverviewRows} />
+            </Section>
             <Section title="Corporate Director Review & Weekly Follow-Up">
               <EditableTable columns={[{ key: "point", label: "Discussion Point", wide: true }, { key: "direction", label: "Direction Given", wide: true }, { key: "owner", label: "Owner" }, { key: "dueDate", label: "Due Date" }, { key: "status", label: "Status" }, { key: "notes", label: "Notes", wide: true }]} rows={followUp} onChange={setFollowUp} />
             </Section>

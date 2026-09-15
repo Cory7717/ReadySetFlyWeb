@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FocusEvent, type MouseEvent, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type FocusEvent, type MouseEvent, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp, Download, FileSpreadsheet, FileText, LockKeyhole, LogOut, Minus, Plus, Trash2, Upload } from "lucide-react";
 import { apiUrl } from "@/lib/api";
@@ -1066,6 +1066,7 @@ function EditableTable({
   rows,
   onChange,
   getCellPreview,
+  renderSubRow,
   allowRowActions = false,
   addRowLabel = "Add row",
 }: {
@@ -1073,6 +1074,7 @@ function EditableTable({
   rows: Row[];
   onChange: (rows: Row[]) => void;
   getCellPreview?: (row: Row, column: { key: string; label: string; wide?: boolean; readOnly?: boolean; visualVariance?: boolean; visualScore?: boolean }) => { label: string; text: string } | null;
+  renderSubRow?: (row: Row) => ReactNode;
   allowRowActions?: boolean;
   addRowLabel?: string;
 }) {
@@ -1112,7 +1114,8 @@ function EditableTable({
         </thead>
         <tbody>
           {rows.map((row, rowIndex) => (
-            <tr key={rowIndex} className={`${row.__readOnly === "true" ? "bg-[#e8f0e9] font-semibold" : "odd:bg-white even:bg-[#fbf6ee]"}`}>
+            <Fragment key={rowIndex}>
+            <tr className={`${row.__readOnly === "true" ? "bg-[#e8f0e9] font-semibold" : "odd:bg-white even:bg-[#fbf6ee]"}`}>
               {columns.map((column) => {
                 const rawValue = String(row[column.key] || "").trim();
                 const varianceValue = num(rawValue);
@@ -1171,6 +1174,8 @@ function EditableTable({
                 </td>
               )}
             </tr>
+            {renderSubRow?.(row) && <tr><td colSpan={columns.length + (allowRowActions ? 1 : 0)} className="border border-[#e0d3c1] bg-[#f4f7f9] p-0">{renderSubRow(row)}</td></tr>}
+            </Fragment>
           ))}
         </tbody>
       </table>
@@ -2989,7 +2994,7 @@ export default function OpsReportPage() {
                     {bistroLaborEvents.isFetching ? "Refreshing events..." : "Refresh events"}
                   </Button>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+                <div className="grid items-end gap-3 sm:grid-cols-2 xl:grid-cols-3">
                   <LabeledInput label="Guests per attendant" value={bistroEventLaborModel.attendeesPerAttendant} onChange={(attendeesPerAttendant) => setBistroEventLaborModel({ ...bistroEventLaborModel, attendeesPerAttendant })} type="number" />
                   <LabeledInput label="Minimum service attendants" value={bistroEventLaborModel.minimumServiceAttendants} onChange={(minimumServiceAttendants) => setBistroEventLaborModel({ ...bistroEventLaborModel, minimumServiceAttendants })} type="number" />
                   <LabeledInput label="Setup staff" value={bistroEventLaborModel.setupStaff} onChange={(setupStaff) => setBistroEventLaborModel({ ...bistroEventLaborModel, setupStaff })} type="number" />
@@ -3006,7 +3011,7 @@ export default function OpsReportPage() {
                     </Select>
                   </div>
                 </div>
-                <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   <div className="rounded-lg border border-[#cbd5df] bg-white p-3"><div className="text-xs text-[#5f5247]">Base outlet</div><div className="text-xl font-semibold text-[#201814]">{effectiveLabor.find((row) => row.department === "BREAKFAST / BISTRO HOURS")?.baseOutletExpectedHours || "0"} hrs</div></div>
                   <div className="rounded-lg border border-[#b8d6c0] bg-[#edf5ef] p-3"><div className="text-xs text-[#315a3f]">Confirmed event labor</div><div className="text-xl font-semibold text-[#173c25]">{fmtHours(bistroEventLabor.confirmedHours)} hrs</div></div>
                   <div className="rounded-lg border border-[#dcc9aa] bg-[#fff8e8] p-3"><div className="text-xs text-[#765b2f]">Tentative event forecast</div><div className="text-xl font-semibold text-[#5f431d]">{fmtHours(bistroEventLabor.tentativeHours)} hrs</div></div>
@@ -3030,7 +3035,7 @@ export default function OpsReportPage() {
                 <div className="mb-3">
                   <div className="text-sm font-semibold text-[#201814]">Housekeeping operational labor model</div>
                   <p className="mt-1 text-xs text-[#5f5247]">
-                    Operational Expected Hours include every Housekeeping function below. The separate Ownership Target remains fixed at 30 MPOR for the full department.
+                    Operational Expected Hours include every Housekeeping function below. The ownership benchmark of 30 MPOR is summarized directly beneath the Housekeeping department row.
                   </p>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -3067,13 +3072,8 @@ export default function OpsReportPage() {
                   { key: "actualHours", label: "Actual Hours" },
                   { key: "budget", label: "Operational Expected", readOnly: true },
                   { key: "variance", label: "Operational Variance", readOnly: true },
-                  { key: "ownershipTargetHours", label: "Ownership Target", readOnly: true },
-                  { key: "ownershipVariance", label: "Ownership Variance", readOnly: true },
                   { key: "estimatedActualWages", label: "Est. Wages", readOnly: true },
                   { key: "estimatedActualWagesWithSalary", label: "Est. Wages w/ Salary", readOnly: true },
-                  { key: "calculatedMpor", label: "Actual MPOR", readOnly: true },
-                  { key: "targetMpor", label: "Target MPOR", readOnly: true },
-                  { key: "mporVariance", label: "MPOR Variance", readOnly: true },
                   { key: "comments", label: "Comments", wide: true },
                 ]}
                 rows={laborRows}
@@ -3081,6 +3081,7 @@ export default function OpsReportPage() {
                   .filter((row) => row.__readOnly !== "true")
                   .map(({ __readOnly, variance, ownershipTargetHours, ownershipVariance, roomAttendantExpectedHours, laundryExpectedHours, supervisorInspectorExpectedHours, housepersonPublicAreaExpectedHours, baseOutletExpectedHours, confirmedEventExpectedHours, tentativeEventExpectedHours, estimatedActualWages, estimatedActualWagesWithSalary, calculatedMpor, targetMpor, mporVariance, ...row }) => row))}
                 getCellPreview={laborDepartmentPreview}
+                renderSubRow={(row) => String(row.department || "").trim().toUpperCase() === "HOUSEKEEPING HOURS" ? <div className="flex flex-wrap items-center gap-2 px-3 py-2.5"><span className="mr-1 text-xs font-bold uppercase tracking-[0.12em] text-[#315f86]">Housekeeping MPOR</span><span className="rounded-full border border-[#cbd5df] bg-white px-3 py-1 text-xs text-[#425466]">Actual <strong className="ml-1 text-[#201814]">{row.calculatedMpor || "—"}</strong></span><span className="rounded-full border border-[#cbd5df] bg-white px-3 py-1 text-xs text-[#425466]">Target <strong className="ml-1 text-[#201814]">{row.targetMpor || "30.0"}</strong></span><span className={`rounded-full border px-3 py-1 text-xs ${varianceTone(-num(row.mporVariance))}`}>Variance <strong className="ml-1">{row.mporVariance || "—"}</strong></span><span className="text-xs text-[#5f5247]">minutes per occupied room · full department</span></div> : null}
               />
             </Section>
             <Section title="Staffing">

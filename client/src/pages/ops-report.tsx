@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type FocusEvent, type MouseEvent, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, Download, FileSpreadsheet, FileText, LockKeyhole, LogOut, Minus, Plus, Trash2, Upload } from "lucide-react";
+import { ArrowDown, ArrowUp, Download, FileSpreadsheet, FileText, LockKeyhole, LogOut, Menu, Minus, Plus, Trash2, Upload } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -33,6 +33,16 @@ const C = {
   darkLabel: "!text-[#f0d9b0]",
   menu: "!border-[#cdbda8] !bg-white !text-[#201814]",
 };
+
+const OPS_SECTION_LINKS = [
+  ["Weekly performance", "weekly-performance"], ["Current month", "current-month"], ["Next month", "next-month"],
+  ["Chargebacks", "weekly-chargebacks"], ["Maintenance", "weekly-maintenance"], ["Out-of-order rooms", "ooo-rooms"],
+  ["Revenue adjustments", "revenue-adjustments"], ["Accounts receivable", "accounts-receivable"], ["Guest ledger", "guest-ledger"],
+  ["Department labor", "department-labor"], ["Staffing", "staffing"], ["Guest relation cases", "guest-relation-cases"],
+  ["GSS scores", "gss-scores"], ["GSS wave to date", "gss-wave"], ["Online reputation", "online-reputation"],
+  ["Weekly reviews", "weekly-reviews"], ["GM weekly overview", "gm-overview"], ["Corporate follow-up", "corporate-follow-up"],
+  ["Next-week priorities", "next-week-priorities"],
+] as const;
 
 type OpsAccess = { unlocked: boolean; user: { employeeDisplayName: string; email: string; isAdmin: boolean } | null; hasPin?: boolean; passwordChangeRequired?: boolean };
 type Row = Record<string, string>;
@@ -843,9 +853,9 @@ function DarkLabeledInput({ label, value, onChange, type = "text", moneyFormat =
   );
 }
 
-function Section({ title, children, right }: { title: string; children: ReactNode; right?: ReactNode }) {
+function Section({ title, children, right, id }: { title: string; children: ReactNode; right?: ReactNode; id?: string }) {
   return (
-    <Card className={C.section}>
+    <Card id={id} className={`${C.section} scroll-mt-24`}>
       <CardHeader className="border-b border-[#d7c8b5] bg-[#fffaf2] py-3">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <CardTitle className="text-base font-semibold text-[#201814]">{title}</CardTitle>
@@ -1205,6 +1215,7 @@ export default function OpsReportPage() {
   const queryClient = useQueryClient();
   const [pin, setPin] = useState("");
   const [week, setWeek] = useState("Week 1");
+  const [activeReportTab, setActiveReportTab] = useState("weekly");
   const [setup, setSetup] = useState({ propertyName: "Courtyard Austin Lakeline", generalManager: "", totalRooms: "" });
   const [topMetrics, setTopMetrics] = useState({ weekStart: "2026-01-03", occupancy: "", roomsSold: "", roomRevenue: "", mtdThisYear: "", mtdLastYear: "", ytdThisYear: "", ytdLastYear: "" });
   const [monthRows, setMonthRows] = useState<Row[]>([
@@ -2373,6 +2384,11 @@ export default function OpsReportPage() {
     });
   }, [monthlyBudgets, currentMonthKey, monthRows]);
 
+  const jumpToSection = (sectionId: string) => {
+    setActiveReportTab("weekly");
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => document.getElementById(sectionId)?.scrollIntoView({ behavior: "smooth", block: "start" })));
+  };
+
   if (access.isLoading) return <div className={`${C.page} p-8`}>Loading operations report...</div>;
   if (!access.data?.unlocked) {
     return (
@@ -2417,6 +2433,14 @@ export default function OpsReportPage() {
             <h1 className="text-3xl font-semibold tracking-tight">Operations Report</h1>
           </div>
           <div className="flex flex-wrap gap-2">
+            <div className="group relative z-40">
+              <Button type="button" variant="outline" className={C.outline} aria-label="Jump to report section" aria-haspopup="menu"><Menu className="mr-2 h-4 w-4" />Sections</Button>
+              <div className="invisible absolute right-0 top-full z-50 w-64 pt-2 opacity-0 transition group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">
+                <div className="max-h-[70vh] overflow-y-auto rounded-lg border border-[#cdbda8] bg-white p-1.5 text-[#201814] shadow-xl" role="menu">
+                  {OPS_SECTION_LINKS.map(([label, sectionId]) => <button key={sectionId} type="button" role="menuitem" className="block w-full rounded-md px-3 py-2 text-left text-sm hover:bg-[#f8efe2] focus:bg-[#f8efe2] focus:outline-none" onClick={() => jumpToSection(sectionId)}>{label}</button>)}
+                </div>
+              </div>
+            </div>
             <Select value={week} onValueChange={handleWeekLabelChange}>
               <SelectTrigger className={`w-32 ${C.field}`}><SelectValue /></SelectTrigger>
               <SelectContent className={C.menu}>{Array.from({ length: 52 }, (_, index) => <SelectItem key={index + 1} value={`Week ${index + 1}`}>Week {index + 1}</SelectItem>)}</SelectContent>
@@ -2537,7 +2561,7 @@ export default function OpsReportPage() {
           </Accordion>
         </div>
 
-        <Tabs defaultValue="weekly" className="space-y-5">
+        <Tabs value={activeReportTab} onValueChange={setActiveReportTab} className="space-y-5">
           <TabsList className="bg-[#fffaf2]">
             <TabsTrigger value="weekly">Weekly worksheet</TabsTrigger>
             <TabsTrigger value="summary">Summary dashboard</TabsTrigger>
@@ -2775,7 +2799,7 @@ export default function OpsReportPage() {
           </TabsContent>
 
           <TabsContent value="weekly" className="space-y-5">
-            <Card className={C.darkShell}>
+            <Card id="weekly-performance" className={`${C.darkShell} scroll-mt-24`}>
               <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <div className="flex items-center gap-2"><FileSpreadsheet className="h-5 w-5 text-[#b9d8c2]" /><CardTitle>{week} Report</CardTitle></div>
@@ -2862,7 +2886,7 @@ export default function OpsReportPage() {
               </CardContent>
             </Card>
 
-            <Section title="Current Month">
+            <Section id="current-month" title="Current Month">
               <SectionReportUpload
                 reports={reportGuideFor("Current Month OTB", "Remaining Month OTB", "Current Month SDLY OTB")}
                 multiple
@@ -2877,7 +2901,7 @@ export default function OpsReportPage() {
                 Positive values are ahead of the comparison; negative values are behind.
               </div>
             </Section>
-            <Section title="Next Month Data">
+            <Section id="next-month" title="Next Month Data">
               <SectionReportUpload
                 reports={reportGuideFor("Next Month OTB")}
                 uploading={opsReportUpload.isPending}
@@ -2885,10 +2909,10 @@ export default function OpsReportPage() {
               />
               <EditableTable columns={[{ key: "label", label: "Next Month", wide: true }, { key: "occupancy", label: "Occupancy" }, { key: "rooms", label: "Rooms" }, { key: "adr", label: "ADR" }, { key: "revenue", label: "Room Revenue" }, { key: "comments", label: "Comments", wide: true }]} rows={nextMonthRows} onChange={setNextMonthRows} />
             </Section>
-            <Section title="Weekly Chargebacks">
+            <Section id="weekly-chargebacks" title="Weekly Chargebacks">
               <EditableTable columns={[{ key: "no", label: "S No" }, { key: "reason", label: "Reason", wide: true }, { key: "respondDate", label: "Respond Date" }, { key: "amount", label: "Total Amount" }, { key: "comment", label: "Comment", wide: true }]} rows={chargebacks} onChange={setChargebacks} />
             </Section>
-            <Section title="Major Weekly Maintenance Tasks">
+            <Section id="weekly-maintenance" title="Major Weekly Maintenance Tasks">
               <EditableTable
                 columns={[{ key: "no", label: "S No" }, { key: "rooms", label: "P.M. Rooms" }, { key: "area", label: "Area" }, { key: "hours", label: "Time Consumed Hrs" }, { key: "comment", label: "Comment", wide: true }]}
                 rows={maintenance}
@@ -2897,7 +2921,7 @@ export default function OpsReportPage() {
                 addRowLabel="Add maintenance row"
               />
             </Section>
-            <Section title="Weekly Out of Order Rooms">
+            <Section id="ooo-rooms" title="Weekly Out of Order Rooms">
               <SectionReportUpload
                 reports={reportGuideFor("OOO Rooms")}
                 uploading={opsReportUpload.isPending}
@@ -2905,10 +2929,10 @@ export default function OpsReportPage() {
               />
               <EditableTable columns={[{ key: "no", label: "S No" }, { key: "room", label: "Room No" }, { key: "startDate", label: "OOO Start Date" }, { key: "returnDate", label: "Expected Return" }, { key: "comment", label: "Comment", wide: true }]} rows={oooRooms} onChange={setOooRooms} />
             </Section>
-            <Section title="Week's Total Revenue Adjustments" right={<Badge variant="outline">{money(adjustmentTotal)}</Badge>}>
+            <Section id="revenue-adjustments" title="Week's Total Revenue Adjustments" right={<Badge variant="outline">{money(adjustmentTotal)}</Badge>}>
               <EditableTable columns={[{ key: "no", label: "S No" }, { key: "room", label: "Room No" }, { key: "guest", label: "Guest Name" }, { key: "amount", label: "Adjustment Amount" }, { key: "comment", label: "Reason/Comment", wide: true }]} rows={adjustments} onChange={setAdjustments} />
             </Section>
-            <Section title="Accounts Receivable / Aging" right={<Badge variant="outline">Total {money(arTotal)}</Badge>}>
+            <Section id="accounts-receivable" title="Accounts Receivable / Aging" right={<Badge variant="outline">Total {money(arTotal)}</Badge>}>
               <SectionReportUpload
                 reports={reportGuideFor("AR Aging")}
                 uploading={opsReportUpload.isPending}
@@ -2922,7 +2946,7 @@ export default function OpsReportPage() {
                 <LabeledInput label="Comments" value={ar.comments} onChange={(comments) => setAr({ ...ar, comments })} />
               </div>
             </Section>
-            <Section title="Guest Ledger Balance">
+            <Section id="guest-ledger" title="Guest Ledger Balance">
               <SectionReportUpload
                 reports={reportGuideFor("Credit Limit / Guest Ledger")}
                 uploading={opsReportUpload.isPending}
@@ -2949,7 +2973,7 @@ export default function OpsReportPage() {
                 onChange={setLedgerExceptions}
               />
             </Section>
-            <Section title="Department Labor Review (Controllable)" right={<Badge variant="outline">Actual vs Expected {fmtHours(laborVariance)}</Badge>}>
+            <Section id="department-labor" title="Department Labor Review (Controllable)" right={<Badge variant="outline">Actual vs Expected {fmtHours(laborVariance)}</Badge>}>
               <div className="flex flex-col gap-3 border-b border-[#e0d3c1] p-4 lg:flex-row lg:items-end lg:justify-between">
                 <div>
                   <div className="text-sm font-semibold text-[#201814]">Scheduled, Actual, and Expected Hours</div>
@@ -3084,7 +3108,7 @@ export default function OpsReportPage() {
                 renderSubRow={(row) => String(row.department || "").trim().toUpperCase() === "HOUSEKEEPING HOURS" ? <div className="flex flex-wrap items-center gap-2 px-3 py-2.5"><span className="mr-1 text-xs font-bold uppercase tracking-[0.12em] text-[#315f86]">Housekeeping MPOR</span><span className="rounded-full border border-[#cbd5df] bg-white px-3 py-1 text-xs text-[#425466]">Actual <strong className="ml-1 text-[#201814]">{row.calculatedMpor || "—"}</strong></span><span className="rounded-full border border-[#cbd5df] bg-white px-3 py-1 text-xs text-[#425466]">Target <strong className="ml-1 text-[#201814]">{row.targetMpor || "30.0"}</strong></span><span className={`rounded-full border px-3 py-1 text-xs ${varianceTone(-num(row.mporVariance))}`}>Variance <strong className="ml-1">{row.mporVariance || "—"}</strong></span><span className="text-xs text-[#5f5247]">minutes per occupied room · full department</span></div> : null}
               />
             </Section>
-            <Section title="Staffing">
+            <Section id="staffing" title="Staffing">
               <div className="grid gap-3 p-4 md:grid-cols-5">
                 <LabeledInput label="Any open positions" value={staffing.openPositions} onChange={(openPositions) => setStaffing({ ...staffing, openPositions })} />
                 <LabeledInput label="Status" value={staffing.status} onChange={(status) => setStaffing({ ...staffing, status })} />
@@ -3093,10 +3117,10 @@ export default function OpsReportPage() {
                 <LabeledInput label="Comment" value={staffing.comment} onChange={(comment) => setStaffing({ ...staffing, comment })} />
               </div>
             </Section>
-            <Section title="Brand / Guest Relation Cases">
+            <Section id="guest-relation-cases" title="Brand / Guest Relation Cases">
               <EditableTable columns={[{ key: "no", label: "S No" }, { key: "guest", label: "Guest Name" }, { key: "incidentType", label: "Incident Type" }, { key: "resolution", label: "Resolution / Compensation" }, { key: "comment", label: "Incident / Comment", wide: true }]} rows={cases} onChange={setCases} />
             </Section>
-            <Section title="Guest Satisfaction Scores" right={<GssScoreLegend />}>
+            <Section id="gss-scores" title="Guest Satisfaction Scores" right={<GssScoreLegend />}>
               <SectionReportUpload
                 reports={reportGuideFor("GSS Scores")}
                 uploading={opsReportUpload.isPending}
@@ -3104,17 +3128,17 @@ export default function OpsReportPage() {
               />
               <EditableTable columns={[{ key: "label", label: "GSS MTD", wide: true }, { key: "hotel", label: "Hotel", visualScore: true }, { key: "priorWeek", label: "Prior Week", visualScore: true }, { key: "weekVariance", label: "+/- Prior", visualVariance: true }, { key: "brand", label: "Brand / Continent", visualScore: true }, { key: "variance", label: "Variance", visualVariance: true }, { key: "comments", label: "Comments", wide: true }]} rows={gssRowsWithPrevious} onChange={(rows) => setGssRows(stripDerivedComparisonColumns(rows))} />
             </Section>
-            <Section title="GSS Wave To Date" right={<GssScoreLegend />}>
+            <Section id="gss-wave" title="GSS Wave To Date" right={<GssScoreLegend />}>
               <EditableTable columns={[{ key: "label", label: "GSS Wave To Date", wide: true }, { key: "hotel", label: "Hotel", visualScore: true }, { key: "priorWeek", label: "Prior Week", visualScore: true }, { key: "weekVariance", label: "+/- Prior", visualVariance: true }, { key: "brand", label: "Brand / Continent", visualScore: true }, { key: "variance", label: "Variance", visualVariance: true }, { key: "comments", label: "Comments", wide: true }]} rows={gssWaveRowsWithPrevious} onChange={(rows) => setGssWaveRows(stripDerivedComparisonColumns(rows))} />
             </Section>
-            <Section title="Online Reputation">
+            <Section id="online-reputation" title="Online Reputation">
               <EditableTable
                 columns={[{ key: "label", label: "Name", wide: true }, { key: "reviews", label: "Total Reviews" }, { key: "score", label: "Current Score" }, { key: "priorWeek", label: "Prior Week", readOnly: true }, { key: "weekVariance", label: "+/- Prior", readOnly: true, visualVariance: true }, { key: "outOf", label: "Out Of" }, { key: "goal", label: "Goal Score" }, { key: "variance", label: "Variance to Goal", readOnly: true, visualVariance: true }, { key: "strategy", label: "Strategy / Action Plan", wide: true }]}
                 rows={reputationRowsWithVariance}
                 onChange={(rows) => setReputationRows(rows.map(({ variance, priorWeek, weekVariance, ...row }) => row))}
               />
             </Section>
-            <div className="overflow-hidden rounded-xl border border-[#cdbda8] bg-[#fffaf2] shadow-[0_12px_30px_rgba(72,52,31,0.08)]">
+            <div id="weekly-reviews" className="scroll-mt-24 overflow-hidden rounded-xl border border-[#cdbda8] bg-[#fffaf2] shadow-[0_12px_30px_rgba(72,52,31,0.08)]">
               <SectionReportUpload
                 reports={reportGuideFor("Marriott Responses")}
                 uploading={opsReportUpload.isPending}
@@ -3129,13 +3153,13 @@ export default function OpsReportPage() {
                 <EditableTable columns={[{ key: "source", label: "Source" }, { key: "score", label: "Overall Score" }, { key: "comment", label: "Guest Comments", wide: true }]} rows={negativeReviews} onChange={setNegativeReviews} />
               </Section>
             </div>
-            <Section title="GM Weekly Overview">
+            <Section id="gm-overview" title="GM Weekly Overview">
               <BulletRowsEditor rows={gmOverviewRows} onChange={setGmOverviewRows} />
             </Section>
-            <Section title="Corporate Director Review & Weekly Follow-Up">
+            <Section id="corporate-follow-up" title="Corporate Director Review & Weekly Follow-Up">
               <EditableTable columns={[{ key: "point", label: "Discussion Point", wide: true }, { key: "direction", label: "Direction Given", wide: true }, { key: "owner", label: "Owner" }, { key: "dueDate", label: "Due Date" }, { key: "status", label: "Status" }, { key: "notes", label: "Notes", wide: true }]} rows={followUp} onChange={setFollowUp} />
             </Section>
-            <Section title="Top 3 Priorities For Next Week">
+            <Section id="next-week-priorities" title="Top 3 Priorities For Next Week">
               <EditableTable columns={[{ key: "priority", label: "Priority" }, { key: "action", label: "Action / Result", wide: true }, { key: "owner", label: "Owner" }, { key: "dueDate", label: "Due Date" }, { key: "status", label: "Status" }, { key: "support", label: "Support Needed", wide: true }]} rows={priorities} onChange={setPriorities} />
             </Section>
           </TabsContent>

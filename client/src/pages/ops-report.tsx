@@ -981,6 +981,30 @@ function varianceTone(value: number) {
   return value > 0 ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-800";
 }
 
+function gssScoreTone(value: number) {
+  if (value >= 80) return { label: "Green: 80+", className: "border-emerald-600 bg-emerald-500" };
+  if (value >= 61) return { label: "Clear: 61–79.9", className: "border-[#b9aa98] bg-white" };
+  if (value >= 53) return { label: "Yellow: 53–60.9", className: "border-amber-500 bg-amber-300" };
+  return { label: "Red: below 53", className: "border-rose-700 bg-rose-600" };
+}
+
+function numericScore(value: unknown) {
+  const raw = String(value ?? "").trim();
+  if (!raw || !/^[+-]?(?:\d+(?:\.\d+)?|\.\d+)\s*%?$/.test(raw)) return null;
+  const parsed = Number(raw.replace("%", "").trim());
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function GssScoreLegend() {
+  const items = [
+    { label: "Green 80+", className: "border-emerald-600 bg-emerald-500" },
+    { label: "Clear 61–79.9", className: "border-[#b9aa98] bg-white" },
+    { label: "Yellow 53–60.9", className: "border-amber-500 bg-amber-300" },
+    { label: "Red <53", className: "border-rose-700 bg-rose-600" },
+  ];
+  return <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] font-medium text-[#5f5247]" aria-label="GSS score color reference">{items.map((item) => <span key={item.label} className="inline-flex items-center gap-1.5"><span className={`h-2.5 w-2.5 rounded-full border ${item.className}`} />{item.label}</span>)}</div>;
+}
+
 function signedValue(value: number, formatter: (value: number) => string) {
   if (!Number.isFinite(value) || value === 0) return formatter(0);
   return `${value > 0 ? "+" : ""}${formatter(value)}`;
@@ -1045,10 +1069,10 @@ function EditableTable({
   allowRowActions = false,
   addRowLabel = "Add row",
 }: {
-  columns: Array<{ key: string; label: string; wide?: boolean; readOnly?: boolean; visualVariance?: boolean }>;
+  columns: Array<{ key: string; label: string; wide?: boolean; readOnly?: boolean; visualVariance?: boolean; visualScore?: boolean }>;
   rows: Row[];
   onChange: (rows: Row[]) => void;
-  getCellPreview?: (row: Row, column: { key: string; label: string; wide?: boolean; readOnly?: boolean; visualVariance?: boolean }) => { label: string; text: string } | null;
+  getCellPreview?: (row: Row, column: { key: string; label: string; wide?: boolean; readOnly?: boolean; visualVariance?: boolean; visualScore?: boolean }) => { label: string; text: string } | null;
   allowRowActions?: boolean;
   addRowLabel?: string;
 }) {
@@ -1066,7 +1090,7 @@ function EditableTable({
     const nextRows = rows.filter((_, index) => index !== rowIndex);
     onChange(renumberRows(nextRows.length ? nextRows : [editableColumns.reduce<Row>((row, column) => ({ ...row, [column.key]: column.key === "no" ? "1" : "" }), {})]));
   };
-  const showPreview = (event: MouseEvent<HTMLInputElement> | FocusEvent<HTMLInputElement>, row: Row, column: { key: string; label: string; wide?: boolean; readOnly?: boolean; visualVariance?: boolean }) => {
+  const showPreview = (event: MouseEvent<HTMLInputElement> | FocusEvent<HTMLInputElement>, row: Row, column: { key: string; label: string; wide?: boolean; readOnly?: boolean; visualVariance?: boolean; visualScore?: boolean }) => {
     const customPreview = getCellPreview?.(row, column);
     const text = customPreview?.text || String(row[column.key] || "").trim();
     const label = customPreview?.label || column.label;
@@ -1099,12 +1123,15 @@ function EditableTable({
                     : "!border-rose-300 !bg-rose-50 !text-rose-900";
                 const VarianceIcon = varianceValue > 0 ? ArrowUp : varianceValue < 0 ? ArrowDown : Minus;
                 const readOnly = row.__readOnly === "true" || column.readOnly || column.key === "priorWeek" || column.key === "weekVariance";
+                const scoreValue = column.visualScore ? numericScore(rawValue) : null;
+                const scoreTone = scoreValue == null ? null : gssScoreTone(scoreValue);
                 return <td key={column.key} className="border border-[#e0d3c1] p-1 align-top">
                   <div className="relative">
                     {column.visualVariance && <VarianceIcon aria-hidden="true" className={`pointer-events-none absolute left-2 top-1/2 z-10 h-4 w-4 -translate-y-1/2 ${varianceValue > 0 ? "text-emerald-700" : varianceValue < 0 ? "text-rose-700" : "text-slate-500"}`} />}
+                    {scoreTone && <span className={`pointer-events-none absolute right-2 top-1/2 z-10 h-3 w-3 -translate-y-1/2 rounded-full border shadow-sm ${scoreTone.className}`} title={scoreTone.label} aria-label={scoreTone.label} />}
                   <Input
                     readOnly={readOnly}
-                    className={`h-9 border-transparent bg-transparent px-2 text-sm font-medium text-[#201814] placeholder:text-[#7c6e61] focus:border-[#b98435] focus:bg-white ${column.visualVariance ? `pl-8 font-bold ${varianceClass}` : readOnly ? "!bg-[#f3efe7] !text-[#5f5247]" : ""}`}
+                    className={`h-9 border-transparent bg-transparent px-2 text-sm font-medium text-[#201814] placeholder:text-[#7c6e61] focus:border-[#b98435] focus:bg-white ${column.visualVariance ? `pl-8 font-bold ${varianceClass}` : readOnly ? "!bg-[#f3efe7] !text-[#5f5247]" : ""} ${scoreTone ? "pr-7" : ""}`}
                     value={row[column.key] || ""}
                     onMouseEnter={(event) => showPreview(event, row, column)}
                     onMouseLeave={() => setPreview(null)}
@@ -3071,16 +3098,16 @@ export default function OpsReportPage() {
             <Section title="GM Weekly Overview">
               <BulletRowsEditor rows={gmOverviewRows} onChange={setGmOverviewRows} />
             </Section>
-            <Section title="Guest Satisfaction Scores">
+            <Section title="Guest Satisfaction Scores" right={<GssScoreLegend />}>
               <SectionReportUpload
                 reports={reportGuideFor("GSS Scores")}
                 uploading={opsReportUpload.isPending}
                 onUpload={(files) => uploadSectionReports("Guest Satisfaction", files)}
               />
-              <EditableTable columns={[{ key: "label", label: "GSS MTD", wide: true }, { key: "hotel", label: "Hotel" }, { key: "priorWeek", label: "Prior Week" }, { key: "weekVariance", label: "+/- Prior", visualVariance: true }, { key: "brand", label: "Brand / Continent" }, { key: "variance", label: "Variance", visualVariance: true }, { key: "comments", label: "Comments", wide: true }]} rows={gssRowsWithPrevious} onChange={(rows) => setGssRows(stripDerivedComparisonColumns(rows))} />
+              <EditableTable columns={[{ key: "label", label: "GSS MTD", wide: true }, { key: "hotel", label: "Hotel", visualScore: true }, { key: "priorWeek", label: "Prior Week", visualScore: true }, { key: "weekVariance", label: "+/- Prior", visualVariance: true }, { key: "brand", label: "Brand / Continent", visualScore: true }, { key: "variance", label: "Variance", visualVariance: true }, { key: "comments", label: "Comments", wide: true }]} rows={gssRowsWithPrevious} onChange={(rows) => setGssRows(stripDerivedComparisonColumns(rows))} />
             </Section>
-            <Section title="GSS Wave To Date">
-              <EditableTable columns={[{ key: "label", label: "GSS Wave To Date", wide: true }, { key: "hotel", label: "Hotel" }, { key: "priorWeek", label: "Prior Week" }, { key: "weekVariance", label: "+/- Prior", visualVariance: true }, { key: "brand", label: "Brand / Continent" }, { key: "variance", label: "Variance", visualVariance: true }, { key: "comments", label: "Comments", wide: true }]} rows={gssWaveRowsWithPrevious} onChange={(rows) => setGssWaveRows(stripDerivedComparisonColumns(rows))} />
+            <Section title="GSS Wave To Date" right={<GssScoreLegend />}>
+              <EditableTable columns={[{ key: "label", label: "GSS Wave To Date", wide: true }, { key: "hotel", label: "Hotel", visualScore: true }, { key: "priorWeek", label: "Prior Week", visualScore: true }, { key: "weekVariance", label: "+/- Prior", visualVariance: true }, { key: "brand", label: "Brand / Continent", visualScore: true }, { key: "variance", label: "Variance", visualVariance: true }, { key: "comments", label: "Comments", wide: true }]} rows={gssWaveRowsWithPrevious} onChange={(rows) => setGssWaveRows(stripDerivedComparisonColumns(rows))} />
             </Section>
             <Section title="Online Reputation">
               <EditableTable

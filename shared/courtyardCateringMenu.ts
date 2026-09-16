@@ -61,7 +61,7 @@ export function cateringSelectionsFromContract(text: string) {
       name: template.name,
       serviceDates: "All event dates",
       chargeMethod: template.chargeMethod,
-      quantity: 1,
+      quantity: 0,
       unitPrice: contractedPrice ? Number(contractedPrice.replace(/,/g, "")) : template.defaultPrice,
       includedQuantity: 0,
       refillPrice: 0,

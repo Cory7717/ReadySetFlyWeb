@@ -224,8 +224,9 @@ const cleanServiceItems = (value: any) => (Array.isArray(value) ? value : []).ma
 })).filter((item: any) => item.name).slice(0, 50);
 const serviceItemTotal = (item: any, attendance: number, eventDays: number) => {
   if (item.chargeMethod === "complimentary") return 0;
-  if (item.chargeMethod === "per_person") return attendance * item.unitPrice;
-  if (item.chargeMethod === "per_person_per_day") return attendance * eventDays * item.unitPrice;
+  const guestCount = Number(item.quantity || 0) > 1 ? Number(item.quantity) : attendance || Number(item.quantity || 0);
+  if (item.chargeMethod === "per_person") return guestCount * item.unitPrice;
+  if (item.chargeMethod === "per_person_per_day") return guestCount * eventDays * item.unitPrice;
   if (item.chargeMethod === "per_day") return item.quantity * eventDays * item.unitPrice;
   return item.quantity * item.unitPrice;
 };
@@ -1007,7 +1008,7 @@ export async function createMeetingBeoPdf(event: any, seriesEvents: any[], space
     { heading: `Breakfast · ${money(event.breakfastPerPerson)} per person`, detail: `${event.attendance || 0} guests × ${dates.length} day(s)` },
     { heading: `Lunch / Dinner · ${money(event.lunchDinnerPerPerson)} per person`, detail: `${event.attendance || 0} guests × ${dates.length} day(s)` },
     { heading: `Snack Bar · ${money(event.snackBarPerPerson)} per person`, detail: `${event.attendance || 0} guests × ${dates.length} day(s)` },
-    ...serviceItems.map((item:any)=>({heading:`${item.name} · ${money(serviceItemTotal(item,Number(event.attendance||0),dates.length))}`,detail:`${item.serviceDates}; ${methodLabel[item.chargeMethod]}; qty ${item.quantity} @ ${money(item.unitPrice)}. ${item.instructions||""}${item.refillPrice?` Additional refill/unit ${money(item.refillPrice)}.`:""}`})),
+    ...serviceItems.map((item:any)=>({heading:`${item.name} · ${money(serviceItemTotal(item,Number(event.attendance||0),dates.length))}`,detail:`${item.serviceDates}; ${methodLabel[item.chargeMethod]}; ${item.chargeMethod === "per_person" || item.chargeMethod === "per_person_per_day" ? "guests" : "qty"} ${Number(item.quantity || 0) > 1 ? item.quantity : event.attendance || item.quantity} @ ${money(item.unitPrice)}. ${item.instructions||""}${item.refillPrice?` Additional refill/unit ${money(item.refillPrice)}.`:""}`})),
     ...(event.cateringNotes?[{heading:"Service notes",detail:String(event.cateringNotes)}]:[]),
   ];
   const setupEntries = [
@@ -1037,7 +1038,7 @@ export async function createMeetingBeoPdf(event: any, seriesEvents: any[], space
   ensure(55); page.drawText("Manager approval: __________________________   Date: __________", { x: 52, y, size: 9, font: regular, color: ink }); y -= 24; page.drawText("Associate initials: __________________________________________________", { x: 52, y, size: 9, font: regular, color: ink });
   if (serviceItems.length) {
     addPage();
-    section("Catering menu selections");
+    section("Catering menu");
     for (const item of serviceItems) {
       note(`${item.name} - ${money(item.unitPrice)} ${methodLabel[item.chargeMethod] || String(item.chargeMethod).replaceAll("_", " ")}`, `${item.serviceDates}. ${item.instructions || "Confirm service details with the catering manager."}`);
       row("Estimated selection charge", money(serviceItemTotal(item, Number(event.attendance || 0), dates.length)), 20);

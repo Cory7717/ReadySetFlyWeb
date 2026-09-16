@@ -151,6 +151,12 @@ const statusLegend = [
 ];
 const groupNights = (block: any) => block?.arrivalDate && block?.departureDate ? Math.max(0, Math.round((new Date(`${block.departureDate}T12:00:00Z`).getTime() - new Date(`${block.arrivalDate}T12:00:00Z`).getTime()) / 86400000)) : 0;
 const roomAllocationsFor = (value: any): any[] => { if (Array.isArray(value?.roomAllocations)) return value.roomAllocations; try { return value?.roomAllocationsJson ? JSON.parse(value.roomAllocationsJson) : []; } catch { return []; } };
+const mergeMissingContractFields = (current: any, extracted: any) => Object.fromEntries(Object.entries({ ...current, ...extracted }).map(([field, extractedValue]) => {
+  const currentValue = current?.[field];
+  const missing = currentValue == null || currentValue === "" || currentValue === 0 || (Array.isArray(currentValue) && currentValue.length === 0);
+  const usable = extractedValue != null && extractedValue !== "" && (!(Array.isArray(extractedValue)) || extractedValue.length > 0);
+  return [field, missing && usable ? extractedValue : currentValue];
+}));
 const allocationRevenue = (value: any) => roomAllocationsFor(value).reduce((sum: number, item: any) => sum + Number(item.roomNights || 0) * Number(item.rate || 0), 0);
 function BookingTypeBadge({ type }: { type: "rooms" | "event" | "both" }) {
   const styles = type === "both" ? "border-violet-300 bg-violet-100 text-violet-900" : type === "rooms" ? "border-blue-300 bg-blue-100 text-blue-900" : "border-[#343a40] bg-[#343a40] text-white";
@@ -252,6 +258,8 @@ export default function CourtyardMeetingCalendar() {
   const [contractFile, setContractFile] = useState<File | null>(null);
   const [contractPreview, setContractPreview] = useState<any>(null);
   const [contractMergeMessage, setContractMergeMessage] = useState("");
+  const [eventContractFile, setEventContractFile] = useState<File | null>(null);
+  const [groupContractFile, setGroupContractFile] = useState<File | null>(null);
   const [cateringTemplateId, setCateringTemplateId] = useState("");
   const me = useQuery({
     queryKey: ["sales-meeting-me"],
@@ -357,6 +365,11 @@ export default function CourtyardMeetingCalendar() {
     mutationFn: async () => { const data = new FormData(); data.append("hotelId", hotelId); data.append("file", contractFile!); return request("/api/courtyard/sales-intelligence/meeting-calendar/contracts/preview", { method: "POST", body: data }); },
     onSuccess: (result: any) => { setContractMergeMessage(""); setContractPreview(result); },
     onError: (error: Error) => toast({ title: "Could not read contract", description: error.message, variant: "destructive" }),
+  });
+  const enrichExisting = useMutation({
+    mutationFn: async ({ targetType, targetId, file }: { targetType: "event" | "group"; targetId: string; file: File }) => { const data=new FormData();data.append("targetType",targetType);data.append("targetId",targetId);data.append("file",file);return request("/api/courtyard/sales-intelligence/meeting-calendar/contracts/enrich-existing",{method:"POST",body:data}); },
+    onSuccess: (result:any, variables) => { if(variables.targetType==="event"){setForm((current:any)=>mergeMissingContractFields(current,result.extracted));setEventContractFile(null);}else{setGroupRoomForm((current:any)=>mergeMissingContractFields(current,result.extracted));setGroupContractFile(null);}qc.invalidateQueries({queryKey:["meeting-calendar"]});toast({title:"Contract attached and missing fields populated",description:result.draft?.warnings?.length?"Review the populated fields and extraction notes before saving.":"Review the populated fields, then save your changes."}); },
+    onError: (error:Error)=>toast({title:"Could not read or attach contract",description:error.message,variant:"destructive"}),
   });
   const importContract = useMutation<any, any, boolean>({
     mutationFn: async (mergeExisting) => { const data = new FormData(); data.append("hotelId", hotelId); data.append("file", contractFile!); data.append("draft", JSON.stringify(contractPreview.draft)); data.append("mergeExisting", String(mergeExisting)); return request("/api/courtyard/sales-intelligence/meeting-calendar/contracts/import", { method: "POST", body: data }); },
@@ -721,11 +734,12 @@ export default function CourtyardMeetingCalendar() {
           </Card>
         )}
       </main>
-      <Dialog open={open} onOpenChange={(isOpen) => { setOpen(isOpen); if (!isOpen) setEditingEventId(null); }}>
+      <Dialog open={open} onOpenChange={(isOpen) => { setOpen(isOpen); if (!isOpen) { setEditingEventId(null); setEventContractFile(null); } }}>
         <DialogContent className="max-h-[92dvh] max-w-5xl overflow-y-auto bg-white text-[#201814]">
           <DialogHeader>
             <DialogTitle>{editingEventId ? "Edit meeting-space event" : "New meeting-space event"}</DialogTitle>
           </DialogHeader>
+          {editingEventId && <div className="rounded-xl border border-[#bfd0df] bg-[#f4f8fb] p-4"><div className="font-semibold text-[#315f86]">Attach the actual contract</div><p className="mb-3 text-xs text-[#4c6478]">The contract is stored with this event. Extracted information fills only fields that are currently blank.</p><div className="flex flex-col gap-2 sm:flex-row"><Input type="file" accept=".docx,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event)=>setEventContractFile(event.target.files?.[0]||null)} /><Button type="button" variant="outline" disabled={!eventContractFile||enrichExisting.isPending} onClick={()=>eventContractFile&&enrichExisting.mutate({targetType:"event",targetId:editingEventId,file:eventContractFile})}><Upload className="mr-2 h-4 w-4" />{enrichExisting.isPending?"Reading…":"Upload & fill missing fields"}</Button></div></div>}
           <div className="grid gap-3 md:grid-cols-2">
             <div>
               <Label>Group/company</Label>
@@ -1052,9 +1066,10 @@ export default function CourtyardMeetingCalendar() {
           )}
         </DialogContent>
       </Dialog>
-      <Dialog open={groupRoomOpen} onOpenChange={(isOpen) => { setGroupRoomOpen(isOpen); if (!isOpen) setEditingGroupRoomId(null); }}>
+      <Dialog open={groupRoomOpen} onOpenChange={(isOpen) => { setGroupRoomOpen(isOpen); if (!isOpen) { setEditingGroupRoomId(null); setGroupContractFile(null); } }}>
         <DialogContent className="max-h-[92dvh] max-w-4xl overflow-y-auto border-[#cdbda8] bg-white text-[#201814] dark:border-[#cdbda8] dark:bg-white dark:text-[#201814] [&_input]:!border-[#cdbda8] [&_input]:!bg-white [&_input]:!text-[#201814] [&_textarea]:!border-[#cdbda8] [&_textarea]:!bg-white [&_textarea]:!text-[#201814]">
           <DialogHeader><DialogTitle>{editingGroupRoomId ? "Edit group room block" : "Add group room block"}</DialogTitle></DialogHeader>
+          {editingGroupRoomId && <div className="rounded-xl border border-[#bfd0df] bg-[#f4f8fb] p-4"><div className="font-semibold text-[#315f86]">Attach the actual contract</div><p className="mb-3 text-xs text-[#4c6478]">The contract is stored with this group. Extracted information fills only fields that are currently blank.</p><div className="flex flex-col gap-2 sm:flex-row"><Input type="file" accept=".docx,.pdf,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" onChange={(event)=>setGroupContractFile(event.target.files?.[0]||null)} /><Button type="button" variant="outline" disabled={!groupContractFile||enrichExisting.isPending} onClick={()=>groupContractFile&&enrichExisting.mutate({targetType:"group",targetId:editingGroupRoomId,file:groupContractFile})}><Upload className="mr-2 h-4 w-4" />{enrichExisting.isPending?"Reading…":"Upload & fill missing fields"}</Button></div></div>}
           <div className="grid gap-4 md:grid-cols-2">
             <div><Label>Group/company *</Label><Input value={groupRoomForm.groupName} onChange={(e) => setGroupRoomForm({ ...groupRoomForm, groupName: e.target.value })} /></div>
             <div><Label>Project / program name</Label><Input value={groupRoomForm.projectName} onChange={(e) => setGroupRoomForm({ ...groupRoomForm, projectName: e.target.value })} /></div>

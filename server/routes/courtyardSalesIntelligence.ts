@@ -1306,6 +1306,36 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
       res.status(201).json(result);
     } catch (error) { next(error); }
   });
+  router.post("/meeting-calendar/contracts/enrich-existing", transitionUpload.single("file"), async (req: any, res, next) => {
+    try {
+      const targetType = String(req.body.targetType || ""), targetId = String(req.body.targetId || "");
+      if (!req.file) return res.status(400).json({ error: "Choose the actual DOCX or PDF contract." });
+      const extension = req.file.originalname.toLowerCase().split(".").pop();
+      if (!extension || !["docx", "pdf"].includes(extension)) return res.status(400).json({ error: "Only DOCX and PDF contracts are supported." });
+      if (!targetId || !["event", "group"].includes(targetType)) return res.status(400).json({ error: "Choose an existing Group Rooms or Meeting/Event entry." });
+      const text = await contractText(req.file), draft = parseGroupContract(text);
+      const target = targetType === "event"
+        ? (await db.select().from(courtyardMeetingEvents).where(eq(courtyardMeetingEvents.id, targetId)).limit(1))[0]
+        : (await db.select().from(courtyardGroupRoomBlocks).where(eq(courtyardGroupRoomBlocks.id, targetId)).limit(1))[0];
+      if (!target || !hasHotel(req, target.hotelId)) return res.status(404).json({ error: targetType === "event" ? "Meeting/Event not found." : "Group Rooms booking not found." });
+      const extracted = targetType === "event" ? draft.meeting : draft.groupRoom;
+      if (!extracted) return res.status(400).json({ error: targetType === "event" ? "This contract does not contain Meeting/Event information." : "This contract does not contain Group Rooms information." });
+      const bookingId = await db.transaction(async (tx) => {
+        let id = target.groupBookingId as string | null;
+        if (!id) {
+          const [booking] = await tx.insert(courtyardGroupBookings).values({ hotelId: target.hotelId, groupName: target.groupName || extracted.groupName || "Imported contract", projectName: target.eventName || target.projectName || null, sourceFormat: extension, importProfile: `${draft.profile || "contract_import"}_enrichment`, createdByUserId: req.salesUser.id }).returning();
+          id = booking.id;
+          if (targetType === "event") {
+            if (target.bookingSeriesId) await tx.update(courtyardMeetingEvents).set({ groupBookingId: id, updatedByUserId: req.salesUser.id, updatedAt: new Date() }).where(eq(courtyardMeetingEvents.bookingSeriesId, target.bookingSeriesId));
+            else await tx.update(courtyardMeetingEvents).set({ groupBookingId: id, updatedByUserId: req.salesUser.id, updatedAt: new Date() }).where(eq(courtyardMeetingEvents.id, target.id));
+          } else await tx.update(courtyardGroupRoomBlocks).set({ groupBookingId: id, updatedByUserId: req.salesUser.id, updatedAt: new Date() }).where(eq(courtyardGroupRoomBlocks.id, target.id));
+        }
+        await tx.insert(courtyardGroupBookingDocuments).values({ groupBookingId: id!, filename: req.file!.originalname, mimeType: req.file!.mimetype || "application/octet-stream", sizeBytes: req.file!.size, contentBase64: req.file!.buffer.toString("base64") });
+        return id;
+      });
+      res.json({ draft, extracted, bookingId, source: { filename: req.file.originalname, format: extension, sizeBytes: req.file.size } });
+    } catch (error) { next(error); }
+  });
   router.get("/meeting-calendar/group-bookings/:bookingId/documents/:id", async (req: any, res, next) => {
     try {
       const [booking] = await db.select().from(courtyardGroupBookings).where(eq(courtyardGroupBookings.id, req.params.bookingId)).limit(1);

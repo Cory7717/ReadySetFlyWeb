@@ -293,6 +293,17 @@ function meetingRevenueValidationError(body: any) {
   if (allocations.length && Math.abs(allocations.reduce((sum: number, item: any) => sum + item.percentage, 0) - 100) > 0.01) return "Internal gratuity allocations must total exactly 100%.";
   return null;
 }
+function meetingRoomsConflict(left: unknown, right: unknown) {
+  const normalize = (value: unknown) => String(value || "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const leftRoom = normalize(left), rightRoom = normalize(right);
+  if (!leftRoom || !rightRoom) return true;
+  if (leftRoom === "full_room" || rightRoom === "full_room") return true;
+  return leftRoom === rightRoom;
+}
+function meetingRoomLabel(value: unknown) {
+  const room = String(value || "meeting space").replace(/_/g, " ");
+  return room.replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
 const GROUP_ROOM_STATUSES = ["prospect", "tentative", "definite", "in_house", "completed", "cancelled"];
 function groupRoomWriteValues(body: any) {
   const peakRooms = body?.peakRooms === "" || body?.peakRooms == null ? null : Number(body.peakRooms);
@@ -1258,12 +1269,12 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
       while (cursor <= rangeEnd && dates.length <= 31) { dates.push(cursor.toISOString().slice(0, 10)); cursor.setUTCDate(cursor.getUTCDate() + 1); }
       const conflicts = await db.select().from(courtyardMeetingEvents).where(and(eq(courtyardMeetingEvents.spaceId, space.id), inArray(courtyardMeetingEvents.eventDate, dates)));
       const normalizedGroup = (value: unknown) => String(value || "").trim().toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
-      const activeConflicts = conflicts.filter((event) => !["cancelled", "completed", "expired"].includes(event.status) && meeting.setupStartTime < event.breakdownEndTime && event.setupStartTime < meeting.breakdownEndTime);
+      const activeConflicts = conflicts.filter((event) => !["cancelled", "completed", "expired"].includes(event.status) && meetingRoomsConflict(meeting.meetingRoom, event.meetingRoom) && meeting.setupStartTime < event.breakdownEndTime && event.setupStartTime < meeting.breakdownEndTime);
       const importGroupName = String(draft.groupRoom?.groupName || meeting.groupName || "").trim();
       if (!importGroupName) return res.status(400).json({ error: "Confirm the group/company name before importing." });
-      const matchingEvents = conflicts.filter((event) => !["cancelled", "completed", "expired"].includes(event.status) && normalizedGroup(event.groupName) === normalizedGroup(importGroupName));
+      const matchingEvents = conflicts.filter((event) => !["cancelled", "completed", "expired"].includes(event.status) && normalizedGroup(event.groupName) === normalizedGroup(importGroupName) && String(event.meetingRoom || "") === String(meeting.meetingRoom || ""));
       const conflictingOtherGroup = activeConflicts.find((event) => normalizedGroup(event.groupName) !== normalizedGroup(importGroupName));
-      if (conflictingOtherGroup) return res.status(409).json({ error: `Meeting space conflicts with ${conflictingOtherGroup.groupName} on ${conflictingOtherGroup.eventDate}. Review the calendar before importing.`, code: "MEETING_SPACE_CONFLICT" });
+      if (conflictingOtherGroup) return res.status(409).json({ error: `${meetingRoomLabel(meeting.meetingRoom)} conflicts with ${conflictingOtherGroup.groupName} in ${meetingRoomLabel(conflictingOtherGroup.meetingRoom)} on ${conflictingOtherGroup.eventDate}. Review the calendar before importing.`, code: "MEETING_SPACE_CONFLICT" });
       const roomBlockCandidates = draft.groupRoom ? await db.select().from(courtyardGroupRoomBlocks).where(eq(courtyardGroupRoomBlocks.hotelId, hotelId)) : [];
       const matchingRoomBlock = draft.groupRoom ? roomBlockCandidates.find((block) => normalizedGroup(block.groupName) === normalizedGroup(draft.groupRoom.groupName) && block.arrivalDate <= draft.groupRoom.departureDate && block.departureDate >= draft.groupRoom.arrivalDate) : null;
       const mergeExisting = String(req.body.mergeExisting || "") === "true";
@@ -1324,8 +1335,8 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
       const holdExpiresAt = req.body.holdExpiresAt ? new Date(req.body.holdExpiresAt) : null;
       if (holdExpiresAt && Number.isNaN(holdExpiresAt.getTime())) return res.status(400).json({ error: "Enter a valid courtesy-hold expiration date and time." });
       const active = (await db.select().from(courtyardMeetingEvents).where(and(eq(courtyardMeetingEvents.spaceId, req.body.spaceId), inArray(courtyardMeetingEvents.eventDate, dates)))).filter((event) => !["cancelled", "completed", "expired"].includes(event.status));
-      const conflict = active.find((event) => req.body.setupStartTime < event.breakdownEndTime && event.setupStartTime < req.body.breakdownEndTime);
-      if (conflict && (!canManageMeetingCalendar(req) || !String(req.body.conflictOverrideReason || "").trim())) return res.status(409).json({ error: `The space is occupied on ${conflict.eventDate} by ${conflict.groupName} from ${conflict.setupStartTime.slice(0, 5)} to ${conflict.breakdownEndTime.slice(0, 5)}. An override reason is required.`, code: "MEETING_SPACE_CONFLICT" });
+      const conflict = active.find((event) => meetingRoomsConflict(req.body.meetingRoom, event.meetingRoom) && req.body.setupStartTime < event.breakdownEndTime && event.setupStartTime < req.body.breakdownEndTime);
+      if (conflict && (!canManageMeetingCalendar(req) || !String(req.body.conflictOverrideReason || "").trim())) return res.status(409).json({ error: `${meetingRoomLabel(req.body.meetingRoom)} is occupied on ${conflict.eventDate} by ${conflict.groupName} in ${meetingRoomLabel(conflict.meetingRoom)} from ${conflict.setupStartTime.slice(0, 5)} to ${conflict.breakdownEndTime.slice(0, 5)}. An override reason is required.`, code: "MEETING_SPACE_CONFLICT" });
       if (req.body.status === "definite" && !canManageMeetingCalendar(req)) return res.status(403).json({ error: "Calendar PIN access is required to mark an event definite." });
       const baseValues = meetingEventWriteValues(req.body, holdExpiresAt, dates.length);
       const bookingSeriesId = crypto.randomUUID();
@@ -1376,8 +1387,8 @@ export function registerCourtyardSalesIntelligenceRoutes(app: Express) {
       const effectiveDates = Array.from(new Set([...seriesEvents.map((event) => event.eventDate), ...dates])).sort();
       const seriesIds = new Set(seriesEvents.map((event) => event.id));
       const active = (await db.select().from(courtyardMeetingEvents).where(and(eq(courtyardMeetingEvents.spaceId, req.body.spaceId), inArray(courtyardMeetingEvents.eventDate, effectiveDates)))).filter((event) => !seriesIds.has(event.id) && !["cancelled", "completed", "expired"].includes(event.status));
-      const conflict = active.find((event) => req.body.setupStartTime < event.breakdownEndTime && event.setupStartTime < req.body.breakdownEndTime);
-      if (conflict && (!canManageMeetingCalendar(req) || !String(req.body.conflictOverrideReason || "").trim())) return res.status(409).json({ error: `The space is occupied on ${conflict.eventDate} by ${conflict.groupName} from ${conflict.setupStartTime.slice(0, 5)} to ${conflict.breakdownEndTime.slice(0, 5)}. An override reason is required.`, code: "MEETING_SPACE_CONFLICT" });
+      const conflict = active.find((event) => meetingRoomsConflict(req.body.meetingRoom, event.meetingRoom) && req.body.setupStartTime < event.breakdownEndTime && event.setupStartTime < req.body.breakdownEndTime);
+      if (conflict && (!canManageMeetingCalendar(req) || !String(req.body.conflictOverrideReason || "").trim())) return res.status(409).json({ error: `${meetingRoomLabel(req.body.meetingRoom)} is occupied on ${conflict.eventDate} by ${conflict.groupName} in ${meetingRoomLabel(conflict.meetingRoom)} from ${conflict.setupStartTime.slice(0, 5)} to ${conflict.breakdownEndTime.slice(0, 5)}. An override reason is required.`, code: "MEETING_SPACE_CONFLICT" });
       if (req.body.status === "definite" && !canManageMeetingCalendar(req)) return res.status(403).json({ error: "Calendar PIN access is required to mark an event definite." });
       const bookingSeriesId = existing.bookingSeriesId || existing.id;
       const baseValues = { ...meetingEventWriteValues(req.body, holdExpiresAt, effectiveDates.length), bookingSeriesId, bookingStartDate: effectiveDates[0], hotelId: existing.hotelId, updatedByUserId: req.salesUser.id, updatedAt: new Date() };

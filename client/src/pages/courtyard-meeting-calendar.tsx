@@ -193,9 +193,9 @@ function MeetingSetupDiagram({ meetingRoom, roomSetup, attendance, banquetChairs
   const roundTableRadius = 2.5 * feetToCanvas; // 60-inch diameter
   const rectangleLong = 6 * feetToCanvas, rectangleShort = 2.5 * feetToCanvas; // 72 x 30 inches
   const innerLeft=55,innerTop=72,innerWidth=490,innerHeight=roomCanvasHeight-60,fallbackYScale=innerHeight/220,scaledY=(y:number)=>innerTop+(y-72)*fallbackYScale;
-  const removedTableIds=new Set(layout.filter((item:any)=>item.type==="removed").map((item:any)=>item.id)),tablePositions=new Map<string,{x:number;y:number}>();
+  const removedTableIds=new Set(layout.filter((item:any)=>item.type==="removed"||item.label==="__removed_table__").map((item:any)=>item.id)),tablePositions=new Map<string,{x:number;y:number}>();
   const position = (id: string, x: number, y: number) => { const saved = layout.find((item:any) => item.id === id); return saved ? {x:innerLeft+Number(saved.x)*innerWidth,y:innerTop+Number(saved.y)*innerHeight} : {x,y:scaledY(y)}; };
-  const deleteLayoutItem=(id:string)=>{if(!onLayoutChange)return;const withoutItem=layout.filter((item:any)=>item.id!==id);onLayoutChange(id.startsWith("table-")?[...withoutItem,{id,type:"removed"}]:withoutItem);setSelectedLayoutId(null);};
+  const deleteLayoutItem=(id:string)=>{if(!onLayoutChange)return;const withoutItem=layout.filter((item:any)=>item.id!==id);onLayoutChange(id.startsWith("table-")?[...withoutItem,{id,label:"__removed_table__"}]:withoutItem);setSelectedLayoutId(null);};
   const drag = (id: string) => onLayoutChange ? { style: { cursor: "grab" }, onPointerDown: (event:any) => { event.preventDefault(); const item=layout.find((candidate:any)=>candidate.id===id);if(id.startsWith("table-")||(item?.type&&!['presentation','entry','removed'].includes(item.type)))setSelectedLayoutId(id);event.currentTarget.setPointerCapture(event.pointerId); }, onPointerMove: (event:any) => { if (!event.currentTarget.hasPointerCapture(event.pointerId)) return; const svg = event.currentTarget.ownerSVGElement, bounds = svg.getBoundingClientRect(); const x = Math.max(0, Math.min(1, ((event.clientX-bounds.left)/bounds.width*600-innerLeft)/innerWidth)), y = Math.max(0, Math.min(1, ((event.clientY-bounds.top)/bounds.height*diagramHeight-innerTop)/innerHeight)); const existing=layout.find((item:any)=>item.id===id)||{id}; onLayoutChange([...layout.filter((item:any)=>item.id!==id),{...existing,id,x,y}]); }, onPointerUp: (event:any) => { if(event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }, onPointerCancel: (event:any) => { if(event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); } } : {};
   useEffect(()=>{if(!onLayoutChange||!selectedLayoutId)return;const removeSelected=(event:KeyboardEvent)=>{const target=event.target as HTMLElement|null;if(target?.closest("input, textarea, select, [contenteditable='true']"))return;if(event.key!=="Delete"&&event.key!=="Backspace")return;event.preventDefault();deleteLayoutItem(selectedLayoutId);};window.addEventListener("keydown",removeSelected);return()=>window.removeEventListener("keydown",removeSelected);},[layout,onLayoutChange,selectedLayoutId]);
   if (roomSetup === "banquet") {
@@ -516,7 +516,7 @@ export default function CourtyardMeetingCalendar() {
       fbTaxPercent: event.fbTaxPercent ?? "8.25",
       fbGratuityPercent: event.fbGratuityPercent ?? "18",
       setupOrientation: event.setupOrientation || "lengthwise",
-      setupLayoutJson: Array.isArray(event.setupLayoutJson) ? event.setupLayoutJson : [],
+      setupLayoutJson: Array.isArray(event.setupLayoutJson) ? event.setupLayoutJson.map((item:any)=>item.type==="removed"?{id:item.id,label:"__removed_table__"}:item) : [],
     });
     setOpen(true);
   };

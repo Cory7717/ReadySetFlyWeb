@@ -1011,6 +1011,12 @@ export async function createMeetingBeoPdf(event: any, seriesEvents: any[], space
     page.drawText(`${room.name} | Approx. ${room.width}' x ${room.length}' | ${room.area.toLocaleString()} sq. ft. | ${guests} guests | ${setup.replaceAll("_", " ").toUpperCase()} | ${String(event.setupOrientation || "lengthwise").toUpperCase()}`, { x: 46, y: 665, size: 8.5, font: bold, color: gold });
     const left = 66, bottom = 235, width = 480, height = 390;
     const savedLayout = Array.isArray(event.setupLayoutJson) ? event.setupLayoutJson : [], lengthwise = event.setupOrientation !== "widthwise";
+    // Generated setup tables are not stored as full furnishings. When a user
+    // removes one, the planner saves a lightweight marker so the default table
+    // is not recreated on the next render. The PDF must honor the same marker.
+    const removedTableIds = new Set(savedLayout
+      .filter((item: any) => item?.type === "removed" || item?.label === "__removed_table__")
+      .map((item: any) => String(item.id)));
     const feetToPlan = Math.min((width - 60) / room.length, (height - 60) / room.width);
     const roundTableRadius = 2.5 * feetToPlan, rectangleLong = 6 * feetToPlan, rectangleShort = 2.5 * feetToPlan;
     const placedId = (id: string, autoX: number, autoY: number) => { const saved = savedLayout.find((item: any) => item.id === id); return saved ? { x: left + 30 + Number(saved.x) * (width - 60), y: bottom + 30 + (1 - Number(saved.y)) * (height - 60) } : { x: autoX, y: autoY }; };
@@ -1022,23 +1028,25 @@ export async function createMeetingBeoPdf(event: any, seriesEvents: any[], space
     const chair = (x: number, yy: number) => page.drawCircle({ x, y: yy, size: 4, color: rgb(0.19, 0.37, 0.53) });
     if (setup === "banquet") {
       const chairsPerTable = Math.min(8, Math.max(1, Number(event.banquetChairsPerTable || 8))), tables = Math.ceil(guests / chairsPerTable), cols = Math.min(5, Math.ceil(Math.sqrt(tables * 1.5)));
-      for (let i=0;i<tables;i++){const pos=placed(i,125+(i%cols)*(370/Math.max(1,cols-1)),520-Math.floor(i/cols)*88),tableChairs=Math.min(chairsPerTable,guests-i*chairsPerTable);page.drawCircle({x:pos.x,y:pos.y,size:roundTableRadius,color:rgb(0.92,0.87,0.8),borderColor:muted,borderWidth:1});page.drawText('60"',{x:pos.x-8,y:pos.y-3,size:7,font:bold,color:ink});for(let seat=0;seat<tableChairs;seat++){const angle=-Math.PI/2+seat*(Math.PI*2/tableChairs);chair(pos.x+Math.cos(angle)*(roundTableRadius+8),pos.y+Math.sin(angle)*(roundTableRadius+8));}}
+      for (let i=0;i<tables;i++){if(removedTableIds.has(`table-${i}`))continue;const pos=placed(i,125+(i%cols)*(370/Math.max(1,cols-1)),520-Math.floor(i/cols)*88),tableChairs=Math.min(chairsPerTable,guests-i*chairsPerTable);page.drawCircle({x:pos.x,y:pos.y,size:roundTableRadius,color:rgb(0.92,0.87,0.8),borderColor:muted,borderWidth:1});page.drawText('60"',{x:pos.x-8,y:pos.y-3,size:7,font:bold,color:ink});for(let seat=0;seat<tableChairs;seat++){const angle=-Math.PI/2+seat*(Math.PI*2/tableChairs);chair(pos.x+Math.cos(angle)*(roundTableRadius+8),pos.y+Math.sin(angle)*(roundTableRadius+8));}}
     } else if (setup === "classroom") {
-      const tables=Math.ceil(guests/3),cols=Math.min(8,Math.max(1,Math.ceil(Math.sqrt(tables*1.7))));for(let i=0;i<tables;i++){const pos=placed(i,110+(i%cols)*(390/Math.max(1,cols)),540-Math.floor(i/cols)*58),tw=lengthwise?rectangleShort:rectangleLong,th=lengthwise?rectangleLong:rectangleShort;page.drawRectangle({x:pos.x-tw/2,y:pos.y-th/2,width:tw,height:th,color:rgb(0.92,0.87,0.8),borderColor:muted,borderWidth:.7});if(lengthwise){chair(pos.x-tw/2-7,pos.y-th*.3);chair(pos.x-tw/2-7,pos.y);chair(pos.x-tw/2-7,pos.y+th*.3);}else{chair(pos.x-tw*.3,pos.y-th/2-7);chair(pos.x,pos.y-th/2-7);chair(pos.x+tw*.3,pos.y-th/2-7);}}
+      const tables=Math.ceil(guests/3),cols=Math.min(8,Math.max(1,Math.ceil(Math.sqrt(tables*1.7))));for(let i=0;i<tables;i++){if(removedTableIds.has(`table-${i}`))continue;const pos=placed(i,110+(i%cols)*(390/Math.max(1,cols)),540-Math.floor(i/cols)*58),tw=lengthwise?rectangleShort:rectangleLong,th=lengthwise?rectangleLong:rectangleShort;page.drawRectangle({x:pos.x-tw/2,y:pos.y-th/2,width:tw,height:th,color:rgb(0.92,0.87,0.8),borderColor:muted,borderWidth:.7});if(lengthwise){chair(pos.x-tw/2-7,pos.y-th*.3);chair(pos.x-tw/2-7,pos.y);chair(pos.x-tw/2-7,pos.y+th*.3);}else{chair(pos.x-tw*.3,pos.y-th/2-7);chair(pos.x,pos.y-th/2-7);chair(pos.x+tw*.3,pos.y-th/2-7);}}
     } else if (setup === "theater") {
       const count=Math.min(guests,120),cols=Math.min(12,Math.ceil(Math.sqrt(count*1.8)));for(let i=0;i<count;i++)chair(105+(i%cols)*(390/Math.max(1,cols-1)),540-Math.floor(i/cols)*30);
     } else if (setup === "u_shape") {
       page.drawLine({start:{x:165,y:535},end:{x:165,y:335},thickness:18,color:rgb(0.72,0.62,0.5)});page.drawLine({start:{x:165,y:335},end:{x:445,y:335},thickness:18,color:rgb(0.72,0.62,0.5)});page.drawLine({start:{x:445,y:335},end:{x:445,y:535},thickness:18,color:rgb(0.72,0.62,0.5)});for(let i=0;i<Math.min(guests,30);i++){const side=i%3,pos=Math.floor(i/3);chair(side===0?140:side===1?470:190+pos*25,side===2?307:515-pos*20);}
     } else if (setup === "conference") {
       const pos=placed(0,305,427),count=Math.min(guests,24),endSeats=count>=4?2:0,sideSeats=count-endSeats,firstSide=Math.ceil(sideSeats/2),secondSide=Math.floor(sideSeats/2),conferenceLength=Math.min(room.length-4,Math.max(6,Math.ceil(Math.max(2,sideSeats)/4)*6))*feetToPlan,conferenceWidth=5*feetToPlan,tw=lengthwise?conferenceWidth:conferenceLength,th=lengthwise?conferenceLength:conferenceWidth;
-      page.drawRectangle({x:pos.x-tw/2,y:pos.y-th/2,width:tw,height:th,color:rgb(0.92,0.87,0.8),borderColor:muted,borderWidth:1});
-      for(let i=0;i<firstSide;i++){const fraction=(i+1)/(firstSide+1);chair(lengthwise?pos.x-tw/2-14:pos.x-tw/2+fraction*tw,lengthwise?pos.y-th/2+fraction*th:pos.y-th/2-14);}
-      for(let i=0;i<secondSide;i++){const fraction=(i+1)/(secondSide+1);chair(lengthwise?pos.x+tw/2+14:pos.x-tw/2+fraction*tw,lengthwise?pos.y-th/2+fraction*th:pos.y+th/2+14);}
-      if(endSeats){chair(lengthwise?pos.x:pos.x-tw/2-14,lengthwise?pos.y-th/2-14:pos.y);chair(lengthwise?pos.x:pos.x+tw/2+14,lengthwise?pos.y+th/2+14:pos.y);}
+      if(!removedTableIds.has("table-0")) page.drawRectangle({x:pos.x-tw/2,y:pos.y-th/2,width:tw,height:th,color:rgb(0.92,0.87,0.8),borderColor:muted,borderWidth:1});
+      if(!removedTableIds.has("table-0")) {
+        for(let i=0;i<firstSide;i++){const fraction=(i+1)/(firstSide+1);chair(lengthwise?pos.x-tw/2-14:pos.x-tw/2+fraction*tw,lengthwise?pos.y-th/2+fraction*th:pos.y-th/2-14);}
+        for(let i=0;i<secondSide;i++){const fraction=(i+1)/(secondSide+1);chair(lengthwise?pos.x+tw/2+14:pos.x-tw/2+fraction*tw,lengthwise?pos.y-th/2+fraction*th:pos.y+th/2+14);}
+        if(endSeats){chair(lengthwise?pos.x:pos.x-tw/2-14,lengthwise?pos.y-th/2-14:pos.y);chair(lengthwise?pos.x:pos.x+tw/2+14,lengthwise?pos.y+th/2+14:pos.y);}
+      }
     } else if (setup === "reception") {
-      const tables=Math.max(3,Math.ceil(guests/12));for(let i=0;i<tables;i++){const pos=placed(i,125+(i%5)*90,520-Math.floor(i/5)*95);page.drawCircle({x:pos.x,y:pos.y,size:16,color:rgb(0.92,0.87,0.8),borderColor:muted,borderWidth:1});}
+      const tables=Math.max(3,Math.ceil(guests/12));for(let i=0;i<tables;i++){if(removedTableIds.has(`table-${i}`))continue;const pos=placed(i,125+(i%5)*90,520-Math.floor(i/5)*95);page.drawCircle({x:pos.x,y:pos.y,size:16,color:rgb(0.92,0.87,0.8),borderColor:muted,borderWidth:1});}
     } else page.drawText("CUSTOM SETUP - REFER TO SETUP NOTES", { x: 175, y: 430, size: 13, font: bold, color: muted });
-    const equipment = savedLayout.filter((item: any) => item.type && !["presentation", "entry"].includes(item.type));
+    const equipment = savedLayout.filter((item: any) => item.type && !["presentation", "entry", "removed"].includes(item.type) && item.label !== "__removed_table__");
     for (const item of equipment) {
       const pos = placedId(String(item.id), 306, 430), rotation = Number(item.rotation || 0) % 360, vertical = rotation === 90 || rotation === 270, label = String(item.label || "Equipment");
       if (item.type === "podium") {

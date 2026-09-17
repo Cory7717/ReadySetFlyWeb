@@ -1049,7 +1049,7 @@ export async function createMeetingBeoPdf(event: any, seriesEvents: any[], space
     const equipment = savedLayout.filter((item: any) => item.type && !["presentation", "entry", "removed"].includes(item.type) && item.label !== "__removed_table__");
     for (const item of equipment) {
       const pos = placedId(String(item.id), 306, 430), rotation = Number(item.rotation || 0) % 360, vertical = rotation === 90 || rotation === 270, label = String(item.label || "Equipment");
-      if (item.type === "podium") {
+      if (item.type === "podium" || item.type === "laptop_stand") {
         page.drawRectangle({ x: pos.x - (vertical ? 16 : 12), y: pos.y - (vertical ? 12 : 16), width: vertical ? 32 : 24, height: vertical ? 24 : 32, color: rgb(0.66, 0.51, 0.33), borderColor: rgb(0.37, 0.25, 0.15), borderWidth: 1 });
       } else if (item.type === "tv") {
         page.drawRectangle({ x: pos.x - (vertical ? 16 : 27), y: pos.y - (vertical ? 27 : 16), width: vertical ? 32 : 54, height: vertical ? 54 : 32, color: ink });

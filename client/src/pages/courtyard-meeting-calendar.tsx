@@ -186,11 +186,12 @@ function MeetingSetupDiagram({ meetingRoom, roomSetup, attendance, banquetChairs
   const [selectedLayoutId,setSelectedLayoutId]=useState<string|null>(null);
   const room = ROOM_LAYOUTS[meetingRoom] || ROOM_LAYOUTS.full_room, guests = Math.max(1, Number(attendance || 1));
   const chairs = guests, elements: any[] = [];
-  // Size furniture consistently inside the established 600 x 350 saved-layout coordinate system.
-  const feetToCanvas = Math.min(530 / room.lengthFeet, 420 / room.widthFeet);
+  // Preserve each room's real footprint while retaining normalized saved-layout coordinates.
+  const horizontalFeet=Math.max(room.widthFeet,room.lengthFeet),verticalFeet=Math.min(room.widthFeet,room.lengthFeet);
+  const roomCanvasWidth=530,roomCanvasHeight=roomCanvasWidth*(verticalFeet/horizontalFeet),diagramHeight=roomCanvasHeight+70;
+  const feetToCanvas = Math.min(roomCanvasWidth/horizontalFeet,roomCanvasHeight/verticalFeet);
   const roundTableRadius = 2.5 * feetToCanvas; // 60-inch diameter
   const rectangleLong = 6 * feetToCanvas, rectangleShort = 2.5 * feetToCanvas; // 72 x 30 inches
-  const roomCanvasWidth=530,roomCanvasHeight=meetingRoom==="cedar"?roomCanvasWidth*(room.widthFeet/room.lengthFeet):280,diagramHeight=roomCanvasHeight+70;
   const innerLeft=55,innerTop=72,innerWidth=490,innerHeight=roomCanvasHeight-60,fallbackYScale=innerHeight/220,scaledY=(y:number)=>innerTop+(y-72)*fallbackYScale;
   const position = (id: string, x: number, y: number) => { const saved = layout.find((item:any) => item.id === id); return saved ? {x:innerLeft+Number(saved.x)*innerWidth,y:innerTop+Number(saved.y)*innerHeight} : {x,y:scaledY(y)}; };
   const drag = (id: string) => onLayoutChange ? { style: { cursor: "grab" }, onPointerDown: (event:any) => { event.preventDefault(); const item=layout.find((candidate:any)=>candidate.id===id);if(item?.type&&!['presentation','entry'].includes(item.type))setSelectedLayoutId(id);event.currentTarget.setPointerCapture(event.pointerId); }, onPointerMove: (event:any) => { if (!event.currentTarget.hasPointerCapture(event.pointerId)) return; const svg = event.currentTarget.ownerSVGElement, bounds = svg.getBoundingClientRect(); const x = Math.max(0, Math.min(1, ((event.clientX-bounds.left)/bounds.width*600-innerLeft)/innerWidth)), y = Math.max(0, Math.min(1, ((event.clientY-bounds.top)/bounds.height*diagramHeight-innerTop)/innerHeight)); const existing=layout.find((item:any)=>item.id===id)||{id}; onLayoutChange([...layout.filter((item:any)=>item.id!==id),{...existing,id,x,y}]); }, onPointerUp: (event:any) => { if(event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); }, onPointerCancel: (event:any) => { if(event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId); } } : {};

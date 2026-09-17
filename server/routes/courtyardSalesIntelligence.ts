@@ -267,7 +267,7 @@ function meetingEventWriteValues(body: any, holdExpiresAt: Date | null, eventDay
     gratuityAllocationsJson: cleanGratuityAllocations(body?.gratuityAllocationsJson),
     banquetChairsPerTable: Math.min(8, Math.max(1, Math.round(Number(body?.banquetChairsPerTable || 8)))),
     setupOrientation: body?.setupOrientation === "widthwise" ? "widthwise" : "lengthwise",
-    setupLayoutJson: (Array.isArray(body?.setupLayoutJson) ? body.setupLayoutJson : []).map((item: any, index: number) => ({ id: String(item?.id || `item-${index}`).slice(0, 80), x: safeNonnegativeNumber(item?.x, 1), y: safeNonnegativeNumber(item?.y, 1), type: String(item?.type || "").slice(0, 40) || undefined, label: String(item?.label || "").trim().slice(0, 80) || undefined, chairs: Math.min(8, Math.max(0, Math.round(Number(item?.chairs ?? (item?.type === "small_table" ? 2 : 0))))), rotation: Math.round(safeNonnegativeNumber(item?.rotation, 270) / 90) * 90 % 360 })).slice(0, 150),
+    setupLayoutJson: (Array.isArray(body?.setupLayoutJson) ? body.setupLayoutJson : []).map((item: any, index: number) => ({ id: String(item?.id || `item-${index}`).slice(0, 80), x: safeNonnegativeNumber(item?.x, 1), y: safeNonnegativeNumber(item?.y, 1), type: String(item?.type || "").slice(0, 40) || undefined, label: String(item?.label || "").trim().slice(0, 80) || undefined, chairs: item?.type === "small_table" ? (Number(item?.chairs) === 3 ? 3 : 2) : Math.min(8, Math.max(0, Math.round(Number(item?.chairs || 0)))), rotation: Math.round(safeNonnegativeNumber(item?.rotation, 270) / 90) * 90 % 360 })).slice(0, 150),
     cateringRevenue: cateringRevenue.toFixed(2),
     breakfastPerPerson: breakfastPerPerson.toFixed(2),
     lunchDinnerPerPerson: lunchDinnerPerPerson.toFixed(2),

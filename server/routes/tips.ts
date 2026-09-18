@@ -25,6 +25,7 @@ import {
   tipsKioskSettings,
   tipsUsers,
   scheduleEmployees,
+  courtyardMeetingEvents,
 } from "@shared/schema";
 
 const require = createRequire(import.meta.url);
@@ -1480,7 +1481,115 @@ async function buildTipsGrid(requestedStart?: string, viewerUser?: any) {
       asc(tipBanquetReports.eventDate),
       asc(tipBanquetReports.eventName),
     );
-  const banquetTotal = banquetReports.reduce(
+  // Meeting Calendar keeps one row per event day, but its revenue and gratuity
+  // allocations describe the entire event series. Import the series once, in
+  // the pay period containing its final event date, so multi-day events are not
+  // paid repeatedly. These records remain derived from the calendar and update
+  // automatically when the event closeout is edited.
+  const meetingRows = await db
+    .select()
+    .from(courtyardMeetingEvents)
+    .where(
+      and(
+        gte(courtyardMeetingEvents.eventDate, period.start),
+        eq(courtyardMeetingEvents.status, "definite"),
+      ),
+    );
+  const meetingSeries = new Map<string, any>();
+  for (const meeting of meetingRows) {
+    const seriesKey = String(meeting.bookingSeriesId || meeting.id);
+    const current = meetingSeries.get(seriesKey);
+    if (!current || String(meeting.eventDate) > String(current.eventDate))
+      meetingSeries.set(seriesKey, meeting);
+  }
+  const normalizeAssociateName = (value: unknown) =>
+    String(value || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, " ")
+      .trim();
+  const banquetAssociateByName = new Map(
+    banquetAssociates.map((associate) => [
+      normalizeAssociateName(associate.employeeDisplayName),
+      associate,
+    ]),
+  );
+  const calendarBanquetReports = Array.from(meetingSeries.entries())
+    .filter(([, meeting]) =>
+      String(meeting.eventDate) >= period.start &&
+      String(meeting.eventDate) <= period.end &&
+      Array.isArray(meeting.gratuityAllocationsJson) &&
+      meeting.gratuityAllocationsJson.length > 0,
+    )
+    .map(([seriesKey, meeting]) => {
+      const allocations = (meeting.gratuityAllocationsJson as any[])
+        .map((allocation: any) => ({
+          associateName: String(allocation?.associateName || "").trim(),
+          workPerformed: String(allocation?.workPerformed || "").trim(),
+          percentage: Math.max(0, Number(allocation?.percentage || 0)),
+        }))
+        .filter((allocation: any) => allocation.associateName && allocation.percentage > 0);
+      const grossSales = moneyNumber(meeting.cateringRevenue) + moneyNumber(meeting.otherRevenue);
+      const gratuityRate = Math.max(0, Number(meeting.fbGratuityPercent ?? 18)) / 100;
+      const banquetTips = grossSales * gratuityRate;
+      let allocatedCents = 0;
+      const totalCents = Math.round(banquetTips * 100);
+      const assignedAssociatesJson = allocations.map((allocation: any, index: number) => {
+        const matched = banquetAssociateByName.get(normalizeAssociateName(allocation.associateName));
+        const cents = index === allocations.length - 1
+          ? Math.max(0, totalCents - allocatedCents)
+          : Math.round(totalCents * allocation.percentage / 100);
+        allocatedCents += cents;
+        return {
+          userId: matched?.id || "",
+          displayName: matched?.employeeDisplayName || allocation.associateName,
+          department: matched?.department || null,
+          position: matched?.position || null,
+          splitAmount: moneyString(cents / 100),
+          workPerformed: allocation.workPerformed || null,
+          percentage: allocation.percentage,
+        };
+      });
+      return {
+        id: `meeting-calendar:${seriesKey}`,
+        eventDate: String(meeting.eventDate),
+        payPeriodStart: period.start,
+        payPeriodEnd: period.end,
+        reportType: "banquet_service",
+        eventName: [meeting.groupName, meeting.eventName].filter(Boolean).join(" - "),
+        grossSales: moneyString(grossSales),
+        serviceRate: gratuityRate.toFixed(4),
+        banquetTips: moneyString(banquetTips),
+        assignedAssociatesJson,
+        notes: "Automatically imported from Meeting Calendar F&B gratuity allocations.",
+        storagePath: null,
+        originalFileName: null,
+        mimeType: null,
+        size: null,
+        source: "meeting_calendar",
+        readOnly: true,
+      };
+    })
+    .filter((report) => moneyNumber(report.banquetTips) > 0);
+  const allBanquetReports = [
+    ...banquetReports.map((report) => ({
+      ...report,
+      grossSales: moneyString(report.grossSales),
+      serviceRate: String(
+        report.serviceRate ?? serviceRateForReportType(report.reportType),
+      ),
+      banquetTips: moneyString(report.banquetTips),
+      assignedAssociatesJson: Array.isArray(report.assignedAssociatesJson)
+        ? report.assignedAssociatesJson
+        : [],
+      source: "manual",
+      readOnly: false,
+    })),
+    ...calendarBanquetReports,
+  ].sort((left, right) =>
+    String(left.eventDate).localeCompare(String(right.eventDate)) ||
+    String(left.eventName).localeCompare(String(right.eventName)),
+  );
+  const banquetTotal = allBanquetReports.reduce(
     (sum, report) => sum + moneyNumber(report.banquetTips),
     0,
   );
@@ -1496,17 +1605,7 @@ async function buildTipsGrid(requestedStart?: string, viewerUser?: any) {
     week1Total: moneyString(week1Total),
     week2Total: moneyString(week2Total),
     totalTips: moneyString(week1Total + week2Total),
-    banquetReports: banquetReports.map((report) => ({
-      ...report,
-      grossSales: moneyString(report.grossSales),
-      serviceRate: String(
-        report.serviceRate ?? serviceRateForReportType(report.reportType),
-      ),
-      banquetTips: moneyString(report.banquetTips),
-      assignedAssociatesJson: Array.isArray(report.assignedAssociatesJson)
-        ? report.assignedAssociatesJson
-        : [],
-    })),
+    banquetReports: allBanquetReports,
     banquetAssociates,
     banquetTotal: moneyString(banquetTotal),
     salesTotals: {

@@ -129,7 +129,7 @@ type TipsGrid = {
   period: { start: string; end: string; dayNumber: number; days: string[] };
   rows: TipsGridRow[];
   dayTotals: Array<{ date: string; totalTips: string; grossSales: string; taxAmount: string; netSales: string; beerSales: string; liquorSales: string; foodSales: string; wineSales: string; tipPercent: number; report: DailyReport | null }>;
-  banquetReports: Array<{ id: string; eventDate: string; reportType?: "banquet_service" | "group_breakfast"; eventName: string; grossSales: string; serviceRate?: string; banquetTips: string; assignedAssociatesJson?: Array<{ userId: string; displayName: string; department?: string | null; position?: string | null; splitAmount: string }>; notes?: string | null; originalFileName?: string | null; storagePath?: string | null }>;
+  banquetReports: Array<{ id: string; eventDate: string; reportType?: "banquet_service" | "group_breakfast"; eventName: string; grossSales: string; serviceRate?: string; banquetTips: string; assignedAssociatesJson?: Array<{ userId: string; displayName: string; department?: string | null; position?: string | null; splitAmount: string; workPerformed?: string | null; percentage?: number }>; notes?: string | null; originalFileName?: string | null; storagePath?: string | null; source?: "manual" | "meeting_calendar"; readOnly?: boolean }>;
   banquetAssociates: Array<{ id: string; employeeDisplayName: string; department?: string | null; position?: string | null }>;
   banquetTotal: string;
   salesTotals: Record<"week1" | "week2" | "period" | "month", { grossSales: string; taxAmount: string; netSales: string; beerSales: string; liquorSales: string; foodSales: string; wineSales: string }>;
@@ -1500,7 +1500,7 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <CardTitle className={C.ink}>Banquet and group breakfast tips</CardTitle>
-              <CardDescription className={C.muted}>Track meeting service fees at 21% and group breakfast payouts at 18% for selected associates.</CardDescription>
+              <CardDescription className={C.muted}>Bistro tips remain separate. Meeting Calendar F&amp;B gratuity allocations import automatically into the matching pay period, alongside manually entered banquet and group-breakfast payouts.</CardDescription>
             </div>
             <Button type="button" variant="outline" className={`${C.outline} shrink-0`} onClick={() => setBanquetOpen((open) => !open)} aria-expanded={banquetOpen}>
               <ChevronDown className={`mr-2 h-4 w-4 transition-transform ${banquetOpen ? "rotate-180" : ""}`} />
@@ -1590,13 +1590,16 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
                 {(grid.banquetReports || []).map((report) => (
                   <div key={report.id} className="grid w-full gap-2 p-3 text-left text-sm hover:bg-[#fbf6ee] md:grid-cols-[140px_150px_1fr_120px_120px_auto_auto]">
                     <div className="font-medium">{formatDisplayDate(report.eventDate)}</div>
-                    <div>{report.reportType === "group_breakfast" ? "Group breakfast" : "Meeting service"}</div>
+                    <div className="space-y-1">
+                      <div>{report.reportType === "group_breakfast" ? "Group breakfast" : report.source === "meeting_calendar" ? "Event gratuity" : "Meeting service"}</div>
+                      {report.source === "meeting_calendar" && <Badge variant="outline" className="border-blue-300 bg-blue-50 text-[10px] text-blue-900">Calendar import</Badge>}
+                    </div>
                     <div>
                       <div className="font-semibold text-[#201814]">{report.eventName}</div>
                       {report.notes && <div className="text-[#5f5247]">{report.notes}</div>}
                       {report.assignedAssociatesJson?.length ? (
                         <div className="mt-1 text-xs text-[#5f5247]">
-                          Split: {report.assignedAssociatesJson.map((associate) => `${associate.displayName} ${formatMoney(associate.splitAmount)}`).join(" | ")}
+                          Split: {report.assignedAssociatesJson.map((associate) => `${associate.displayName} ${formatMoney(associate.splitAmount)}${associate.workPerformed ? ` (${associate.workPerformed})` : ""}`).join(" | ")}
                         </div>
                       ) : null}
                     </div>
@@ -1607,7 +1610,7 @@ function TipsGridTracker({ currentUser }: { currentUser: TipsUser | null }) {
                     ) : (
                       <span className="text-[#5f5247]">No file</span>
                     )}
-                    <Button type="button" size="sm" variant="outline" className={C.outline} onClick={() => startEditBanquetReport(report)}>Edit</Button>
+                    {report.readOnly ? <span className="self-center text-xs font-medium text-[#5f5247]">Edit in Meeting Calendar</span> : <Button type="button" size="sm" variant="outline" className={C.outline} onClick={() => startEditBanquetReport(report)}>Edit</Button>}
                   </div>
                 ))}
               </div>

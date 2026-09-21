@@ -23,7 +23,7 @@ const field = "!border-[#d1bea5] !bg-white !bg-none !text-[#201814]";
 async function json(url: string, init?: RequestInit) {
   const response = await fetch(apiUrl(url), { credentials: "include", ...init });
   const value = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(value.error || "Request failed.");
+  if (!response.ok) throw Object.assign(new Error(value.error || "Request failed."), { status: response.status });
   return value;
 }
 function Metric({ label, value, sub }: { label: string; value: string; sub?: string }) {
@@ -82,7 +82,7 @@ export default function CourtyardRevenuePage() {
     ["workingForecast", "Working", (r) => fmtMoney(r.workingForecast)],
     ["forecastHigh", "High", (r) => fmtMoney(r.forecastHigh)],
   ];
-  if (data.isError && (data.error as any)?.message?.toLowerCase().includes("login")) return <div className="min-h-screen bg-[#f7f2ea] p-6 text-[#201814]"><div className="mx-auto max-w-md space-y-4 rounded-lg border border-[#d9ccb8] bg-[#fffaf2] p-6"><h1 className="text-xl font-semibold">Revenue Intelligence</h1><p>Enter the Courtyard Sales Intelligence PIN to continue.</p><Input type="password" inputMode="numeric" maxLength={5} value={pin} onChange={(e) => setPin(e.target.value)} className={field}/><Button onClick={() => unlock.mutate()} disabled={pin.length !== 5 || unlock.isPending}>Unlock</Button><div><Link href="/courtyard" className="text-sm underline">Back to Courtyard</Link></div></div></div>;
+  if (data.isError && [401, 403].includes((data.error as any)?.status)) return <div className="min-h-screen bg-[#f7f2ea] p-6 text-[#201814]"><div className="mx-auto max-w-md space-y-4 rounded-lg border border-[#d9ccb8] bg-[#fffaf2] p-6"><h1 className="text-xl font-semibold">Revenue Intelligence</h1><p>No Courtyard employee account is required. Enter the shared five-digit PIN to continue.</p><Input type="password" inputMode="numeric" maxLength={5} value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 5))} onKeyDown={(e) => e.key === "Enter" && pin.length === 5 && unlock.mutate()} className={field} aria-label="Revenue Intelligence PIN"/><Button onClick={() => unlock.mutate()} disabled={pin.length !== 5 || unlock.isPending}>Unlock Revenue Intelligence</Button><div className="flex gap-4 text-sm"><Link href="/opsreport" className="underline">Back to Ops Report</Link><Link href="/courtyard" className="underline">Courtyard</Link></div></div></div>;
   if (data.isLoading) return <div className="min-h-screen bg-[#f7f2ea] p-8 text-[#201814]">Loading revenue intelligence…</div>;
   if (data.isError) return <div className="min-h-screen bg-[#f7f2ea] p-8 text-red-800">{(data.error as Error).message}</div>;
   return <div className="min-h-screen bg-[#f7f2ea] pb-12 text-[#201814]"><header className="border-b border-[#d9ccb8] bg-[#fffaf2]"><div className="mx-auto flex max-w-[1500px] flex-wrap items-center justify-between gap-3 px-4 py-4"><div><div className="text-[10px] font-bold uppercase tracking-[.2em] text-[#9a6d27]">Courtyard Austin Northwest/Lakeline · 118 rooms</div><h1 className="text-2xl font-semibold tracking-tight text-[#243746]">Revenue Intelligence</h1><p className="text-sm text-[#6a5b4c]">OTB pace, pickup, forecast and stay-date demand</p></div><Link href="/courtyard"><Button variant="outline" className={field}><ArrowLeft className="mr-2 h-4 w-4"/>Courtyard</Button></Link></div></header>

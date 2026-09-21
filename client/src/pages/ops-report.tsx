@@ -1,6 +1,7 @@
 import { Fragment, useEffect, useMemo, useRef, useState, type FocusEvent, type MouseEvent, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDown, ArrowUp, Download, FileSpreadsheet, FileText, LockKeyhole, LogOut, Menu, Minus, Plus, Trash2, Upload } from "lucide-react";
+import { Link } from "wouter";
+import { ArrowDown, ArrowUp, Download, FileSpreadsheet, FileText, LockKeyhole, LogOut, Menu, Minus, Plus, Trash2, TrendingUp, Upload } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -2433,6 +2434,7 @@ export default function OpsReportPage() {
             <h1 className="text-3xl font-semibold tracking-tight">Operations Report</h1>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Link href="/courtyard/revenue"><Button type="button" variant="outline" className={C.outline}><TrendingUp className="mr-2 h-4 w-4" />Revenue Intelligence</Button></Link>
             <div className="group relative z-40">
               <Button type="button" variant="outline" className={C.outline} aria-label="Jump to report section" aria-haspopup="menu"><Menu className="mr-2 h-4 w-4" />Sections</Button>
               <div className="invisible absolute right-0 top-full z-50 w-64 pt-2 opacity-0 transition group-hover:visible group-hover:opacity-100 group-focus-within:visible group-focus-within:opacity-100">

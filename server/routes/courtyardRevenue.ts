@@ -7,6 +7,7 @@ import { courtyardRevenueAnnotations, courtyardRevenueBenchmarks, courtyardReven
 import { courtyardSalesAuth, hasCourtyardHotel } from "./courtyardSalesIntelligence";
 import { parseCourtyardOtbCsv } from "../courtyardOtb";
 import { pickupWatchDates, substantialRoomPickup, SUBSTANTIAL_ROOM_PICKUP_THRESHOLD } from "../courtyardRevenuePickup";
+import { effectiveSnapshotOccupancy } from "../courtyardRevenueOccupancy";
 
 const hotelId = "courtyard-austin-lakeline";
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2_000_000, files: 1 } });
@@ -94,12 +95,15 @@ export function registerCourtyardRevenueRoutes(app: Express) {
   };
   app.get("/api/courtyard/revenue", courtyardSalesAuth, guard, async (req: any, res, next) => {
     try {
-      const [allSnapshots, benchmarks, forecasts, annotations] = await Promise.all([
+      const [storedSnapshots, benchmarks, forecasts, annotations] = await Promise.all([
         db.select(snapshotColumns).from(courtyardRevenueSnapshots).where(eq(courtyardRevenueSnapshots.hotelId, hotelId)),
         db.select().from(courtyardRevenueBenchmarks).where(eq(courtyardRevenueBenchmarks.hotelId, hotelId)),
         db.select().from(courtyardRevenueForecasts).where(eq(courtyardRevenueForecasts.hotelId, hotelId)),
         db.select().from(courtyardRevenueAnnotations).where(eq(courtyardRevenueAnnotations.hotelId, hotelId)),
       ]);
+      // Correct older detailed uploads at read time too; aggregate-only imports
+      // have no stay-date evidence and retain their original occupancy value.
+      const allSnapshots = storedSnapshots.map((snapshot) => ({ ...snapshot, occupancy: effectiveSnapshotOccupancy(snapshot) }));
       const months = Array.from(new Set([...allSnapshots.map((s) => String(s.targetMonth)), ...benchmarks.map((b) => String(b.targetMonth))])).sort();
       const currentMonth = new Date().toISOString().slice(0, 7) + "-01";
       const selected = monthSchema.safeParse(req.query.month).success ? String(req.query.month) : months.includes(currentMonth) ? currentMonth : months.at(-1) || currentMonth;

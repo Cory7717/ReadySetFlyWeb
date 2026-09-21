@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { daysInTargetMonth, monthlyOtbOccupancy } from "./courtyardRevenueOccupancy";
 
 export type OtbStayDate = { stayDate: string; roomsSold: number; groupPu: number; groupUnpu: number; occupancy: number | null; adr: number | null; roomRevenue: number };
 export type OtbPreview = { targetMonth: string; roomRevenue: number; roomsOtb: number; adr: number; occupancy: number | null; groupPu: number; groupUnpu: number; rows: OtbStayDate[]; fingerprint: string; ignoredRows: number; totalRows: number; warnings: string[] };
@@ -86,13 +87,19 @@ export function parseCourtyardOtbCsv(text: string): OtbPreview {
   rows.sort((a, b) => a.stayDate.localeCompare(b.stayDate));
   const roomsOtb = rows.reduce((sum, row) => sum + row.roomsSold, 0);
   const roomRevenue = cents(rows.reduce((sum, row) => sum + row.roomRevenue, 0));
+  const targetMonth = `${rows[0].stayDate.slice(0, 7)}-01`;
   const occupancyRows = rows.filter((row) => row.occupancy != null);
-  const occupancy = occupancyRows.length ? occupancyRows.reduce((sum, row) => sum + row.occupancy!, 0) / occupancyRows.length : null;
-  const fingerprint = crypto.createHash("sha256").update(JSON.stringify({ targetMonth: `${rows[0].stayDate.slice(0, 7)}-01`, rows })).digest("hex");
+  const occupancy = monthlyOtbOccupancy(roomsOtb, targetMonth);
+  const fingerprint = crypto.createHash("sha256").update(JSON.stringify({ targetMonth, rows })).digest("hex");
   const warnings: string[] = [];
-  if (columns.occupancy < 0) warnings.push("Occupancy column not found; occupancy is unavailable.");
-  else if (occupancyRows.length !== rows.length) warnings.push(`Occupancy is missing on ${rows.length - occupancyRows.length} stay date(s); the average uses available values only.`);
+  if (rows.length !== daysInTargetMonth(targetMonth)) warnings.push(`This CSV includes ${rows.length} of ${daysInTargetMonth(targetMonth)} stay dates. Confirm omitted dates have zero rooms; otherwise monthly OTB totals and occupancy will be understated.`);
+  if (columns.occupancy < 0) warnings.push("Source occupancy column not found; occupancy is calculated from rooms sold and the 118-room inventory.");
+  else if (occupancyRows.length !== rows.length) warnings.push(`Source occupancy is missing on ${rows.length - occupancyRows.length} stay date(s); monthly occupancy is still calculated from rooms sold.`);
+  if (occupancyRows.length && occupancy != null) {
+    const sourceAverage = occupancyRows.reduce((sum, row) => sum + row.occupancy!, 0) / occupancyRows.length;
+    if (Math.abs(sourceAverage - occupancy) > 0.05) warnings.push(`Source Occ% averages ${(sourceAverage * 100).toFixed(2)}% across populated rows, while monthly OTB occupancy is ${(occupancy * 100).toFixed(2)}% from room-nights. Review the CSV's date coverage and Occ% mapping; the source average was not used for the monthly figure.`);
+  }
   if (columns.adr < 0) warnings.push("ADR column not found; OTB ADR was calculated from revenue / rooms.");
   if (ignoredRows) warnings.push(`${ignoredRows} non-stay-date row(s), including any TOTAL row, were excluded.`);
-  return { targetMonth: `${rows[0].stayDate.slice(0, 7)}-01`, rows, roomRevenue, roomsOtb, adr: roomsOtb ? cents(roomRevenue / roomsOtb) : 0, occupancy, groupPu: rows.reduce((sum, row) => sum + row.groupPu, 0), groupUnpu: rows.reduce((sum, row) => sum + row.groupUnpu, 0), fingerprint, ignoredRows, totalRows, warnings };
+  return { targetMonth, rows, roomRevenue, roomsOtb, adr: roomsOtb ? cents(roomRevenue / roomsOtb) : 0, occupancy, groupPu: rows.reduce((sum, row) => sum + row.groupPu, 0), groupUnpu: rows.reduce((sum, row) => sum + row.groupUnpu, 0), fingerprint, ignoredRows, totalRows, warnings };
 }

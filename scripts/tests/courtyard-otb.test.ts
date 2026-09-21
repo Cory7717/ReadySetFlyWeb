@@ -12,7 +12,8 @@ test("Marriott OTB mapping excludes TOTAL and computes monthly values from stay 
   assert.equal(parsed.roomRevenue, 15500);
   assert.equal(parsed.roomsOtb, 150);
   assert.equal(parsed.adr, 103.33);
-  assert.equal(parsed.occupancy, .375);
+  assert.equal(parsed.occupancy, 150 / (118 * 30));
+  assert.ok(parsed.warnings.some((warning) => warning.includes("2 of 30 stay dates")));
   assert.equal(parsed.groupPu, 16);
   assert.equal(parsed.groupUnpu, 3);
 });
@@ -37,4 +38,12 @@ test("Marriott two-digit-year dates resolve to the intended month", () => {
   const parsed = parseCourtyardOtbCsv([header, "11/18/26,17,3,0,55%,108.82,,1850.00"].join("\n"));
   assert.equal(parsed.targetMonth, "2026-11-01");
   assert.equal(parsed.rows[0].stayDate, "2026-11-18");
+});
+
+test("December occupancy uses all available room-nights, not the average reported daily percentage", () => {
+  const parsed = parseCourtyardOtbCsv([header, "12/01/2026,53,0,0,34.23%,95.36,,5054.26"].join("\n"));
+  assert.equal(parsed.roomsOtb, 53);
+  assert.equal(parsed.occupancy, 53 / (118 * 31));
+  assert.ok(parsed.warnings.some((warning) => warning.includes("1 of 31 stay dates")));
+  assert.ok(parsed.warnings.some((warning) => warning.includes("Source Occ% averages 34.23%")));
 });

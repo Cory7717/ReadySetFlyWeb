@@ -6,6 +6,7 @@ import { db } from "../db";
 import { courtyardRevenueAnnotations, courtyardRevenueBenchmarks, courtyardRevenueForecasts, courtyardRevenueSnapshots, courtyardRevenueStayDates } from "@shared/schema";
 import { courtyardSalesAuth, hasCourtyardHotel } from "./courtyardSalesIntelligence";
 import { parseCourtyardOtbCsv } from "../courtyardOtb";
+import { pickupWatchDates, substantialRoomPickup, SUBSTANTIAL_ROOM_PICKUP_THRESHOLD } from "../courtyardRevenuePickup";
 
 const hotelId = "courtyard-austin-lakeline";
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2_000_000, files: 1 } });
@@ -77,7 +78,7 @@ function stayDateComparison(current: any[], previous: any[]) {
     const adrDelta = row.adr == null || old.adr == null ? null : money(row.adr) - money(old.adr);
     const signal = (roomDelta >= DEMAND_REVIEW_THRESHOLDS.roomPickup || (occupancyDelta != null && occupancyDelta * 100 >= DEMAND_REVIEW_THRESHOLDS.occupancyPoints) || revenueDelta >= DEMAND_REVIEW_THRESHOLDS.revenuePickup)
       ? "Demand review" : null;
-    return { ...row, comparable: true, previousRooms: old.roomsSold, previousOccupancy: old.occupancy, previousAdr: old.adr, previousRevenue: old.roomRevenue, roomDelta, revenueDelta, occupancyDelta, adrDelta, groupPuDelta: money(row.groupPu) - money(old.groupPu), groupUnpuDelta: money(row.groupUnpu) - money(old.groupUnpu), signal, adrFlatWhileAccelerating: Boolean(signal && adrDelta != null && Math.abs(adrDelta) < DEMAND_REVIEW_THRESHOLDS.flatAdrDollars) };
+    return { ...row, comparable: true, previousRooms: old.roomsSold, previousOccupancy: old.occupancy, previousAdr: old.adr, previousRevenue: old.roomRevenue, roomDelta, substantialRoomPickup: substantialRoomPickup(roomDelta), revenueDelta, occupancyDelta, adrDelta, groupPuDelta: money(row.groupPu) - money(old.groupPu), groupUnpuDelta: money(row.groupUnpu) - money(old.groupUnpu), signal, adrFlatWhileAccelerating: Boolean(signal && adrDelta != null && Math.abs(adrDelta) < DEMAND_REVIEW_THRESHOLDS.flatAdrDollars) };
   });
   return compared.map((row: any, index) => ({ ...row, adjacentAcceleration: Boolean(row.signal && ((compared[index - 1] as any)?.signal || (compared[index + 1] as any)?.signal)) }));
 }
@@ -109,6 +110,7 @@ export function registerCourtyardRevenueRoutes(app: Express) {
       const comparableSnapshots = latestWithDetail.every((s) => s.detailAvailable) ? latestWithDetail : latestWithDetail[0]?.detailAvailable ? latestWithDetail.slice(0, 1) : [];
       const detail = await Promise.all(comparableSnapshots.map((s) => db.select().from(courtyardRevenueStayDates).where(eq(courtyardRevenueStayDates.snapshotId, s.id)).orderBy(asc(courtyardRevenueStayDates.stayDate))));
       const stayDatePickup = detail.length === 2 ? stayDateComparison(detail[0], detail[1]) : detail.length === 1 ? detail[0].map((row) => ({ ...row, comparable: false })) : [];
+      const pickupWatch = pickupWatchDates(stayDatePickup);
       const latest = snapshots.at(-1);
       const outlook = months.filter((month) => daysBetween(month, new Date().toISOString().slice(0, 10)) >= -31 && daysBetween(month, new Date().toISOString().slice(0, 10)) <= 120).map((month) => {
         const monthSnapshots = allSnapshots.filter((s) => String(s.targetMonth) === month).sort(sortSnapshots);
@@ -119,7 +121,7 @@ export function registerCourtyardRevenueRoutes(app: Express) {
       const priorCurve = allSnapshots.filter((s) => String(s.targetMonth) === priorMonth).sort(sortSnapshots).map((s) => ({ daysRemaining: daysBetween(monthEnd(priorMonth), String(s.snapshotDate)), revenue: money(s.roomRevenue), rooms: s.roomsOtb, adr: s.adr, occupancy: s.occupancy, snapshotDate: s.snapshotDate }));
       const currentDays = latest ? daysBetween(monthEnd(selected), String(latest.snapshotDate)) : null;
       const sameDaysOut = currentDays == null || !priorCurve.length ? null : priorCurve.reduce((nearest, row) => Math.abs(row.daysRemaining - currentDays) < Math.abs(nearest.daysRemaining - currentDays) ? row : nearest);
-      res.json({ months, selectedMonth: selected, snapshots: history(snapshots, benchmark, monthForecasts), latest: latest || null, benchmark, forecasts: monthForecasts, annotations: annotations.filter((a) => String(a.targetMonth || "") === selected), stayDatePickup, comparedSnapshotDates: comparableSnapshots.map((s) => s.snapshotDate), outlook, priorCurve, sameDaysOut, canEdit: canEdit(req) });
+      res.json({ months, selectedMonth: selected, snapshots: history(snapshots, benchmark, monthForecasts), latest: latest || null, benchmark, forecasts: monthForecasts, annotations: annotations.filter((a) => String(a.targetMonth || "") === selected), stayDatePickup, pickupWatch, pickupWatchThreshold: SUBSTANTIAL_ROOM_PICKUP_THRESHOLD, comparedSnapshotDates: comparableSnapshots.map((s) => s.snapshotDate), outlook, priorCurve, sameDaysOut, canEdit: canEdit(req) });
     } catch (error) { next(error); }
   });
   app.post("/api/courtyard/revenue/preview", courtyardSalesAuth, guard, edit, file, async (req: any, res, next) => {

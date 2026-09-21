@@ -92,6 +92,61 @@
   background: #f1e5d4 !important;
 }
 
+/* Revenue Intelligence deliberately keeps the Courtyard light palette even
+   when the rest of the application is in dark mode. Shared cards and chart
+   tooltips otherwise inherit dark surfaces while this page uses dark ink. */
+.courtyard-revenue-content .rsf-card-shell {
+  color: #201814 !important;
+  background: #fffaf2 !important;
+  border-color: #cdbda8 !important;
+}
+
+.courtyard-revenue-content .text-muted-foreground {
+  color: #5f5247 !important;
+}
+
+.courtyard-revenue-content :is(input, textarea, select),
+.courtyard-revenue-content select option {
+  color: #201814 !important;
+  background: #fff !important;
+  border-color: #8d765a !important;
+  color-scheme: light;
+}
+
+.courtyard-revenue-content :is(input, textarea)::placeholder {
+  color: #6b7280 !important;
+  opacity: 1;
+}
+
+.courtyard-revenue-content input[type="file"]::file-selector-button {
+  color: #201814 !important;
+  background: #eee5d7 !important;
+  border-radius: 0.35rem;
+  margin-right: 0.75rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.courtyard-revenue-content button {
+  color: #fff !important;
+  background: #2f5f46 !important;
+  border-color: #264d39 !important;
+}
+
+.courtyard-revenue-content button:hover {
+  background: #274d39 !important;
+}
+
+.courtyard-revenue-content .recharts-default-tooltip {
+  color: #201814 !important;
+  background: #fffaf2 !important;
+  border: 1px solid #cdbda8 !important;
+}
+
+.courtyard-revenue-content .recharts-tooltip-label,
+.courtyard-revenue-content .recharts-tooltip-item {
+  color: #201814 !important;
+}
+
 .uppy-DashboardItem-previewImg {
   object-fit: contain !important;
   background-color: #fff;

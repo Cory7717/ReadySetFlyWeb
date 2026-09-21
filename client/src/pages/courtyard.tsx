@@ -17,6 +17,7 @@ import {
   Search,
   Settings2,
   ShieldCheck,
+  TrendingUp,
 } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { apiRequest } from "@/lib/queryClient";
@@ -924,6 +925,15 @@ export default function CourtyardPortalPage() {
       disabled:
         !toolEnabled(user, "salesintelligence") &&
         !toolEnabled(user, "dosreporting"),
+    },
+    {
+      href: "/courtyard/revenue",
+      icon: TrendingUp,
+      title: "Revenue Intelligence",
+      description: "Upload daily OTB reports, follow 30/60/90 pickup, and manage the working room-revenue forecast.",
+      action: "Open revenue intelligence",
+      tone: C.green,
+      disabled: !toolEnabled(user, "salesintelligence") && !toolEnabled(user, "dosreporting"),
     },
   ];
 

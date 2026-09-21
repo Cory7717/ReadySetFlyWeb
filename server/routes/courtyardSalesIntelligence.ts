@@ -574,6 +574,7 @@ async function auth(req: any, res: any, next: any) {
 function hasHotel(req: any, id: string) {
   return req.salesHotels.some((h: any) => h.id === id);
 }
+export { auth as courtyardSalesAuth, hasHotel as hasCourtyardHotel };
 function productionInsertValue(
   row: any,
   batchId: string,

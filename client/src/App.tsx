@@ -119,6 +119,7 @@ import CourtyardSalesIntelligencePage from "@/pages/courtyard-sales-intelligence
 import CourtyardSalesTransitionShare from "@/pages/courtyard-sales-transition-share";
 import CourtyardMeetingCalendar from "@/pages/courtyard-meeting-calendar";
 import CourtyardMeetingCalendarShare from "@/pages/courtyard-meeting-calendar-share";
+import CourtyardRevenuePage from "@/pages/courtyard-revenue";
 import BankDepositPage from "@/pages/bank-deposit";
 import IncidentReportPage from "@/pages/incident-report";
 import IncidentReportSharePage from "@/pages/incident-report-share";
@@ -454,6 +455,7 @@ function Router() {
       />
       <Route path="/courtyard/sales-transition/:token" component={CourtyardSalesTransitionShare} />
       <Route path="/courtyard/meeting-calendar" component={CourtyardMeetingCalendar} />
+      <Route path="/courtyard/revenue" component={CourtyardRevenuePage} />
       <Route path="/courtyard/meeting-calendar/share/:token" component={CourtyardMeetingCalendarShare} />
       <Route path="/bankdeposit" component={BankDepositPage} />
       <Route path="/schedule" component={SchedulePage} />

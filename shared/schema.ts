@@ -2372,6 +2372,79 @@ export const courtyardMeetingCalendarShares = pgTable("courtyard_meeting_calenda
   createdByUserId: varchar("created_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }), createdAt: timestamp("created_at").defaultNow(),
 }, (table) => [index("idx_courtyard_meeting_shares_hotel").on(table.hotelId)]);
 
+export const courtyardRevenueSnapshots = pgTable("courtyard_revenue_snapshots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  hotelId: varchar("hotel_id").notNull().references(() => courtyardHotels.id, { onDelete: "cascade" }),
+  targetMonth: date("target_month").notNull(),
+  snapshotDate: date("snapshot_date").notNull(),
+  snapshotTime: time("snapshot_time"),
+  roomRevenue: numeric("room_revenue", { precision: 14, scale: 2 }).notNull(),
+  roomsOtb: integer("rooms_otb"),
+  adr: numeric("adr", { precision: 10, scale: 2 }),
+  occupancy: numeric("occupancy", { precision: 8, scale: 5 }),
+  groupPu: integer("group_pu"),
+  groupUnpu: integer("group_unpu"),
+  sourceFilename: text("source_filename"),
+  fingerprint: text("fingerprint").notNull(),
+  detailAvailable: boolean("detail_available").notNull().default(true),
+  sourceCsv: text("source_csv"),
+  sourceNote: text("source_note"),
+  createdByUserId: varchar("created_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [uniqueIndex("uniq_courtyard_revenue_snapshot_fingerprint").on(table.hotelId, table.fingerprint), index("idx_courtyard_revenue_snapshot_month").on(table.hotelId, table.targetMonth, table.snapshotDate)]);
+
+export const courtyardRevenueStayDates = pgTable("courtyard_revenue_stay_dates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  snapshotId: varchar("snapshot_id").notNull().references(() => courtyardRevenueSnapshots.id, { onDelete: "cascade" }),
+  stayDate: date("stay_date").notNull(),
+  roomsSold: integer("rooms_sold").notNull(),
+  occupancy: numeric("occupancy", { precision: 8, scale: 5 }),
+  adr: numeric("adr", { precision: 10, scale: 2 }),
+  roomRevenue: numeric("room_revenue", { precision: 14, scale: 2 }).notNull(),
+  groupPu: integer("group_pu"),
+  groupUnpu: integer("group_unpu"),
+}, (table) => [uniqueIndex("uniq_courtyard_revenue_stay_date").on(table.snapshotId, table.stayDate)]);
+
+export const courtyardRevenueBenchmarks = pgTable("courtyard_revenue_benchmarks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  hotelId: varchar("hotel_id").notNull().references(() => courtyardHotels.id, { onDelete: "cascade" }),
+  targetMonth: date("target_month").notNull(),
+  priorYearRevenue: numeric("prior_year_revenue", { precision: 14, scale: 2 }),
+  priorYearRooms: integer("prior_year_rooms"),
+  priorYearOccupancy: numeric("prior_year_occupancy", { precision: 8, scale: 5 }),
+  priorYearAdr: numeric("prior_year_adr", { precision: 10, scale: 2 }),
+  budgetRevenue: numeric("budget_revenue", { precision: 14, scale: 2 }),
+  budgetRooms: integer("budget_rooms"),
+  budgetOccupancy: numeric("budget_occupancy", { precision: 8, scale: 5 }),
+  budgetAdr: numeric("budget_adr", { precision: 10, scale: 2 }),
+  finalActualRevenue: numeric("final_actual_revenue", { precision: 14, scale: 2 }),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [uniqueIndex("uniq_courtyard_revenue_benchmark_month").on(table.hotelId, table.targetMonth)]);
+
+export const courtyardRevenueForecasts = pgTable("courtyard_revenue_forecasts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  hotelId: varchar("hotel_id").notNull().references(() => courtyardHotels.id, { onDelete: "cascade" }),
+  targetMonth: date("target_month").notNull(),
+  forecastDate: date("forecast_date").notNull(),
+  forecastLow: numeric("forecast_low", { precision: 14, scale: 2 }).notNull(),
+  workingForecast: numeric("working_forecast", { precision: 14, scale: 2 }).notNull(),
+  forecastHigh: numeric("forecast_high", { precision: 14, scale: 2 }).notNull(),
+  note: text("note"),
+  createdByUserId: varchar("created_by_user_id").references(() => tipsUsers.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [index("idx_courtyard_revenue_forecast_month").on(table.hotelId, table.targetMonth, table.forecastDate)]);
+
+export const courtyardRevenueAnnotations = pgTable("courtyard_revenue_annotations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  hotelId: varchar("hotel_id").notNull().references(() => courtyardHotels.id, { onDelete: "cascade" }),
+  annotationDate: date("annotation_date").notNull(),
+  targetMonth: date("target_month"),
+  kind: text("kind").notNull(),
+  label: text("label").notNull(),
+  note: text("note"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [index("idx_courtyard_revenue_annotation_month").on(table.hotelId, table.targetMonth, table.annotationDate)]);
+
 export const courtyardGroupRoomBlocks = pgTable("courtyard_group_room_blocks", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   hotelId: varchar("hotel_id").notNull().references(() => courtyardHotels.id, { onDelete: "cascade" }),

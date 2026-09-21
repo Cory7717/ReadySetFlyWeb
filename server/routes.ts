@@ -257,6 +257,7 @@ import { registerDosReportingRoutes } from "./routes/dosReporting";
 import { registerIncidentReportRoutes } from "./routes/incidentReport";
 import { registerCourtyardBudgetRoutes } from "./routes/courtyardBudget";
 import { registerCourtyardSalesIntelligenceRoutes } from "./routes/courtyardSalesIntelligence";
+import { registerCourtyardRevenueRoutes } from "./routes/courtyardRevenue";
 import { registerComptrollerRoutes } from "./routes/comptroller";
 import { registerVehicleListingRoutes } from "./routes/vehicleListings";
 import { registerAviationBriefingRoutes } from "./routes/aviationBriefings";
@@ -6928,6 +6929,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerIncidentReportRoutes(app);
   registerCourtyardBudgetRoutes(app);
   registerCourtyardSalesIntelligenceRoutes(app);
+  registerCourtyardRevenueRoutes(app);
   registerComptrollerRoutes(app);
   registerVehicleListingRoutes(app);
   registerAviationBriefingEngagementRoutes(app);

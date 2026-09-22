@@ -182,6 +182,8 @@ type ScheduleRequest = {
   requestEndDate?: string | null;
   originalRequestDate?: string | null;
   requestType: string;
+  requestedShiftTypeId?: string | null;
+  requestedShiftLabel?: string | null;
   startTime?: string | null;
   endTime?: string | null;
   notes?: string | null;
@@ -195,6 +197,9 @@ type ScheduleRequest = {
     requesterName: string;
     requestDate: string;
     requestEndDate?: string | null;
+    startTime?: string | null;
+    endTime?: string | null;
+    requestedShiftLabel?: string | null;
     status: string;
     createdAt?: string | null;
     isCurrentRequest?: boolean;
@@ -204,11 +209,16 @@ type ScheduleRequest = {
     requesterName: string;
     requestDate: string;
     requestEndDate?: string | null;
+    startTime?: string | null;
+    endTime?: string | null;
+    requestedShiftLabel?: string | null;
     status: string;
     createdAt?: string | null;
   }>;
   requester?: ScheduleUser;
 };
+
+type ScheduleRequestShiftOption = { id: string; label: string; startTime: string; endTime: string };
 
 type ScheduleEmployee = {
   id: string;
@@ -578,6 +588,15 @@ function formatRequestDateRange(request: ScheduleRequest) {
   const start = request.originalRequestDate || request.requestDate;
   const end = request.requestEndDate || start;
   return end && end !== start ? `${formatDate(start)} - ${formatDate(end)}` : formatDate(start);
+}
+
+function requestShiftLabel(request: Pick<ScheduleRequest, "requestedShiftLabel" | "startTime" | "endTime">) {
+  const time = request.startTime && request.endTime ? `${request.startTime.slice(0, 5)} - ${request.endTime.slice(0, 5)}` : "";
+  return request.requestedShiftLabel
+    ? `${request.requestedShiftLabel}${time ? ` (${time})` : ""}`
+    : time
+    ? time
+    : "Full day / all shifts";
 }
 
 function shiftText(assignment: ShiftAssignment | undefined, shiftType: ShiftType | undefined) {
@@ -2942,8 +2961,9 @@ function EmployeeManager({ employees, canViewRates, onAdd, onUpdate, onPayrollIm
   );
 }
 
-function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus, onCancel }: { requests: ScheduleRequest[]; isAdmin: boolean; spanish: boolean; onSubmit: (request: any) => Promise<void>; onStatus: (request: ScheduleRequest, status: string) => void; onCancel: (request: ScheduleRequest) => void }) {
-  const [form, setForm] = useState({ requestDate: "", requestEndDate: "", requestType: "time_off", startTime: "", endTime: "", notes: "" });
+function ScheduleRequestsPanel({ requests, requestShiftOptions, isAdmin, spanish, onSubmit, onStatus, onCancel }: { requests: ScheduleRequest[]; requestShiftOptions: ScheduleRequestShiftOption[]; isAdmin: boolean; spanish: boolean; onSubmit: (request: any) => Promise<void>; onStatus: (request: ScheduleRequest, status: string) => void; onCancel: (request: ScheduleRequest) => void }) {
+  const emptyForm = { requestDate: "", requestEndDate: "", requestType: "time_off", requestedShiftTypeId: "full_day", startTime: "", endTime: "", notes: "" };
+  const [form, setForm] = useState(emptyForm);
   const [expanded, setExpanded] = useState(true);
   const [pastExpanded, setPastExpanded] = useState(false);
   const [policyOpen, setPolicyOpen] = useState(false);
@@ -2972,8 +2992,8 @@ function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus,
     }
     setSubmitting(true);
     try {
-      await onSubmit({ ...form, requestEndDate: form.requestEndDate || form.requestDate, startTime: form.startTime || null, endTime: form.endTime || null, policyAccepted: acceptedPolicy });
-      setForm({ requestDate: "", requestEndDate: "", requestType: "time_off", startTime: "", endTime: "", notes: "" });
+      await onSubmit({ ...form, requestedShiftTypeId: ["full_day", "custom"].includes(form.requestedShiftTypeId) ? null : form.requestedShiftTypeId, requestEndDate: form.requestEndDate || form.requestDate, startTime: form.startTime || null, endTime: form.endTime || null, policyAccepted: acceptedPolicy });
+      setForm(emptyForm);
       setPolicyOpen(false);
       setPolicyAccepted(false);
     } catch {
@@ -2986,7 +3006,7 @@ function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus,
     if (!policyAccepted) return;
     await submitRequest(true);
   };
-  const pendingCount = activeRequests.filter((request) => request.status === "submitted").length;
+  const pendingCount = activeRequests.filter((request) => request.status === "submitted" || request.status === "waitlisted").length;
   const approvedCount = activeRequests.filter((request) => request.status === "approved").length;
   const deniedCount = activeRequests.filter((request) => request.status === "denied").length;
   const cancelledCount = activeRequests.filter((request) => request.status === "cancelled").length;
@@ -2995,13 +3015,13 @@ function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus,
     const first = request.firstOverlapRequest;
     const conflictNames = (request.overlapConflicts || [])
       .slice(0, 4)
-      .map((conflict) => `${conflict.requesterName} (${conflict.status})`)
+      .map((conflict) => `${conflict.requesterName} (${conflict.status}, ${requestShiftLabel(conflict)})`)
       .join(", ");
     return (
       <div key={request.id} className="flex flex-col gap-2 rounded-lg border border-[#e0d3c1] bg-white p-3 text-sm md:flex-row md:items-start md:justify-between">
         <div className="min-w-0 flex-1">
           <div className="font-semibold">{isAdmin ? `${request.requester?.employeeDisplayName || "Associate"} - ` : ""}{formatRequestDateRange(request)} - {request.requestType.replace("_", " ")}</div>
-          <div className="text-[#5f5247]">{isAdmin && request.department ? `${request.department} - ` : ""}{[request.startTime?.slice(0, 5), request.endTime?.slice(0, 5)].filter(Boolean).join(" - ")} {request.notes}</div>
+          <div className="text-[#5f5247]">{isAdmin && request.department ? `${request.department} - ` : ""}<span className="font-medium">Shift: {requestShiftLabel(request)}</span>{request.notes ? ` - ${request.notes}` : ""}</div>
           {isAdmin && overlapCount > 0 && (
             <div className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-2 text-amber-950">
               <div className="flex items-start gap-2 font-semibold">
@@ -3012,7 +3032,7 @@ function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus,
               </div>
               {first && (
                 <div className="mt-1 text-xs">
-                  {spanish ? "Primera solicitud" : "First requested"}: {first.requesterName} ({first.status}) for {formatRequestDateRange({ ...request, requestDate: first.requestDate, requestEndDate: first.requestEndDate } as ScheduleRequest)}.
+                  {spanish ? "Primera solicitud" : "First requested"}: {first.requesterName} ({first.status}) for {formatRequestDateRange({ ...request, requestDate: first.requestDate, requestEndDate: first.requestEndDate } as ScheduleRequest)}, shift {requestShiftLabel(first)}.
                 </div>
               )}
               {conflictNames && <div className="mt-1 text-xs">{spanish ? "Coincide con" : "Overlaps with"}: {conflictNames}</div>}
@@ -3026,13 +3046,13 @@ function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus,
             </Badge>
           )}
           <Badge variant="outline" className={request.status === "approved" ? "border-emerald-300 bg-emerald-50 text-emerald-800" : request.status === "denied" ? "border-red-300 bg-red-50 text-red-800" : request.status === "cancelled" ? "border-slate-300 bg-slate-50 text-slate-700" : "border-amber-300 bg-amber-50 text-amber-900"}>{request.status}</Badge>
-          {isAdmin && request.status === "submitted" && !isPastRequest(request) && (
+          {isAdmin && (request.status === "submitted" || request.status === "waitlisted") && !isPastRequest(request) && (
             <>
               <Button size="sm" variant="outline" className={C.outline} onClick={() => onStatus(request, "approved")}>{t("Approve")}</Button>
               <Button size="sm" variant="outline" className={C.outline} onClick={() => onStatus(request, "denied")}>{t("Deny")}</Button>
             </>
           )}
-          {(request.status === "submitted" || request.status === "approved") && !isPastRequest(request) && (
+          {(request.status === "submitted" || request.status === "waitlisted" || request.status === "approved") && !isPastRequest(request) && (
             <Button size="sm" variant="outline" className={C.outline} onClick={() => onCancel(request)}>{t("Cancel")}</Button>
           )}
         </div>
@@ -3063,7 +3083,7 @@ function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus,
         </div>
       </CardHeader>
       {expanded && <CardContent className="space-y-4">
-        <div className="grid gap-3 md:grid-cols-[150px_150px_180px_120px_120px_1fr_auto]">
+        <div className="grid gap-3 md:grid-cols-[150px_150px_180px_210px_1fr_auto]">
           <div><Label>{spanish ? "Fecha inicio" : "Start date"}</Label><Input className={C.field} type="date" min={today} max={latestRequestDate} value={form.requestDate} onChange={(event) => setForm({ ...form, requestDate: event.target.value, requestEndDate: form.requestEndDate || event.target.value })} /></div>
           <div><Label>{spanish ? "Fecha fin" : "End date"}</Label><Input className={C.field} type="date" min={form.requestDate || today} max={latestRequestDate} value={form.requestEndDate} onChange={(event) => setForm({ ...form, requestEndDate: event.target.value })} /></div>
           <div>
@@ -3078,10 +3098,10 @@ function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus,
               </SelectContent>
             </Select>
           </div>
-          <div><Label>{t("Start")}</Label><Input className={C.field} type="time" value={form.startTime} onChange={(event) => setForm({ ...form, startTime: event.target.value })} /></div>
-          <div><Label>{t("End")}</Label><Input className={C.field} type="time" value={form.endTime} onChange={(event) => setForm({ ...form, endTime: event.target.value })} /></div>
+          <div><Label>{spanish ? "Turno solicitado" : "Requested shift"}</Label><Select value={form.requestedShiftTypeId} onValueChange={(value) => { const shift = requestShiftOptions.find((option) => option.id === value); setForm({ ...form, requestedShiftTypeId: value, startTime: shift?.startTime?.slice(0, 5) || "", endTime: shift?.endTime?.slice(0, 5) || "" }); }}><SelectTrigger className={C.field}><SelectValue /></SelectTrigger><SelectContent className={C.menu}><SelectItem value="full_day">{spanish ? "Dia completo / todos los turnos" : "Full day / all shifts"}</SelectItem>{requestShiftOptions.map((shift) => <SelectItem key={shift.id} value={shift.id}>{shift.label} ({shift.startTime.slice(0, 5)} - {shift.endTime.slice(0, 5)})</SelectItem>)}<SelectItem value="custom">{spanish ? "Horario personalizado" : "Custom time window"}</SelectItem></SelectContent></Select></div>
+          {form.requestedShiftTypeId === "custom" && <div className="grid grid-cols-2 gap-2"><div><Label>{t("Start")}</Label><Input className={C.field} type="time" value={form.startTime} onChange={(event) => setForm({ ...form, startTime: event.target.value })} /></div><div><Label>{t("End")}</Label><Input className={C.field} type="time" value={form.endTime} onChange={(event) => setForm({ ...form, endTime: event.target.value })} /></div></div>}
           <div><Label>{t("Notes")}</Label><Input className={C.field} value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} placeholder={t("Request details")} /></div>
-          <div className="flex items-end"><Button className={C.green} disabled={!form.requestDate || !form.notes.trim()} onClick={submit}>{t("Submit")}</Button></div>
+          <div className="flex items-end"><Button className={C.green} disabled={!form.requestDate || !form.notes.trim() || (form.requestedShiftTypeId === "custom" && (!form.startTime || !form.endTime))} onClick={submit}>{t("Submit")}</Button></div>
         </div>
         <Dialog open={policyOpen} onOpenChange={(open) => {
           if (submitting) return;
@@ -3102,7 +3122,7 @@ function ScheduleRequestsPanel({ requests, isAdmin, spanish, onSubmit, onStatus,
                 <li>Associates should submit foreseeable requests as early as possible. Requests submitted fewer than 14 days before the requested date may receive additional review and are not guaranteed approval.</li>
                 <li>A request is not approved until its status shows “Approved.” Submitting a request does not authorize an absence.</li>
                 <li>Requests are subject to staffing needs, anticipated occupancy, the number of qualified associates available, previously submitted requests, and other operational requirements.</li>
-                <li>A request cannot be submitted when another pending or approved request already affects the same department, date, and overlapping shift. The associate may contact their direct supervisor to discuss exceptional circumstances, but supervisor review does not guarantee approval.</li>
+                <li>If another pending or approved request affects the same department, date, and overlapping shift, both requests remain eligible for manager review. The overlap will be flagged so the manager can evaluate coverage and approve or deny each request. Requests for different, non-overlapping shifts are reviewed separately.</li>
                 <li>Associates should not make nonrefundable plans until their request has been approved.</li>
                 <li>Associates must continue reporting to all scheduled shifts unless the request is approved or a supervisor provides other instructions.</li>
                 <li>This request system is not the call-in procedure for an illness, emergency, unexpected absence, or late arrival. Associates must follow the established call-in procedure and contact their supervisor as soon as reasonably possible.</li>
@@ -3298,7 +3318,7 @@ export default function SchedulePage() {
 
   const auth = useQuery<{ user: ScheduleUser | null }>({ queryKey: ["/api/schedule/auth/me"], queryFn: () => fetchJson("/api/schedule/auth/me"), enabled: !shareToken });
   const weeks = useQuery<{ weeks: WeeklySchedule[] }>({ queryKey: ["/api/schedule/weeks"], queryFn: () => fetchJson("/api/schedule/weeks"), enabled: !!auth.data?.user && !shareToken && !requestOnly });
-  const requests = useQuery<{ requests: ScheduleRequest[] }>({ queryKey: ["/api/schedule/requests"], queryFn: () => fetchJson("/api/schedule/requests"), enabled: !!auth.data?.user && !shareToken });
+  const requests = useQuery<{ requests: ScheduleRequest[]; requestShiftOptions: ScheduleRequestShiftOption[] }>({ queryKey: ["/api/schedule/requests"], queryFn: () => fetchJson("/api/schedule/requests"), enabled: !!auth.data?.user && !shareToken });
   const requestPlatform = useQuery<any>({ queryKey: ["/api/schedule/request-platform"], queryFn: () => fetchJson("/api/schedule/request-platform"), enabled: !!auth.data?.user && !shareToken });
   const share = useQuery<SchedulePayload>({ queryKey: ["/api/schedule/share", shareToken], queryFn: () => fetchJson(`/api/schedule/share/${shareToken}`), enabled: !!shareToken });
   const weekId = selectedWeekId || weeks.data?.weeks?.[0]?.id || "";
@@ -3687,20 +3707,16 @@ export default function SchedulePage() {
       const response = await apiRequest("POST", "/api/schedule/requests", request);
       return response.json();
     },
-    onSuccess: (data: { emailSent?: boolean; policyWarning?: boolean; highDemandWarning?: boolean; request?: ScheduleRequest }) => {
+    onSuccess: (data: { emailSent?: boolean; policyWarning?: boolean; highDemandWarning?: boolean; coverageWarning?: boolean; request?: ScheduleRequest }) => {
       toast({
-        title: data.request?.status === "waitlisted" ? "Added to waitlist" : "Schedule request submitted",
-        description: data.request?.status === "waitlisted" ? "You will be promoted automatically if the conflicting request is cancelled." : data.highDemandWarning ? "This is a high-demand date and will receive enhanced manager review." : data.policyWarning
+        title: "Schedule request submitted",
+        description: data.coverageWarning ? "Another request overlaps this department, date, and shift. Your manager was notified and can still approve or deny the request." : data.highDemandWarning ? "This is a high-demand date and will receive enhanced manager review." : data.policyWarning
           ? "Request saved with policy warning: inside 14 days and subject to manager approval."
           : data.emailSent ? "Your department manager was notified." : "Your request was saved. Manager email could not be sent automatically.",
       });
       queryClient.invalidateQueries({ queryKey: ["/api/schedule/requests"] });
     },
-    onError: (error: Error & { code?: string }, variables: any) => {
-      if (error.code === "SCHEDULE_REQUEST_CONFLICT" && !variables.joinWaitlist && window.confirm(`${error.message}\n\nWould you like to join the waitlist?`)) {
-        submitRequest.mutate({ ...variables, joinWaitlist: true });
-        return;
-      }
+    onError: (error: Error & { code?: string }) => {
       toast({ title: "Request not submitted", description: error.message, variant: "destructive" });
     },
   });
@@ -3911,13 +3927,14 @@ export default function SchedulePage() {
         {!shareToken && user && (
           <ScheduleRequestsPanel
             requests={requests.data?.requests || []}
+            requestShiftOptions={requests.data?.requestShiftOptions || []}
             isAdmin={canManageSchedule}
             spanish={spanish}
             onSubmit={async (request) => { await submitRequest.mutateAsync(request); }}
             onStatus={(request, status) => {
               const overlapCount = Number(request.overlapConflictCount || request.conflictCount || 0);
               const first = request.firstOverlapRequest;
-              const firstText = first ? ` First request: ${first.requesterName} (${first.status}) for ${formatRequestDateRange({ ...request, requestDate: first.requestDate, requestEndDate: first.requestEndDate } as ScheduleRequest)}.` : "";
+              const firstText = first ? ` First request: ${first.requesterName} (${first.status}) for ${formatRequestDateRange({ ...request, requestDate: first.requestDate, requestEndDate: first.requestEndDate } as ScheduleRequest)}, shift ${requestShiftLabel(first)}.` : "";
               if (
                 status === "approved" &&
                 overlapCount > 0 &&

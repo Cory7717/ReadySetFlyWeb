@@ -1163,6 +1163,11 @@ export const scheduleRequests = pgTable(
     requestEndDate: date("request_end_date"),
     requestGroupId: varchar("request_group_id"),
     requestType: text("request_type").notNull().default("time_off"),
+    requestedShiftTypeId: varchar("requested_shift_type_id").references(
+      () => scheduleShiftTypes.id,
+      { onDelete: "set null" },
+    ),
+    requestedShiftLabel: text("requested_shift_label"),
     startTime: time("start_time"),
     endTime: time("end_time"),
     notes: text("notes"),

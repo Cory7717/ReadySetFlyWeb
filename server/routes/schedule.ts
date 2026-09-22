@@ -8,6 +8,7 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import bcrypt from "bcrypt";
 import { XMLParser } from "fast-xml-parser";
 import { z } from "zod";
+import { dateInRequestRange, isExactDuplicateRequest, requestEndDate, requestRangesOverlap, requestTimeWindowsOverlap } from "../scheduleRequestConflicts";
 import { and, asc, desc, eq, inArray, isNull, lte, lt, sql } from "drizzle-orm";
 import { normalizeAgilysysScreenshotDays } from "@shared/schedule-agilysys-screenshot";
 import { db } from "../db";
@@ -173,39 +174,6 @@ function daysBetween(start: string, end: string) {
   const endDate = parseDateKey(end);
   if (!startDate || !endDate) return 0;
   return Math.floor((endDate.getTime() - startDate.getTime()) / DAY_MS);
-}
-
-function requestEndDate(request: any) {
-  return request?.requestEndDate || request?.requestDate;
-}
-
-function dateInRequestRange(request: any, dateKey: string) {
-  return dateKey >= request.requestDate && dateKey <= requestEndDate(request);
-}
-
-function requestRangesOverlap(left: any, right: any) {
-  return left.requestDate <= requestEndDate(right) && requestEndDate(left) >= right.requestDate;
-}
-
-function requestTimeWindowsOverlap(left: any, right: any) {
-  if ((!left.startTime && !left.endTime) || (!right.startTime && !right.endTime)) return true;
-  if (!left.startTime || !left.endTime || !right.startTime || !right.endTime) return true;
-
-  const expandWindow = (startTime: string, endTime: string) => {
-    const start = minutesFromTime(startTime);
-    const end = minutesFromTime(endTime);
-    if (start == null || end == null) return [[0, 24 * 60]] as Array<[number, number]>;
-    if (start === end) return [[0, 24 * 60]] as Array<[number, number]>;
-    return end > start
-      ? [[start, end]] as Array<[number, number]>
-      : [[start, 24 * 60], [0, end]] as Array<[number, number]>;
-  };
-
-  const leftWindows = expandWindow(left.startTime, left.endTime);
-  const rightWindows = expandWindow(right.startTime, right.endTime);
-  return leftWindows.some(([leftStart, leftEnd]) =>
-    rightWindows.some(([rightStart, rightEnd]) => leftStart < rightEnd && rightStart < leftEnd),
-  );
 }
 
 function normalizeDepartment(value?: string | null) {
@@ -1431,12 +1399,12 @@ const scheduleRequestSchema = z.object({
   requestDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   requestEndDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional().nullable(),
   requestType: z.enum(["time_off", "preferred_shift", "availability", "other"]).default("time_off"),
+  requestedShiftTypeId: z.string().uuid().optional().nullable(),
   startTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/).optional().nullable(),
   endTime: z.string().regex(/^(?:[01]\d|2[0-3]):[0-5]\d$/).optional().nullable(),
   notes: z.string().trim().min(1).max(2000),
   policyAccepted: z.boolean().optional(),
   isProtectedLeave: z.boolean().default(false),
-  joinWaitlist: z.boolean().default(false),
 }).refine(
   (request) => Boolean(request.startTime) === Boolean(request.endTime),
   { message: "Start and end times must be provided together.", path: ["endTime"] },
@@ -1446,7 +1414,7 @@ const scheduleRequestSchema = z.object({
 );
 
 const scheduleRequestStatusSchema = z.object({
-  status: z.enum(["submitted", "approved", "denied", "cancelled", "waitlisted"]),
+  status: z.enum(["submitted", "approved", "denied", "cancelled"]),
   overrideReason: z.string().trim().min(5).max(1000).optional(),
   coveragePlan: z.string().trim().min(5).max(1000).optional(),
 });
@@ -1879,12 +1847,13 @@ async function addRequestConflictInfo(rows: Array<{ request: any; user: any }>) 
     .select({ request: scheduleRequests, user: tipsUsers })
     .from(scheduleRequests)
     .innerJoin(tipsUsers, eq(scheduleRequests.requesterUserId, tipsUsers.id))
-    .where(inArray(scheduleRequests.status, ["submitted", "approved"] as any));
+    .where(inArray(scheduleRequests.status, ["submitted", "approved", "waitlisted"] as any));
   const today = todayDateKey();
   return rows.map((row) => {
     const conflicts = activeRows.filter((candidate) =>
       candidate.request.department === row.request.department &&
       requestRangesOverlap(candidate.request, row.request) &&
+      requestTimeWindowsOverlap(candidate.request, row.request) &&
       candidate.request.id !== row.request.id &&
       candidate.request.requesterUserId !== row.request.requesterUserId,
     );
@@ -1905,6 +1874,9 @@ async function addRequestConflictInfo(rows: Array<{ request: any; user: any }>) 
             requesterName: publicScheduleUser(first.user).employeeDisplayName || [first.user.firstName, first.user.lastName].filter(Boolean).join(" ") || first.user.email,
             requestDate: first.request.requestDate,
             requestEndDate: requestEndDate(first.request),
+            startTime: first.request.startTime,
+            endTime: first.request.endTime,
+            requestedShiftLabel: first.request.requestedShiftLabel,
             status: first.request.status,
             createdAt: first.request.createdAt,
             isCurrentRequest: first.request.id === row.request.id,
@@ -1919,6 +1891,9 @@ async function addRequestConflictInfo(rows: Array<{ request: any; user: any }>) 
           requesterName: publicScheduleUser(candidate.user).employeeDisplayName || [candidate.user.firstName, candidate.user.lastName].filter(Boolean).join(" ") || candidate.user.email,
           requestDate: candidate.request.requestDate,
           requestEndDate: requestEndDate(candidate.request),
+          startTime: candidate.request.startTime,
+          endTime: candidate.request.endTime,
+          requestedShiftLabel: candidate.request.requestedShiftLabel,
           status: candidate.request.status,
           createdAt: candidate.request.createdAt,
         })),
@@ -3502,6 +3477,11 @@ export function registerScheduleRoutes(app: Express) {
   router.get("/requests", requireCourtyardAssociate, async (req: any, res, next) => {
     try {
       const user = await publicScheduleUserWithProfile(req.scheduleUser);
+      await seedShiftTypes();
+      const requesterDepartment = await getScheduleRequestDepartment(req.scheduleUser);
+      const requestShiftOptions = (await db.select().from(scheduleShiftTypes).where(eq(scheduleShiftTypes.active, true)).orderBy(asc(scheduleShiftTypes.sortOrder), asc(scheduleShiftTypes.label)))
+        .filter((shift) => normalizeDepartment(shift.departmentHint || shift.label) === requesterDepartment && !isNonWorkingShiftLabel(shift.label) && shift.startTime && shift.endTime)
+        .map((shift) => ({ id: shift.id, label: shift.label, startTime: shift.startTime, endTime: shift.endTime }));
       const query = db
         .select({ request: scheduleRequests, user: tipsUsers })
         .from(scheduleRequests)
@@ -3517,7 +3497,7 @@ export function registerScheduleRoutes(app: Express) {
         rows = await query.where(eq(scheduleRequests.requesterUserId, req.scheduleUser.id)).orderBy(desc(scheduleRequests.requestDate), desc(scheduleRequests.createdAt));
       }
       const requestsWithConflicts = await addRequestConflictInfo(rows);
-      res.json({ requests: requestsWithConflicts.map((request: any) => request.isProtectedLeave && request.requesterUserId !== req.scheduleUser.id && !user.isSuperAdmin
+      res.json({ requestShiftOptions, requests: requestsWithConflicts.map((request: any) => request.isProtectedLeave && request.requesterUserId !== req.scheduleUser.id && !user.isSuperAdmin
         ? { ...request, notes: "Protected leave details are restricted. Contact Human Resources." }
         : request) });
     } catch (error) {
@@ -3552,11 +3532,23 @@ export function registerScheduleRoutes(app: Express) {
       const policyWarning = leadDays < 14;
       const department = await getScheduleRequestDepartment(req.scheduleUser);
       const requesterEmployee = await getScheduleEmployeeForUser(req.scheduleUser);
+      let requestedShift: any = null;
+      if (parsed.data.requestedShiftTypeId) {
+        [requestedShift] = await db.select().from(scheduleShiftTypes).where(and(eq(scheduleShiftTypes.id, parsed.data.requestedShiftTypeId), eq(scheduleShiftTypes.active, true))).limit(1);
+        if (!requestedShift || normalizeDepartment(requestedShift.departmentHint || requestedShift.label) !== department || isNonWorkingShiftLabel(requestedShift.label) || !requestedShift.startTime || !requestedShift.endTime) {
+          return res.status(400).json({ error: "Select an active shift for your department." });
+        }
+      }
+      const requestDraft = {
+        ...parsed.data,
+        startTime: requestedShift?.startTime || parsed.data.startTime || null,
+        endTime: requestedShift?.endTime || parsed.data.endTime || null,
+      };
       const blackoutRows = await db.select().from(scheduleBlackoutDates).where(and(
         lte(scheduleBlackoutDates.blackoutDate, requestEnd),
       ));
       const highDemandWarning = blackoutRows.some((item) => item.blackoutDate >= parsed.data.requestDate && (!item.department || item.department === department));
-      const request = await db.transaction(async (tx) => {
+      const submission = await db.transaction(async (tx) => {
         // Serialize submissions within a department so concurrent requests cannot both pass the conflict check.
         await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`schedule-request:${department}`}))`);
         const activeExisting = await tx
@@ -3564,16 +3556,23 @@ export function registerScheduleRoutes(app: Express) {
           .from(scheduleRequests)
           .where(and(
             eq(scheduleRequests.department, department),
-            inArray(scheduleRequests.status, ["submitted", "approved"] as any),
+            inArray(scheduleRequests.status, ["submitted", "approved", "waitlisted"] as any),
           ));
+        const duplicate = activeExisting.find((existing) => isExactDuplicateRequest(existing, {
+          ...requestDraft,
+          requesterUserId: req.scheduleUser.id,
+          requestEndDate: requestEnd,
+        }));
+        if (duplicate) return { duplicate, request: null, hasConflictingRequest: false };
         const overlappingRequests = activeExisting.filter((existing) =>
+          existing.requesterUserId !== req.scheduleUser.id &&
           requestRangesOverlap(existing, { requestDate: parsed.data.requestDate, requestEndDate: requestEnd }) &&
-          requestTimeWindowsOverlap(existing, parsed.data) && ["time_off", "availability"].includes(existing.requestType),
+          requestTimeWindowsOverlap(existing, requestDraft) && ["time_off", "availability"].includes(existing.requestType),
         );
         const requirements = await tx.select().from(scheduleCoverageRequirements).where(and(eq(scheduleCoverageRequirements.department, department), eq(scheduleCoverageRequirements.active, true)));
         const requesterRoleText = [requesterEmployee?.position, ...rolesArray(requesterEmployee?.rolesJson)].filter(Boolean).join(" ").toLowerCase();
         const applicableRequirements = requirements.filter((rule) =>
-          requesterRoleText.includes(rule.role.toLowerCase()) && requestTimeWindowsOverlap(rule, parsed.data),
+          requesterRoleText.includes(rule.role.toLowerCase()) && requestTimeWindowsOverlap(rule, requestDraft),
         );
         let hasConflictingRequest = overlappingRequests.length > 0;
         if (applicableRequirements.length) {
@@ -3584,7 +3583,6 @@ export function registerScheduleRoutes(app: Express) {
           });
         }
         hasConflictingRequest = !parsed.data.isProtectedLeave && hasConflictingRequest;
-        if (hasConflictingRequest && !parsed.data.joinWaitlist) return null;
         const [created] = await tx
           .insert(scheduleRequests)
           .values({
@@ -3594,20 +3592,23 @@ export function registerScheduleRoutes(app: Express) {
             requestEndDate: requestEnd,
             requestGroupId: crypto.randomUUID(),
             requestType: parsed.data.requestType,
-            startTime: parsed.data.startTime || null,
-            endTime: parsed.data.endTime || null,
+            requestedShiftTypeId: requestedShift?.id || null,
+            requestedShiftLabel: requestedShift?.label || null,
+            startTime: requestDraft.startTime,
+            endTime: requestDraft.endTime,
             notes: parsed.data.notes,
-            status: hasConflictingRequest ? "waitlisted" : "submitted",
+            status: "submitted",
             isProtectedLeave: parsed.data.isProtectedLeave,
             policyVersion: parsed.data.requestType === "time_off" ? TIME_OFF_POLICY_VERSION : null,
             policyAcceptedAt: parsed.data.requestType === "time_off" ? new Date() : null,
           })
           .returning();
-        return created;
+        return { duplicate: null, request: created, hasConflictingRequest };
       });
-      if (!request) {
-        return res.status(409).json({ error: "This request cannot be processed due to a conflicting request. Please contact your direct supervisor to discuss this request, or join the waitlist.", code: "SCHEDULE_REQUEST_CONFLICT", canWaitlist: true });
+      if (submission.duplicate) {
+        return res.status(409).json({ error: "You already have an active request for the same date, time, and request type.", code: "DUPLICATE_SCHEDULE_REQUEST", existingRequestId: submission.duplicate.id });
       }
+      const request = submission.request!;
       await audit(null, req.scheduleUser.id, "schedule_request_submitted", {
         requestId: request.id,
         requestDate: request.requestDate,
@@ -3615,7 +3616,7 @@ export function registerScheduleRoutes(app: Express) {
         timeOffPolicyAccepted: parsed.data.requestType === "time_off" ? true : undefined,
         timeOffPolicyVersion: parsed.data.requestType === "time_off" ? TIME_OFF_POLICY_VERSION : undefined,
         protectedLeaveRoute: parsed.data.isProtectedLeave,
-        waitlisted: request.status === "waitlisted",
+        coverageWarning: submission.hasConflictingRequest,
       });
       let emailSent = false;
       try {
@@ -3629,7 +3630,7 @@ export function registerScheduleRoutes(app: Express) {
           error: emailError?.message || emailError,
         });
       }
-      res.status(201).json({ request, emailSent, policyWarning, highDemandWarning });
+      res.status(201).json({ request, emailSent, policyWarning, highDemandWarning, coverageWarning: submission.hasConflictingRequest });
     } catch (error) {
       next(error);
     }
@@ -3649,7 +3650,7 @@ export function registerScheduleRoutes(app: Express) {
       if (parsed.data.status === "approved") {
         const active = await db.select().from(scheduleRequests).where(and(
           eq(scheduleRequests.department, existing.department),
-          inArray(scheduleRequests.status, ["submitted", "approved"] as any),
+          inArray(scheduleRequests.status, ["submitted", "approved", "waitlisted"] as any),
         ));
         const conflicting = active.some((candidate) => candidate.id !== existing.id && requestRangesOverlap(candidate, existing) && requestTimeWindowsOverlap(candidate, existing));
         if (conflicting && (!parsed.data.overrideReason || !parsed.data.coveragePlan)) {
@@ -3690,12 +3691,6 @@ export function registerScheduleRoutes(app: Express) {
         .where(eq(scheduleRequests.id, req.params.id))
         .returning();
       await audit(null, req.scheduleUser.id, "schedule_request_cancelled", { requestId: request.id, previousStatus: existing.status });
-      const waitlisted = await db.select().from(scheduleRequests).where(and(eq(scheduleRequests.department, existing.department), eq(scheduleRequests.status, "waitlisted" as any))).orderBy(asc(scheduleRequests.createdAt));
-      const next = waitlisted.find((candidate) => requestRangesOverlap(candidate, existing) && requestTimeWindowsOverlap(candidate, existing));
-      if (next) {
-        await db.update(scheduleRequests).set({ status: "submitted", updatedAt: new Date() }).where(eq(scheduleRequests.id, next.id));
-        await audit(null, req.scheduleUser.id, "schedule_request_promoted_from_waitlist", { requestId: next.id, cancelledRequestId: existing.id });
-      }
       const [requester] = await db.select().from(tipsUsers).where(eq(tipsUsers.id, request.requesterUserId)).limit(1);
       try { await sendScheduleRequestStatusEmail(request, requester); } catch (emailError) { console.error("Schedule request cancellation email failed", emailError); }
       const [requestWithConflicts] = await addRequestConflictInfo([{ request, user: requester }]);

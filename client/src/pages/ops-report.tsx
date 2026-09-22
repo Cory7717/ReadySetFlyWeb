@@ -1089,7 +1089,7 @@ function EditableTable({
   allowRowActions?: boolean;
   addRowLabel?: string;
 }) {
-  const [preview, setPreview] = useState<{ label: string; text: string; x: number; y: number } | null>(null);
+  const [preview, setPreview] = useState<{ label: string; text: string; x: number; y: number; placement: "above" | "below" } | null>(null);
   const editableColumns = columns.filter((column) => !column.readOnly);
   const renumberRows = (nextRows: Row[]) =>
     columns.some((column) => column.key === "no")
@@ -1110,7 +1110,15 @@ function EditableTable({
     if (!customPreview && (!isLongTextColumn(column.key, column.label) || !text)) return;
     if (!text) return;
     const rect = event.currentTarget.getBoundingClientRect();
-    setPreview({ label, text, x: Math.min(rect.left, window.innerWidth - 460), y: rect.bottom + 8 });
+    const estimatedPreviewHeight = 260;
+    const placement = rect.bottom + estimatedPreviewHeight > window.innerHeight && rect.top > estimatedPreviewHeight ? "above" : "below";
+    setPreview({
+      label,
+      text,
+      x: Math.max(12, Math.min(rect.left, window.innerWidth - 452)),
+      y: placement === "above" ? rect.top - 8 : rect.bottom + 8,
+      placement,
+    });
   };
   return (
     <div className="relative overflow-x-auto">
@@ -1201,7 +1209,7 @@ function EditableTable({
       {preview && (
         <div
           className="pointer-events-none fixed z-[100] max-w-[440px] rounded-lg border border-[#cdbda8] bg-[#201814] px-3 py-2 text-xs font-medium leading-relaxed text-white shadow-2xl"
-          style={{ left: preview.x, top: preview.y }}
+          style={{ left: preview.x, top: preview.y, transform: preview.placement === "above" ? "translateY(-100%)" : undefined }}
         >
           <div className="mb-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#f0d9b0]">{preview.label}</div>
           <div className="max-h-56 overflow-y-auto whitespace-pre-wrap">{preview.text}</div>

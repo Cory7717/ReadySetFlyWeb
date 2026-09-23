@@ -19,6 +19,7 @@ import {
   weeklySchedules,
 } from "@shared/schema";
 import { parseOpsReportFile } from "../opsReportParsers";
+import { parseAbacusLaborCsv } from "../abacusLaborParser";
 import {
   buildMonthlySummaryDocx,
   buildMonthlySummaryPdf,
@@ -30,8 +31,8 @@ const laborUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    if (file.mimetype === "application/pdf" || /\.pdf$/i.test(file.originalname)) return cb(null, true);
-    cb(new Error("Upload a PDF labor summary."));
+    if (file.mimetype === "application/pdf" || /\.pdf$/i.test(file.originalname) || file.mimetype === "text/csv" || /\.csv$/i.test(file.originalname)) return cb(null, true);
+    cb(new Error("Upload an Abacus CSV or the legacy PDF labor summary."));
   },
 });
 const reportUpload = multer({
@@ -985,7 +986,11 @@ export function registerOpsReportRoutes(app: Express) {
       try {
         if (error) return res.status(400).json({ error: error.message || "Unable to upload labor summary." });
         const file = (req as any).file as Express.Multer.File | undefined;
-        if (!file) return res.status(400).json({ error: "Labor summary PDF is required." });
+        if (!file) return res.status(400).json({ error: "An Abacus CSV or labor summary PDF is required." });
+        if (/\.csv$/i.test(file.originalname) || file.mimetype === "text/csv") {
+          const parsed = parseAbacusLaborCsv(file.buffer, file.originalname);
+          return res.json({ originalFileName: file.originalname, importType: "abacus", abacusLabor: parsed, departments: Object.fromEntries(parsed.departments.filter((item) => item.department !== "UNMAPPED / REVIEW REQUIRED").map((item) => [item.department, item.totalHours])) });
+        }
         const text = await parsePdfText(file.buffer);
         const employees = await db.select().from(scheduleEmployees);
         const parsed = parseLaborSummaryText(text, employees);

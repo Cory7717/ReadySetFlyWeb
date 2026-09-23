@@ -80,6 +80,40 @@ type LaborHoursResponse = {
   breakdown?: LaborHoursBreakdown;
   wageEstimates?: Record<string, LaborWageEstimate>;
 };
+type AbacusLaborTotals = {
+  regularHours: number;
+  overtimeHours: number;
+  memoHours: number;
+  totalHours: number;
+  regularPayroll: number;
+  overtimePayroll: number;
+  otherPayroll: number;
+  totalPayroll: number;
+};
+type AbacusLaborCodeTotal = AbacusLaborTotals & {
+  laborCode: string;
+  laborTitle: string;
+  department: string;
+  overtimePercent: number;
+};
+type AbacusDepartmentTotal = AbacusLaborTotals & {
+  department: string;
+  overtimePercent: number;
+  shareOfHotelOvertime: number;
+  laborCodes: AbacusLaborCodeTotal[];
+};
+type AbacusLaborImport = {
+  source: "abacus_time_earnings_hours";
+  originalFileName: string;
+  weekStart: string;
+  weekEnd: string;
+  importedAt: string;
+  departments: AbacusDepartmentTotal[];
+  hotelTotal: AbacusLaborTotals;
+  reportGrandTotal: { hours: number; payroll: number } | null;
+  reconciled: boolean;
+  warnings: string[];
+};
 type OpsImportResponse = {
   uploadId: string;
   originalFileName: string;
@@ -267,6 +301,11 @@ function money(value: string | number) {
   return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(Number.isFinite(n) ? n : 0);
 }
 
+function money2(value: string | number) {
+  const n = num(value);
+  return new Intl.NumberFormat(undefined, { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number.isFinite(n) ? n : 0);
+}
+
 function pct(value: string | number) {
   const n = Number(value || 0);
   return `${((Number.isFinite(n) ? n : 0) * 100).toFixed(1)}%`;
@@ -323,6 +362,17 @@ function isLongTextColumn(key: string, label: string) {
 function fmtHours(value: string | number) {
   const n = num(value);
   return Number.isInteger(n) ? String(n) : n.toFixed(2).replace(/\.?0+$/, "");
+}
+
+function laborDepartmentLabel(value: string) {
+  const labels: Record<string, string> = {
+    "HOUSEKEEPING HOURS": "Housekeeping",
+    "FRONT DESK / NIGHT AUDIT HOURS": "Front Office",
+    "BREAKFAST / BISTRO HOURS": "Bistro / F&B",
+    "MAINTENANCE HOURS": "Maintenance",
+    "UNMAPPED / REVIEW REQUIRED": "Unmapped / Review Required",
+  };
+  return labels[value] || value;
 }
 
 const DEFAULT_OPS_TOTAL_ROOMS = 118;
@@ -1253,6 +1303,7 @@ export default function OpsReportPage() {
   const [ledger, setLedger] = useState({ balance: "", over1000: "", uncovered: "", comment: "" });
   const [ledgerExceptions, setLedgerExceptions] = useState<Row[]>([]);
   const [labor, setLabor] = useState<Row[]>(defaultLaborRows());
+  const [abacusLabor, setAbacusLabor] = useState<AbacusLaborImport | null>(null);
   const [housekeepingLaborModel, setHousekeepingLaborModel] = useState(DEFAULT_HOUSEKEEPING_LABOR_MODEL);
   const [bistroEventLaborModel, setBistroEventLaborModel] = useState(DEFAULT_BISTRO_EVENT_LABOR_MODEL);
   const [laborFile, setLaborFile] = useState<File | null>(null);
@@ -1395,21 +1446,31 @@ export default function OpsReportPage() {
     mutationFn: async (file: File) => {
       const form = new FormData();
       form.append("laborSummary", file);
+      form.append("weekStart", topMetrics.weekStart);
       const response = await fetch(apiUrl("/api/opsreport/labor/actual-upload"), { method: "POST", credentials: "include", body: form });
       if (!response.ok) throw new Error(await response.text());
       return response.json() as Promise<{
         originalFileName: string;
+        importType?: "abacus";
+        abacusLabor?: AbacusLaborImport;
         departments: Record<string, number>;
         unmatchedEmployees?: Array<{ name: string; employeeNumber: string; hours: number }>;
       }>;
     },
-    onSuccess: (data) => {
+    onSuccess: async (data) => {
+      if (data.abacusLabor && data.abacusLabor.weekStart !== topMetrics.weekStart) {
+        await loadOpsWeek(data.abacusLabor.weekStart, week);
+      }
       setLabor((rows) => mergeLaborHours(rows, data.departments, "actualHours"));
+      if (data.abacusLabor) setAbacusLabor(data.abacusLabor);
       setLaborFile(null);
+      const warnings = data.abacusLabor?.warnings.length || 0;
       const unmatched = data.unmatchedEmployees?.length || 0;
       toast({
-        title: "Actual labor hours imported",
-        description: unmatched
+        title: data.abacusLabor ? "Abacus labor imported" : "Actual labor hours imported",
+        description: data.abacusLabor
+          ? `${data.originalFileName} mapped ${data.abacusLabor.hotelTotal.totalHours.toFixed(2)} hours and ${money(data.abacusLabor.hotelTotal.totalPayroll)}.${warnings ? ` ${warnings} warning${warnings === 1 ? "" : "s"} need review.` : " Totals reconcile to Abacus."}`
+          : unmatched
           ? `${data.originalFileName} was parsed. ${unmatched} unmatched associate${unmatched === 1 ? "" : "s"} mapped to Other.`
           : `${data.originalFileName} was parsed into the Staff Hours table.`,
       });
@@ -1590,6 +1651,7 @@ export default function OpsReportPage() {
   }), [labor, setup.totalRooms, topMetrics.occupancy, topMetrics.roomsSold, housekeepingLaborModel, bistroEventLabor.confirmedHours, bistroEventLabor.tentativeHours]);
   const scheduledLaborTotal = useMemo(() => effectiveLabor.reduce((sum, row) => sum + num(row.scheduledHours), 0), [effectiveLabor]);
   const actualLaborTotal = useMemo(() => effectiveLabor.reduce((sum, row) => sum + num(row.actualHours), 0), [effectiveLabor]);
+  const previousAbacusLabor = previousDraft.data?.draft?.payload?.abacusLabor as AbacusLaborImport | undefined;
   const bistroLaborSummary = useMemo(() => {
     const row = effectiveLabor.find((item) => String(item.department || "").trim().toUpperCase() === "BREAKFAST / BISTRO HOURS");
     const expectedHours = num(row?.budget ?? "");
@@ -1996,8 +2058,8 @@ export default function OpsReportPage() {
     {
       name: "Actual Labor Hours",
       scope: `${displayOpsDate(topMetrics.weekStart)} through ${displayOpsDate(weekEnd)}`,
-      parameters: "Run the closed-week payroll labor summary/Hours Detail for the exact selected week. Upload it inside Department Labor Review.",
-      fileName: "Closed week labor summary.pdf",
+      parameters: "Export the closed-week Abacus Time, Earnings and Hours CSV. Labor codes, regular/OT/memo hours, and actual payroll are mapped automatically. The legacy PDF remains supported.",
+      fileName: "Abacus - Time Earnings and Hours Export.csv",
     },
   ];
   const reportGuideFor = (...names: string[]) => reportGuide.filter((report) => names.includes(report.name));
@@ -2126,6 +2188,7 @@ export default function OpsReportPage() {
     setLedger({ balance: "", over1000: "", uncovered: "", comment: "" });
     setLedgerExceptions([]);
     setLabor(defaultLaborRows());
+    setAbacusLabor(null);
     setHousekeepingLaborModel(DEFAULT_HOUSEKEEPING_LABOR_MODEL);
     setBistroEventLaborModel(DEFAULT_BISTRO_EVENT_LABOR_MODEL);
     setStaffing({ openPositions: "", status: "", overtimeLastWeek: "", overtimeExpected: "", comment: "" });
@@ -2157,6 +2220,7 @@ export default function OpsReportPage() {
     if (payload.ledger) setLedger(payload.ledger);
     if (payload.ledgerExceptions) setLedgerExceptions(payload.ledgerExceptions);
     if (payload.labor) setLabor(normalizeLaborRows(payload.labor));
+    setAbacusLabor(payload.abacusLabor || null);
     if (payload.housekeepingLaborModel) setHousekeepingLaborModel({ ...DEFAULT_HOUSEKEEPING_LABOR_MODEL, ...payload.housekeepingLaborModel });
     if (payload.bistroEventLaborModel) setBistroEventLaborModel({ ...DEFAULT_BISTRO_EVENT_LABOR_MODEL, ...payload.bistroEventLaborModel });
     if (payload.monthlyBudgets) setMonthlyBudgets(payload.monthlyBudgets.map(normalizeMonthlyBudgetRow));
@@ -2211,6 +2275,7 @@ export default function OpsReportPage() {
     ledger,
     ledgerExceptions,
     labor,
+    abacusLabor,
     housekeepingLaborModel,
     bistroEventLaborModel,
     monthlyBudgets: monthlyBudgets.map(normalizeMonthlyBudgetRow),
@@ -2226,7 +2291,7 @@ export default function OpsReportPage() {
     negativeReviews,
     followUp,
     priorities,
-  }), [setup, topMetrics, monthRows, nextMonthRows, chargebacks, maintenance, oooRooms, adjustments, ar, ledger, ledgerExceptions, labor, housekeepingLaborModel, bistroEventLaborModel, monthlyBudgets, bistroProductions, meetingProductions, staffing, cases, gmOverviewRows, gssRows, gssWaveRows, reputationRows, positiveReviews, negativeReviews, followUp, priorities]);
+  }), [setup, topMetrics, monthRows, nextMonthRows, chargebacks, maintenance, oooRooms, adjustments, ar, ledger, ledgerExceptions, labor, abacusLabor, housekeepingLaborModel, bistroEventLaborModel, monthlyBudgets, bistroProductions, meetingProductions, staffing, cases, gmOverviewRows, gssRows, gssWaveRows, reputationRows, positiveReviews, negativeReviews, followUp, priorities]);
 
   useEffect(() => {
     if (!access.data?.unlocked || draft.isLoading || draftHydrated) return;
@@ -3008,7 +3073,7 @@ export default function OpsReportPage() {
                   <Input
                     className={`${C.field} sm:w-72`}
                     type="file"
-                    accept="application/pdf,.pdf"
+                    accept="text/csv,.csv,application/pdf,.pdf"
                     onChange={(event) => setLaborFile(event.target.files?.[0] || null)}
                   />
                   <Button className={C.green} onClick={() => laborFile && actualLaborUpload.mutate(laborFile)} disabled={!laborFile || actualLaborUpload.isPending}>
@@ -3016,6 +3081,70 @@ export default function OpsReportPage() {
                   </Button>
                 </div>
               </div>
+              {abacusLabor && (
+                <div className="border-b border-[#e0d3c1] bg-white p-4">
+                  <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <div className="text-sm font-semibold text-[#201814]">Abacus actual labor · {displayOpsDate(abacusLabor.weekStart)}–{displayOpsDate(abacusLabor.weekEnd)}</div>
+                      <p className="mt-1 text-xs text-[#5f5247]">Department totals use labor code as the primary mapping key. Select a department to audit its labor-code detail.</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Badge variant="outline">Hotel OT {abacusLabor.hotelTotal.overtimeHours.toFixed(2)} hrs</Badge>
+                      <Badge className={abacusLabor.reconciled ? "bg-[#2f5f46]" : "bg-[#9b2c2c]"}>{abacusLabor.reconciled ? "Reconciled" : "Reconciliation warning"}</Badge>
+                    </div>
+                  </div>
+                  {abacusLabor.warnings.length > 0 && (
+                    <div className="mb-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+                      {abacusLabor.warnings.map((warning) => <div key={warning}>⚠ {warning}</div>)}
+                    </div>
+                  )}
+                  <div className="overflow-x-auto rounded-lg border border-[#d7c8b5]">
+                    <table className="w-full min-w-[900px] border-collapse text-sm">
+                      <thead><tr className={C.header}>
+                        <th className="p-2 text-left">Department</th><th className="p-2 text-right">Regular</th><th className="p-2 text-right">OT</th><th className="p-2 text-right">Memo</th><th className="p-2 text-right">Total Hours</th><th className="p-2 text-right">Payroll</th><th className="p-2 text-right">Hours vs Prior</th><th className="p-2 text-right">Payroll vs Prior</th>
+                      </tr></thead>
+                      <tbody>
+                        {abacusLabor.departments.map((department) => {
+                          const prior = previousAbacusLabor?.departments.find((item) => item.department === department.department);
+                          const hoursVariance = prior ? department.totalHours - prior.totalHours : null;
+                          const payrollVariance = prior ? department.totalPayroll - prior.totalPayroll : null;
+                          const otVariance = prior ? department.overtimeHours - prior.overtimeHours : null;
+                          const reviewRequired = department.department === "UNMAPPED / REVIEW REQUIRED";
+                          return (
+                            <Fragment key={department.department}>
+                              <tr className={`border-t border-[#e0d3c1] ${reviewRequired ? "bg-amber-50" : "odd:bg-white even:bg-[#fffaf2]"}`}>
+                                <td className="p-2 font-semibold">
+                                  <details><summary className="cursor-pointer">{laborDepartmentLabel(department.department)}</summary>
+                                    <div className="mt-2 min-w-[430px] space-y-1 font-normal text-[#5f5247]">
+                                      {department.laborCodes.map((code) => <div key={code.laborCode} className="grid grid-cols-[1fr_auto_auto] gap-3"><span>{code.laborCode} · {code.laborTitle || "Untitled labor code"}</span><span>{code.totalHours.toFixed(2)} hrs</span><span>{money2(code.totalPayroll)}</span></div>)}
+                                      <div className="mt-2 flex flex-wrap gap-2 border-t border-[#e0d3c1] pt-2 text-xs">
+                                        <span>Department OT: {department.overtimeHours.toFixed(2)} hrs ({department.overtimePercent.toFixed(2)}% of worked hours)</span>
+                                        <span>· {department.shareOfHotelOvertime.toFixed(2)}% of hotel OT</span>
+                                        {prior && <span>· Prior OT {prior.overtimeHours.toFixed(2)} · Variance {otVariance! >= 0 ? "+" : ""}{otVariance!.toFixed(2)}</span>}
+                                      </div>
+                                      <div className="text-xs">Payroll detail: Regular {money2(department.regularPayroll)} · OT {money2(department.overtimePayroll)} · Memo/other {money2(department.otherPayroll)}</div>
+                                    </div>
+                                  </details>
+                                </td>
+                                <td className="p-2 text-right tabular-nums">{department.regularHours.toFixed(2)}</td>
+                                <td className={`p-2 text-right tabular-nums ${department.overtimeHours > 0 ? "font-semibold text-[#9a5b00]" : ""}`}>{department.overtimeHours.toFixed(2)}</td>
+                                <td className="p-2 text-right tabular-nums">{department.memoHours.toFixed(2)}</td>
+                                <td className="p-2 text-right font-semibold tabular-nums">{department.totalHours.toFixed(2)}</td>
+                                <td className="p-2 text-right font-semibold tabular-nums">{money2(department.totalPayroll)}</td>
+                                <td className="p-2 text-right tabular-nums">{hoursVariance == null ? "—" : `${hoursVariance >= 0 ? "+" : ""}${hoursVariance.toFixed(2)}`}</td>
+                                <td className="p-2 text-right tabular-nums">{payrollVariance == null ? "—" : `${payrollVariance >= 0 ? "+" : ""}${money2(payrollVariance)}`}</td>
+                              </tr>
+                            </Fragment>
+                          );
+                        })}
+                        <tr className="border-t-2 border-[#243746] bg-[#e8edf1] font-bold text-[#201814]">
+                          <td className="p-2">HOTEL TOTAL</td><td className="p-2 text-right">{abacusLabor.hotelTotal.regularHours.toFixed(2)}</td><td className="p-2 text-right">{abacusLabor.hotelTotal.overtimeHours.toFixed(2)}</td><td className="p-2 text-right">{abacusLabor.hotelTotal.memoHours.toFixed(2)}</td><td className="p-2 text-right">{abacusLabor.hotelTotal.totalHours.toFixed(2)}</td><td className="p-2 text-right">{money2(abacusLabor.hotelTotal.totalPayroll)}</td><td className="p-2 text-right">{previousAbacusLabor ? `${abacusLabor.hotelTotal.totalHours - previousAbacusLabor.hotelTotal.totalHours >= 0 ? "+" : ""}${(abacusLabor.hotelTotal.totalHours - previousAbacusLabor.hotelTotal.totalHours).toFixed(2)}` : "—"}</td><td className="p-2 text-right">{previousAbacusLabor ? `${abacusLabor.hotelTotal.totalPayroll - previousAbacusLabor.hotelTotal.totalPayroll >= 0 ? "+" : ""}${money2(abacusLabor.hotelTotal.totalPayroll - previousAbacusLabor.hotelTotal.totalPayroll)}` : "—"}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
               <details className="group border-b border-[#e0d3c1] bg-[#f4f7f9]">
                 <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 p-4 [&::-webkit-details-marker]:hidden">
                   <div><div className="flex items-center gap-2 text-sm font-semibold text-[#201814]"><span className="inline-block text-[#315f86] transition-transform group-open:rotate-90">▶</span>Bistro outlet + event labor model</div><p className="mt-1 text-xs text-[#5f5247]">Expected {fmtHours(bistroLaborSummary.expectedHours)} hrs · {fmtHours(bistroEventLabor.confirmedHours)} confirmed event hrs · {fmtHours(bistroLaborSummary.uncoveredHours)} uncovered</p></div>

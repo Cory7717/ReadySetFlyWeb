@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import { excelDateToIso, parseOooText, parseOpsReportFile } from "../../server/opsReportParsers";
 import { addLaborWageEstimate, emptyLaborWageEstimates, finalizeLaborWageEstimates, parseLaborSummaryText, opsLaborBreakdownLabelForSchedule, opsLaborBucketForSchedule } from "../../server/routes/opsReport";
+import { ABACUS_LABOR_DEPARTMENT_MAP, parseAbacusLaborCsv } from "../../server/abacusLaborParser";
 
 const context = { weekStart: "2026-05-30", weekEnd: "2026-06-05", reportMonth: "2026-06" };
 
@@ -13,6 +14,68 @@ function csvFile(originalname: string, body: string) {
     buffer: Buffer.from(body),
   } as Express.Multer.File;
 }
+
+const abacusHeader = "Date,Legal Company Code,Client Name,Employee Number,Employee Name,Labor Value,Labor Title,Earnings Type,Earnings Code,Earning Title,Hours,Rate,Other,Total";
+
+function abacusRow(date: string, code: string, title: string, earningsCode: string, earningTitle: string, hours: string | number, total: string | number) {
+  return [date, "HOTEL", "Test Hotel", "100", "Test Associate", code, title, "E", earningsCode, earningTitle, hours, "0", "0", total].join(",");
+}
+
+test("Abacus labor-code mapping is centralized and covers the configured hotel departments", () => {
+  assert.equal(ABACUS_LABOR_DEPARTMENT_MAP["109"], "BREAKFAST / BISTRO HOURS");
+  assert.equal(ABACUS_LABOR_DEPARTMENT_MAP["200"], "FRONT DESK / NIGHT AUDIT HOURS");
+  assert.equal(ABACUS_LABOR_DEPARTMENT_MAP["300"], "HOUSEKEEPING HOURS");
+  assert.equal(ABACUS_LABOR_DEPARTMENT_MAP["400"], "MAINTENANCE HOURS");
+});
+
+test("Abacus September 12-18 fixture reproduces department and hotel totals exactly", () => {
+  const csv = [
+    abacusHeader,
+    abacusRow("9/12/2026", "300", "300 - Room Attendant", "1", "Regular", 259.21, 4412.67),
+    abacusRow("9/13/2026", "300", "300 - Room Attendant", "2", "Overtime - Blended Rate", 65, 1691.66),
+    abacusRow("9/14/2026", "300", "300 - Room Attendant", "M1", "Memo Hours", 11.99, 204.72),
+    abacusRow("9/12/2026", "200", "200 - Front Desk", "1", "Regular", 160.59, 2890.51),
+    abacusRow("9/13/2026", "200", "200 - Front Desk", "2", "Overtime - Blended Rate", 25.72, 735.23),
+    abacusRow("9/14/2026", "200", "200 - Front Desk", "M1", "Memo Hours", 0.98, 19.20),
+    abacusRow("9/15/2026", "109", "109 - Barista Manager", "1", "Regular", 113.85, 2222.91),
+    abacusRow("9/16/2026", "400", "400 - Maintenance", "1", "Regular", 56.12, 1410.10),
+    abacusRow("9/17/2026", "400", "400 - Maintenance", "2", "Overtime - Blended Rate", 2, 84),
+    abacusRow("9/18/2026", "400", "400 - Maintenance", "M1", "Memo Hours", 1.05, 18.90),
+    ",,,,,,,,,,696.51,3481.75,0,13689.90",
+  ].join("\n");
+  const parsed = parseAbacusLaborCsv(Buffer.from(csv), "Abacus fixture.csv");
+  const departments = Object.fromEntries(parsed.departments.map((department) => [department.department, department]));
+  assert.deepEqual([parsed.weekStart, parsed.weekEnd], ["2026-09-12", "2026-09-18"]);
+  assert.equal(departments["HOUSEKEEPING HOURS"].totalHours, 336.20);
+  assert.equal(departments["HOUSEKEEPING HOURS"].totalPayroll, 6309.05);
+  assert.equal(departments["FRONT DESK / NIGHT AUDIT HOURS"].totalHours, 187.29);
+  assert.equal(departments["BREAKFAST / BISTRO HOURS"].totalHours, 113.85);
+  assert.equal(departments["MAINTENANCE HOURS"].totalHours, 59.17);
+  assert.equal(parsed.hotelTotal.regularHours, 589.77);
+  assert.equal(parsed.hotelTotal.overtimeHours, 92.72);
+  assert.equal(parsed.hotelTotal.memoHours, 14.02);
+  assert.equal(parsed.hotelTotal.totalHours, 696.51);
+  assert.equal(parsed.hotelTotal.totalPayroll, 13689.90);
+  assert.equal(parsed.reconciled, true);
+});
+
+test("Abacus parser preserves unknown codes, ignores blank/header rows, and safely handles malformed numerics", () => {
+  const csv = [
+    abacusHeader,
+    abacusHeader,
+    ",,,,,,,,,,,,,",
+    abacusRow("9/12/2026", "999", "999 - Special Project", "1", "Regular", 4, 100),
+    abacusRow("9/13/2026", "999", "999 - Special Project", "2", "Overtime", "bad", "invalid"),
+    ",,,,,,,,,,4,0,0,100",
+  ].join("\n");
+  const parsed = parseAbacusLaborCsv(Buffer.from(csv), "Abacus unknown.csv");
+  const unmapped = parsed.departments.find((department) => department.department === "UNMAPPED / REVIEW REQUIRED");
+  assert.equal(unmapped?.laborCodes[0].laborCode, "999");
+  assert.equal(unmapped?.totalHours, 4);
+  assert.equal(unmapped?.totalPayroll, 100);
+  assert.match(parsed.warnings.join(" "), /unmapped labor code/i);
+  assert.match(parsed.warnings.join(" "), /malformed numeric/i);
+});
 
 test("Excel serial dates normalize without time-zone drift", () => {
   assert.equal(excelDateToIso("46177.488703703704"), "2026-06-04");

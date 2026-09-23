@@ -22,6 +22,15 @@ const momentumItems = [
 
 const projects = [
   {
+    title: "CERTAINTY",
+    genre: "Prestige Thriller / Survival Drama",
+    cue: "10-Episode Limited Series",
+    description:
+      "A grounded, character-driven survival thriller about automation, irreversible risk, misinformation, and five people rebuilding life after the systems civilization trusted collapse.",
+    badges: ["Pilot Draft Complete", "10 Episodes", "Limited Series", "TV-MA"],
+    href: "/certainty",
+  },
+  {
     title: "NOISE & FURY",
     genre: "Prestige Anthology Drama Series",
     cue: "Seattle music / legacy / addiction",
@@ -91,7 +100,7 @@ export default function CoryArmer() {
         'meta[name="description"]',
         "name",
         "description",
-        "Industry-facing portfolio for writer and creator Cory Armer, featuring original television and feature projects including Noise & Fury, Graveside, The Grasp, and The Patriot Protocol.",
+        "Industry-facing portfolio for writer and creator Cory Armer, featuring original television and feature projects including CERTAINTY, Noise & Fury, Graveside, The Grasp, and The Patriot Protocol.",
       ),
       setMetaTag('meta[property="og:title"]', "property", "og:title", "Cory Armer | Writer & Creator Portfolio"),
       setMetaTag(

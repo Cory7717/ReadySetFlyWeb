@@ -35,6 +35,7 @@ const SPECIAL_ANALYTICS_ROUTES: Array<{ match: (path: string) => boolean; title:
   { match: (path) => path === "/noiseandfury", title: "Noise & Fury | Cory Armer", group: "Cory Armer Projects", area: "cory_armer_portfolio", name: "Noise & Fury" },
   { match: (path) => path === "/graveside", title: "Graveside | Cory Armer", group: "Cory Armer Projects", area: "cory_armer_portfolio", name: "Graveside" },
   { match: (path) => path === "/thegrasp", title: "The Grasp | Cory Armer", group: "Cory Armer Projects", area: "cory_armer_portfolio", name: "The Grasp" },
+  { match: (path) => path === "/certainty", title: "CERTAINTY | A Limited Series by Cory Armer", group: "Cory Armer Projects", area: "cory_armer_portfolio", name: "CERTAINTY" },
   { match: (path) => path === "/patriotprotocol", title: "The Patriot Protocol | Cory Armer", group: "Cory Armer Projects", area: "cory_armer_portfolio", name: "The Patriot Protocol" },
 ];
 

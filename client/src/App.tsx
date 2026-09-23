@@ -107,6 +107,7 @@ import NoiseAndFuryPage from "@/pages/noise-and-fury";
 import GravesidePage from "@/pages/graveside";
 import PatriotProtocolPage from "@/pages/patriot-protocol";
 import TheGraspPage from "@/pages/the-grasp";
+import CertaintyPage from "@/pages/certainty";
 import CoryArmer from "@/pages/CoryArmer";
 import TipsPage from "@/pages/tips";
 import SchedulePage from "@/pages/schedule";
@@ -445,6 +446,7 @@ function Router() {
       <Route path="/graveside" component={GravesidePage} />
       <Route path="/patriotprotocol" component={PatriotProtocolPage} />
       <Route path="/thegrasp" component={TheGraspPage} />
+      <Route path="/certainty" component={CertaintyPage} />
       <Route path="/coryarmer" component={CoryArmer} />
       <Route path="/tips" component={TipsPage} />
       <Route path="/tips/waste" component={TipsPage} />
@@ -759,6 +761,7 @@ function AppShell() {
   const isGravesidePage = location.startsWith("/graveside");
   const isPatriotProtocolPage = location.startsWith("/patriotprotocol");
   const isTheGraspPage = location.startsWith("/thegrasp");
+  const isCertaintyPage = location.startsWith("/certainty");
   const isCoryArmerPage = location.startsWith("/coryarmer");
   const isTipsPage = location.startsWith("/tips");
   const isSchedulePage = location.startsWith("/schedule");
@@ -775,6 +778,7 @@ function AppShell() {
     isGravesidePage ||
     isPatriotProtocolPage ||
     isTheGraspPage ||
+    isCertaintyPage ||
     isCoryArmerPage ||
     isTipsPage ||
     isSchedulePage ||

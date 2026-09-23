@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { apiRequest } from "@/lib/queryClient";
+import { trackEvent } from "@/lib/analytics";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import {
@@ -1015,7 +1016,7 @@ export default function CourtyardPortalPage() {
                     </Button>
                   ) : (
                     <Button asChild className={`w-full ${tool.tone}`}>
-                      <Link href={tool.href}>{tool.action}</Link>
+                      <Link href={tool.href} onClick={() => trackEvent("courtyard_tool_selected", { page: "/courtyard", tool_name: tool.title, destination: tool.href.split("?", 1)[0] })}>{tool.action}</Link>
                     </Button>
                   )}
                 </CardContent>

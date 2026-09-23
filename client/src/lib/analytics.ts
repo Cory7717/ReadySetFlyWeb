@@ -5,6 +5,62 @@ const SESSION_ID_KEY = "rsf_session_id";
 const SESSION_PING_PREFIX = "rsf_session_ping:";
 const SESSION_PING_TTL_MS = 1000 * 60 * 30;
 
+type AnalyticsRouteMeta = {
+  canonicalPath: string;
+  pageTitle: string;
+  contentGroup: string;
+  siteArea: "courtyard" | "cory_armer_portfolio" | "ready_set_fly";
+  contentName: string;
+};
+
+const SPECIAL_ANALYTICS_ROUTES: Array<{ match: (path: string) => boolean; title: string; group: string; area: AnalyticsRouteMeta["siteArea"]; name: string; canonical?: string }> = [
+  { match: (path) => path.startsWith("/courtyard/meeting-calendar/share/"), title: "Shared Meeting Calendar | Courtyard", group: "Courtyard Operations", area: "courtyard", name: "Meeting Calendar Share", canonical: "/courtyard/meeting-calendar/share/:token" },
+  { match: (path) => path.startsWith("/courtyard/sales-transition/"), title: "Sales Transition Hub | Courtyard", group: "Courtyard Operations", area: "courtyard", name: "Sales Transition Share", canonical: "/courtyard/sales-transition/:token" },
+  { match: (path) => path.startsWith("/incidentreport/share/"), title: "Shared Incident Report | Courtyard", group: "Courtyard Operations", area: "courtyard", name: "Incident Report Share", canonical: "/incidentreport/share/:token" },
+  { match: (path) => path === "/courtyard/meeting-calendar", title: "Meeting & Group Calendar | Courtyard", group: "Courtyard Operations", area: "courtyard", name: "Meeting Calendar" },
+  { match: (path) => path === "/courtyard/sales-intelligence", title: "Sales Intelligence | Courtyard", group: "Courtyard Operations", area: "courtyard", name: "Sales Intelligence" },
+  { match: (path) => path === "/courtyard/revenue", title: "Revenue Intelligence | Courtyard", group: "Courtyard Operations", area: "courtyard", name: "Revenue Intelligence" },
+  { match: (path) => path === "/courtyard/budget", title: "Budget & Checkbook | Courtyard", group: "Courtyard Operations", area: "courtyard", name: "Budget" },
+  { match: (path) => path === "/courtyard", title: "Courtyard Associate Portal", group: "Courtyard Operations", area: "courtyard", name: "Courtyard Portal" },
+  { match: (path) => path === "/schedule", title: "Associate Schedule | Courtyard", group: "Courtyard Operations", area: "courtyard", name: "Schedule" },
+  { match: (path) => path === "/tips/waste", title: "Bistro Waste Log | Courtyard", group: "Courtyard Operations", area: "courtyard", name: "Bistro Waste Log" },
+  { match: (path) => path === "/tips/admin", title: "Bistro Tips Administration | Courtyard", group: "Courtyard Operations", area: "courtyard", name: "Bistro Tips Admin" },
+  { match: (path) => path === "/tips", title: "Bistro Tips | Courtyard", group: "Courtyard Operations", area: "courtyard", name: "Bistro Tips" },
+  { match: (path) => path === "/opsreport", title: "Operations Report | Courtyard", group: "Courtyard Operations", area: "courtyard", name: "Ops Report" },
+  { match: (path) => path === "/comptroller" || path === "/comtroller", title: "Comptroller | Courtyard", group: "Courtyard Operations", area: "courtyard", name: "Comptroller", canonical: "/comptroller" },
+  { match: (path) => path === "/dosreporting", title: "Director of Sales Reporting | Courtyard", group: "Courtyard Operations", area: "courtyard", name: "DOS Reporting" },
+  { match: (path) => path === "/incidentreport", title: "Incident Reports | Courtyard", group: "Courtyard Operations", area: "courtyard", name: "Incident Reports" },
+  { match: (path) => path === "/bankdeposit", title: "Bank Deposit | Courtyard", group: "Courtyard Operations", area: "courtyard", name: "Bank Deposit" },
+  { match: (path) => path === "/coryarmer", title: "Cory Armer | Writer & Creator Portfolio", group: "Cory Armer Portfolio", area: "cory_armer_portfolio", name: "Portfolio Home" },
+  { match: (path) => path === "/noiseandfury", title: "Noise & Fury | Cory Armer", group: "Cory Armer Projects", area: "cory_armer_portfolio", name: "Noise & Fury" },
+  { match: (path) => path === "/graveside", title: "Graveside | Cory Armer", group: "Cory Armer Projects", area: "cory_armer_portfolio", name: "Graveside" },
+  { match: (path) => path === "/thegrasp", title: "The Grasp | Cory Armer", group: "Cory Armer Projects", area: "cory_armer_portfolio", name: "The Grasp" },
+  { match: (path) => path === "/patriotprotocol", title: "The Patriot Protocol | Cory Armer", group: "Cory Armer Projects", area: "cory_armer_portfolio", name: "The Patriot Protocol" },
+];
+
+function pathnameOnly(rawPath: string) {
+  const raw = String(rawPath || "/").trim() || "/";
+  if (/^https?:\/\//i.test(raw)) {
+    try { return new URL(raw).pathname || "/"; } catch {}
+  }
+  const path = raw.split(/[?#]/, 1)[0] || "/";
+  return path.startsWith("/") ? path : `/${path}`;
+}
+
+export function analyticsRouteMeta(rawPath: string): AnalyticsRouteMeta {
+  const path = pathnameOnly(rawPath);
+  const route = SPECIAL_ANALYTICS_ROUTES.find((candidate) => candidate.match(path));
+  if (route) return { canonicalPath: route.canonical || path, pageTitle: route.title, contentGroup: route.group, siteArea: route.area, contentName: route.name };
+  if (path.startsWith("/courtyard/")) {
+    const name = path.split("/").filter(Boolean).slice(1).map((part) => part.replace(/[-_]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())).join(" / ");
+    return { canonicalPath: path, pageTitle: `${name} | Courtyard`, contentGroup: "Courtyard Operations", siteArea: "courtyard", contentName: name };
+  }
+  const fallbackName = path === "/" ? "Ready Set Fly Home" : path.split("/").filter(Boolean).map((part) => part.replace(/[-_]+/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())).join(" / ");
+  return { canonicalPath: path, pageTitle: typeof document !== "undefined" ? document.title : fallbackName, contentGroup: "Ready Set Fly", siteArea: "ready_set_fly", contentName: fallbackName };
+}
+
+let priorGaPageLocation = "";
+
 const getStoredVisitorId = (): string | undefined => {
   if (typeof window === "undefined") return undefined;
   try {
@@ -107,6 +163,24 @@ export function trackEvent(event: string, params?: Record<string, any>) {
   };
 
   void send();
+}
+
+export function trackPageView(rawPath: string) {
+  if (typeof window === "undefined") return;
+  const meta = analyticsRouteMeta(rawPath);
+  const pageLocation = `${window.location.origin}${meta.canonicalPath}`;
+  const pageReferrer = priorGaPageLocation || document.referrer || undefined;
+  trackEvent("page_view", {
+    page: meta.canonicalPath,
+    page_path: meta.canonicalPath,
+    page_location: pageLocation,
+    page_title: meta.pageTitle,
+    page_referrer: pageReferrer,
+    content_group: meta.contentGroup,
+    site_area: meta.siteArea,
+    content_name: meta.contentName,
+  });
+  priorGaPageLocation = pageLocation;
 }
 
 export function trackSessionPing(page: string) {

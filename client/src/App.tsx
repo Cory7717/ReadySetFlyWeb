@@ -17,7 +17,7 @@ import { ThemeProvider } from "./components/theme-provider";
 import { Header } from "./components/header";
 import { Footer } from "./components/footer";
 import { useAuth } from "@/hooks/useAuth";
-import { trackEvent, trackSessionPing } from "@/lib/analytics";
+import { trackEvent, trackPageView, trackSessionPing } from "@/lib/analytics";
 import { pixelPageView } from "@/lib/pixel";
 import { SignupNudgeBanner } from "@/components/SignupNudgeBanner";
 import { FreeAccountValueBar } from "@/components/FreeAccountValueBar";
@@ -274,9 +274,11 @@ function AnalyticsTracker() {
   const [path] = useLocation();
   const { isAuthenticated } = useAuth();
   useEffect(() => {
-    trackEvent("page_view", { page: path });
+    trackPageView(path);
     trackSessionPing(path);
     pixelPageView();
+  }, [path]);
+  useEffect(() => {
     const normalized = path.startsWith("/") ? path : `/${path}`;
     const toolPrefixes = [
       "/tool-hub",

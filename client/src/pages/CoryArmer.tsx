@@ -1,11 +1,16 @@
 import { useEffect } from "react";
 import { ArrowDown, Download, Mail, MapPin, Send, Sparkles } from "lucide-react";
+import { trackEvent } from "@/lib/analytics";
 import "./CoryArmer.css";
 
 const ONE_SHEET_PATH = "/assets/Cory_Armer_Representation_One_Sheet.pdf";
 const PROFILE_IMAGE_PATH = "/downloads/cory-armer-creator-bio.png";
 const CONTACT_EMAIL = "coryarmer@gmail.com";
 const CONTACT_MAILTO = `mailto:${CONTACT_EMAIL}?subject=${encodeURIComponent("Representation inquiry for Cory Armer")}`;
+
+function trackPortfolioAction(action: string, label: string, destination?: string) {
+  trackEvent("portfolio_action", { page: "/coryarmer", action, label, destination });
+}
 
 const momentumItems = [
   "Noise & Fury currently in early development",
@@ -136,7 +141,7 @@ export default function CoryArmer() {
               themselves - fame, mortality, history, obsession, and systems built to consume them.
             </p>
             <div className="cw-actions">
-              <a className="cw-button cw-button-primary" href={ONE_SHEET_PATH} download>
+              <a className="cw-button cw-button-primary" href={ONE_SHEET_PATH} download onClick={() => trackPortfolioAction("download", "Representation One-Sheet", ONE_SHEET_PATH)}>
                 <Download aria-hidden="true" />
                 Download One-Sheet
               </a>
@@ -204,7 +209,7 @@ export default function CoryArmer() {
                     <span key={badge}>{badge}</span>
                   ))}
                 </div>
-                <a className="cw-project-link" href={project.href}>
+                <a className="cw-project-link" href={project.href} onClick={() => trackEvent("portfolio_project_selected", { page: "/coryarmer", project_name: project.title, destination: project.href })}>
                   View Project
                 </a>
               </div>
@@ -223,11 +228,11 @@ export default function CoryArmer() {
           </p>
         </div>
         <div className="cw-actions cw-seeking-actions">
-          <a className="cw-button cw-button-primary" href={ONE_SHEET_PATH} download>
+          <a className="cw-button cw-button-primary" href={ONE_SHEET_PATH} download onClick={() => trackPortfolioAction("download", "Representation One-Sheet", ONE_SHEET_PATH)}>
             <Download aria-hidden="true" />
             Download One-Sheet
           </a>
-          <a className="cw-button cw-button-secondary" href={CONTACT_MAILTO}>
+          <a className="cw-button cw-button-secondary" href={CONTACT_MAILTO} onClick={() => trackPortfolioAction("contact", "Contact Cory", CONTACT_MAILTO)}>
             <Send aria-hidden="true" />
             Contact Cory
           </a>
@@ -244,7 +249,7 @@ export default function CoryArmer() {
             <MapPin aria-hidden="true" />
             <span>Austin, Texas</span>
           </div>
-          <a className="cw-contact-item" href={CONTACT_MAILTO}>
+          <a className="cw-contact-item" href={CONTACT_MAILTO} onClick={() => trackPortfolioAction("contact", "Email Cory", CONTACT_MAILTO)}>
             <Mail aria-hidden="true" />
             <span>{CONTACT_EMAIL}</span>
           </a>

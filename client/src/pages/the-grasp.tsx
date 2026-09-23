@@ -3,6 +3,7 @@ import {
   ArrowDown,
   BookOpen,
   CircleDot,
+  Download,
   Expand,
   Eye,
   Infinity,
@@ -12,13 +13,17 @@ import {
   Waves,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { GraspScriptExcerptDialog } from "@/components/the-grasp/GraspScriptExcerptDialog";
 import { trackEvent } from "@/lib/analytics";
 
 const CONCEPT_ART_PATH = "/downloads/the-grasp-concept-art.png";
 const CORY_BIO_IMAGE_PATH = "/downloads/cory-armer-creator-bio.png";
+const SCREENPLAY_EXCERPT_PATH = "/the-grasp-excerpt.pdf";
+const ONE_PAGER_PATH = "/downloads/the-grasp-one-pager.pdf";
+const FEATURE_BIBLE_PATH = "/downloads/the-grasp-feature-bible.pdf";
 const THE_GRASP_DESCRIPTION =
-  "Seeking freedom from a life dictated by time, Jonas and Lena relocate to the Norwegian island of Sommarøy, where clocks and schedules have been abandoned. What begins as liberation slowly reveals itself to be something far darker as they uncover the island’s true reason for drawing people there.";
+  "Burned out by a life run on alarms and deadlines, Jonas and Lena move to Sommarøy, a Norwegian island where the sun never sets and time seems to stop. The village welcomes them like family. Then the festival ends, and they begin to learn what the island asks of the people it keeps.";
+const THE_GRASP_META_DESCRIPTION =
+  "A folk horror film about a burned-out couple who escape to a Norwegian island where the sun never sets, and the warm community that gently lets its members disappear.";
 
 const storyMovements = [
   {
@@ -29,27 +34,21 @@ const storyMovements = [
   },
   {
     number: "II",
-    title: "The Arrival",
-    label: "Endless light",
-    text: "Sommarøy appears to offer what they need: open water, quiet streets, no darkness, and a community that treats time as something optional.",
+    title: "The Welcome",
+    label: "Island festival",
+    text: "The village greets them with a festival that seems to last for days under a sun that never sets. For the first time in years, they are happy. Then the music stops.",
   },
   {
     number: "III",
-    title: "The Belonging",
-    label: "Seduction",
-    text: "Lena begins to feel seen by the island. Jonas begins to notice patterns: the hum, the spirals, missing departures, and villagers who answer questions he has not asked.",
+    title: "The Count",
+    label: "Lost days",
+    text: "Nineteen days have passed that neither of them can account for. Jonas starts counting. Lena starts belonging. The island begins to write in his notebook.",
   },
   {
     number: "IV",
-    title: "The Ritual",
-    label: "Choice",
-    text: "The island's calm reveals a structure built around memory, sacrifice, and communal permanence. The couple's attempt to reconnect becomes a fight over who gets to define rescue.",
-  },
-  {
-    number: "V",
-    title: "The Return",
-    label: "The grasp closes",
-    text: "Leaving becomes another movement inside the pattern. The ferry, the shoreline, and even Jonas's resistance bend toward the same patient conclusion.",
+    title: "The Keeper",
+    label: "Succession",
+    text: "The island has one rule: the ferry only comes when somebody goes. Someone always has to go, and someone always has to remember.",
   },
 ];
 
@@ -65,9 +64,9 @@ const characters = [
     text: "Late twenties, exhausted by a life organized around demand. Sommarøy offers her attention, rhythm, and belonging without requiring her to perform wellness first.",
   },
   {
-    name: "The Elder",
+    name: "Halvard",
     title: "The one who remembers",
-    text: "Weathered, calm, and impossible to hurry. He does not command the village so much as articulate what the island has already decided.",
+    text: "The island's elder, and once a railway controller who knew every train in Oslo to the minute. He arrived in 1983 and has kept count ever since. He speaks plainly, checks a pocket watch that stopped decades ago, and recognizes something in Jonas from the moment they meet.",
   },
 ];
 
@@ -76,7 +75,7 @@ const themes = [
   ["Time", "A prison in the city. A lure on the island."],
   ["Love", "Is rescue still love when the other person refuses it?"],
   ["Choice", "The film allows choice to remain sincere even when its conditions are terrifying."],
-  ["Memory", "The island remembers what its people surrender."],
+  ["Memory", "Everyone on the island forgets. Only the keeper remembers every name."],
   ["Identity", "Freedom and disappearance begin to resemble each other."],
 ];
 
@@ -138,15 +137,14 @@ function SpiralMark({ className = "" }: { className?: string }) {
 
 export default function TheGraspPage() {
   const [activeMovement, setActiveMovement] = useState(0);
-  const [scriptOpen, setScriptOpen] = useState(false);
 
   useEffect(() => {
     const previousTitle = document.title;
-    document.title = "The Grasp | A Psychological Folk Horror Feature";
+    document.title = "The Grasp | A feature film by Cory Armer";
     const metaCleanups = [
-      setMetaTag('meta[name="description"]', "name", "description", THE_GRASP_DESCRIPTION),
-      setMetaTag('meta[property="og:title"]', "property", "og:title", "The Grasp | A Psychological Folk Horror Feature"),
-      setMetaTag('meta[property="og:description"]', "property", "og:description", THE_GRASP_DESCRIPTION),
+      setMetaTag('meta[name="description"]', "name", "description", THE_GRASP_META_DESCRIPTION),
+      setMetaTag('meta[property="og:title"]', "property", "og:title", "The Grasp | A feature film by Cory Armer"),
+      setMetaTag('meta[property="og:description"]', "property", "og:description", THE_GRASP_META_DESCRIPTION),
       setMetaTag('meta[property="og:image"]', "property", "og:image", CONCEPT_ART_PATH),
     ];
     trackEvent("the_grasp_page_view", { page: "/thegrasp" });
@@ -164,7 +162,7 @@ export default function TheGraspPage() {
       <section className="relative min-h-screen overflow-hidden border-b border-[#50666e]/20">
         <img
           src={CONCEPT_ART_PATH}
-          alt="The Grasp concept art showing Sommarøy, Jonas, Lena, the Elder, and a spiral in the sea"
+          alt="The Grasp concept art showing Sommarøy, Jonas, Lena, Halvard, and a spiral in the sea"
           className="absolute inset-0 h-full w-full object-cover object-[center_18%]"
         />
         <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(222,229,228,0.97)_0%,rgba(222,229,228,0.8)_28%,rgba(218,226,225,0.16)_62%,rgba(210,219,218,0.5)_100%)]" />
@@ -186,7 +184,7 @@ export default function TheGraspPage() {
           <div className="flex flex-1 items-center py-16">
             <div className="max-w-3xl">
               <div className="text-[10px] font-semibold uppercase tracking-[0.38em] text-[#536d76]">
-                Psychological folk horror / feature
+                Folk horror / psychological drama / feature
               </div>
               <h1 className="mt-7 font-serif text-[clamp(5rem,13vw,10rem)] font-normal uppercase leading-[0.82] tracking-[0.15em] text-[#30464d]">
                 The
@@ -196,7 +194,7 @@ export default function TheGraspPage() {
               <div className="mt-8 flex items-center gap-5">
                 <SpiralMark className="w-16 text-[#607881]" />
                 <p className="max-w-xl font-serif text-xl italic leading-8 text-[#30464d] sm:text-2xl">
-                  Time isn't the prison. Belonging is.
+                  All the time in the world.
                 </p>
               </div>
               <p className="mt-7 max-w-2xl text-base leading-8 text-[#40575f] sm:text-lg">
@@ -216,13 +214,11 @@ export default function TheGraspPage() {
                 </div>
               </div>
               <div className="mt-8 flex flex-wrap gap-3">
-                <Button
-                  size="lg"
-                  onClick={() => setScriptOpen(true)}
-                  className="border-[#536d76] bg-[#536d76] text-white [background-image:none] hover:bg-[#627e88]"
-                >
-                  <BookOpen className="mr-2 h-4 w-4" />
-                  Read screenplay excerpt
+                <Button asChild size="lg" className="border-[#536d76] bg-[#536d76] text-white [background-image:none] hover:bg-[#627e88]">
+                  <a href={SCREENPLAY_EXCERPT_PATH} target="_blank" rel="noopener noreferrer" onClick={() => trackAsset("the_grasp_screenplay_excerpt", SCREENPLAY_EXCERPT_PATH)}>
+                    <BookOpen className="mr-2 h-4 w-4" />
+                    Read screenplay excerpt
+                  </a>
                 </Button>
                 <Button
                   size="lg"
@@ -257,14 +253,15 @@ export default function TheGraspPage() {
             </div>
             <div className="space-y-8">
               <p className="font-serif text-2xl leading-10 text-[#334b53] sm:text-3xl sm:leading-[1.45]">
-                Jonas believes the island is changing Lena. Lena believes it is the first place that has ever allowed her
-                to become herself.
+                When a burned-out couple escapes to an Arctic island where the sun never sets, she surrenders to a warm,
+                timeless community that gently lets its members disappear, while he clings to counting the days, until he
+                learns the island has always needed someone to keep count.
               </p>
               <p className="text-base leading-8 text-[#52676e] sm:text-lg">
-                The Grasp is a psychological folk-horror thriller about burnout, intimacy, and the seductive danger of
-                finding a community that seems to understand what the person who loves you cannot. Its supernatural
-                language remains tactile and restrained: endless light, a low hum, circular patterns, shared rhythm,
-                altered memory, and departures that never move in a straight line.
+                The Grasp is a folk horror film about burnout, love, and the cost of letting go. Its horror comes from
+                kindness rather than menace. Nobody on the island locks a door. The dread lives in the details: endless
+                light, a low hum of many voices, spirals carved into wood and stone, a notebook that writes in a hand that
+                isn't his, and a ferry that only comes when somebody goes.
               </p>
               <div className="grid gap-px bg-[#526970]/15 sm:grid-cols-3">
                 {[
@@ -407,6 +404,39 @@ export default function TheGraspPage() {
           </div>
         </section>
 
+        <section className="border-y border-[#536d76]/15 bg-[#e7eceb]">
+          <div className="mx-auto grid max-w-[1500px] gap-10 px-5 py-24 sm:px-8 lg:grid-cols-[0.7fr_1.3fr] lg:px-12 lg:py-32">
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-[0.36em] text-[#617981]">The Production</div>
+              <h2 className="mt-6 font-serif text-5xl font-normal tracking-[-0.035em] text-[#293e45] sm:text-7xl">
+                Built to be made.
+              </h2>
+            </div>
+            <div className="flex flex-col justify-center">
+              <p className="font-serif text-2xl leading-10 text-[#334b53] sm:text-3xl sm:leading-[1.45]">
+                The Grasp is a 101-page feature with a small cast and one primary island location. Because the sun never sets, there are no night shoots. The project is designed as a Norwegian co-production to take advantage of Norway's production incentive.
+              </p>
+              <p className="mt-8 border-t border-[#536d76]/20 pt-6 text-sm leading-7 text-[#5d7278] sm:text-base">
+                A one-pager, full feature bible, and working budget and schedule are available on request.
+              </p>
+              <div className="mt-7 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+                <Button asChild size="lg" className="border-[#536d76] bg-[#536d76] text-white [background-image:none] hover:bg-[#627e88]">
+                  <a href={ONE_PAGER_PATH} download onClick={() => trackAsset("the_grasp_one_pager", ONE_PAGER_PATH)}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Download one-pager
+                  </a>
+                </Button>
+                <Button asChild size="lg" variant="outline" className="border-[#536d76]/35 bg-white/35 text-[#2b4249] [background-image:none] hover:bg-white/60">
+                  <a href={FEATURE_BIBLE_PATH} download onClick={() => trackAsset("the_grasp_feature_bible", FEATURE_BIBLE_PATH)}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Download feature bible
+                  </a>
+                </Button>
+              </div>
+            </div>
+          </div>
+        </section>
+
         <section id="creator" className="border-y border-[#536d76]/15 bg-[#d2dcda] scroll-mt-8">
           <div className="mx-auto max-w-[1500px] px-5 py-28 sm:px-8 lg:px-12 lg:py-40">
             <div className="mx-auto max-w-3xl text-center">
@@ -448,14 +478,18 @@ export default function TheGraspPage() {
                   The sea is still. The ferry turns. No one is at the wheel.
                 </p>
               </div>
-              <Button
-                type="button"
-                size="lg"
-                onClick={() => setScriptOpen(true)}
-                className="border-[#536d76] bg-[#536d76] text-white [background-image:none] hover:bg-[#627e88]"
-              >
-                <BookOpen className="mr-2 h-4 w-4" />
-                Read screenplay excerpt
+              <Button asChild size="lg" className="border-[#536d76] bg-[#536d76] text-white [background-image:none] hover:bg-[#627e88]">
+                <a href={SCREENPLAY_EXCERPT_PATH} target="_blank" rel="noopener noreferrer" onClick={() => trackAsset("the_grasp_screenplay_excerpt", SCREENPLAY_EXCERPT_PATH)}>
+                  <BookOpen className="mr-2 h-4 w-4" />
+                  Read screenplay excerpt
+                </a>
+              </Button>
+            </div>
+            <div className="mt-16 border-y border-[#536d76]/20 py-12 text-center">
+              <h2 className="font-serif text-4xl font-normal tracking-[-0.03em] text-[#2d444b] sm:text-5xl">Interested in The Grasp?</h2>
+              <p className="mx-auto mt-5 max-w-2xl text-base leading-8 text-[#536970]">Producers, directors, and representatives can request the full screenplay and materials.</p>
+              <Button asChild size="lg" className="mt-7 border-[#536d76] bg-[#536d76] text-white [background-image:none] hover:bg-[#627e88]">
+                <a href="mailto:cory@readysetfly.us?subject=The%20Grasp%20-%20Screenplay%20Request" onClick={() => trackAsset("the_grasp_screenplay_request", "mailto:cory@readysetfly.us")}>Request the screenplay</a>
               </Button>
             </div>
             <div className="mt-16 flex flex-col gap-3 border-t border-[#536d76]/20 pt-6 text-[10px] uppercase tracking-[0.24em] text-[#6b7d82] sm:flex-row sm:justify-between">
@@ -466,7 +500,6 @@ export default function TheGraspPage() {
         </section>
       </main>
 
-      <GraspScriptExcerptDialog open={scriptOpen} onOpenChange={setScriptOpen} />
     </div>
   );
 }

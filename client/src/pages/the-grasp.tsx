@@ -14,10 +14,10 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { trackEvent } from "@/lib/analytics";
+import { TheGraspScriptExcerptDialog } from "@/components/the-grasp/ScriptExcerptDialog";
 
 const CONCEPT_ART_PATH = "/downloads/the-grasp-concept-art.png";
 const CORY_BIO_IMAGE_PATH = "/downloads/cory-armer-creator-bio.png";
-const SCREENPLAY_EXCERPT_PATH = "/downloads/the-grasp-screenplay-excerpt.pdf";
 const ONE_PAGER_PATH = "/downloads/the-grasp-one-pager.pdf";
 const FEATURE_BIBLE_PATH = "/downloads/the-grasp-feature-bible.pdf";
 const THE_GRASP_DESCRIPTION =
@@ -137,6 +137,7 @@ function SpiralMark({ className = "" }: { className?: string }) {
 
 export default function TheGraspPage() {
   const [activeMovement, setActiveMovement] = useState(0);
+  const [scriptExcerptOpen, setScriptExcerptOpen] = useState(false);
 
   useEffect(() => {
     const previousTitle = document.title;
@@ -214,11 +215,9 @@ export default function TheGraspPage() {
                 </div>
               </div>
               <div className="mt-8 flex flex-wrap gap-3">
-                <Button asChild size="lg" className="border-[#536d76] bg-[#536d76] text-white [background-image:none] hover:bg-[#627e88]">
-                  <a href={SCREENPLAY_EXCERPT_PATH} target="_blank" rel="noopener noreferrer" onClick={() => trackAsset("the_grasp_screenplay_excerpt", SCREENPLAY_EXCERPT_PATH)}>
-                    <BookOpen className="mr-2 h-4 w-4" />
-                    Read screenplay excerpt
-                  </a>
+                <Button type="button" size="lg" onClick={() => setScriptExcerptOpen(true)} className="border-[#536d76] bg-[#536d76] text-white [background-image:none] hover:bg-[#627e88]">
+                  <BookOpen className="mr-2 h-4 w-4" />
+                  Read screenplay excerpt
                 </Button>
                 <Button
                   size="lg"
@@ -478,11 +477,9 @@ export default function TheGraspPage() {
                   The sea is still. The ferry turns. No one is at the wheel.
                 </p>
               </div>
-              <Button asChild size="lg" className="border-[#536d76] bg-[#536d76] text-white [background-image:none] hover:bg-[#627e88]">
-                <a href={SCREENPLAY_EXCERPT_PATH} target="_blank" rel="noopener noreferrer" onClick={() => trackAsset("the_grasp_screenplay_excerpt", SCREENPLAY_EXCERPT_PATH)}>
-                  <BookOpen className="mr-2 h-4 w-4" />
-                  Read screenplay excerpt
-                </a>
+              <Button type="button" size="lg" onClick={() => setScriptExcerptOpen(true)} className="border-[#536d76] bg-[#536d76] text-white [background-image:none] hover:bg-[#627e88]">
+                <BookOpen className="mr-2 h-4 w-4" />
+                Read screenplay excerpt
               </Button>
             </div>
             <div className="mt-16 border-y border-[#536d76]/20 py-12 text-center">
@@ -499,7 +496,7 @@ export default function TheGraspPage() {
           </div>
         </section>
       </main>
-
+      <TheGraspScriptExcerptDialog open={scriptExcerptOpen} onOpenChange={setScriptExcerptOpen} />
     </div>
   );
 }

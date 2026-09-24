@@ -22,6 +22,7 @@ import { buildCorsOptions } from "./corsOptions";
 import { cloudflareGuard } from "./middleware/impressionMiddleware";
 import { scannerGuard } from "./middleware/scannerGuard";
 import { securityHeaders } from "./middleware/securityHeaders";
+import { apiNotFound } from "./middleware/apiNotFound";
 
 const app = express();
 // Behind Render's proxy; required for secure cookies/session in OAuth flows
@@ -97,6 +98,11 @@ app.use((req, res, next) => {
 
 (async () => {
   const server = await registerRoutes(app);
+
+  // All legitimate API routes are registered above. Keep unmatched API
+  // requests out of the Vite/production SPA fallbacks, which intentionally
+  // return index.html for client-side application routes.
+  app.use("/api", apiNotFound);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

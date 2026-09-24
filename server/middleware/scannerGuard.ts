@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import type { Request, RequestHandler } from "express";
 
 type ScannerBucket = {
@@ -14,6 +15,12 @@ const directScannerPatterns = [
   /\/\.env(\.|$|~)/i,
   /\/\.git\//i,
   /^\/(?:phpinfo|info|test|debug)\.php$/i,
+  /(?:^|\/)\.ssh(?:\/|$)/i,
+  /(?:^|\/)proc\/self\/environ(?:\/|$)/i,
+  /(?:^|\/)\.\.(?:\/|$)/,
+  /^\/api\/fs\/exec(?:\/|$)/i,
+  /\/jobs_u\/get_log_file(?:\/|$)/i,
+  /(?:^|\/)phpinfo(?:\.php)?(?:\/|$)/i,
   /\.(bak|backup|old|save|swp|sql|zip|tar|gz|7z|map)$/i,
 ];
 
@@ -87,6 +94,9 @@ const getRequestId = (req: Request) => {
   return Array.isArray(value) ? value[0] || null : value || null;
 };
 
+const hashIp = (ip: string) =>
+  crypto.createHash("sha256").update(ip).digest("hex").slice(0, 12);
+
 const incrementScannerBucket = (ip: string) => {
   const now = Date.now();
   const existing = scannerBuckets.get(ip);
@@ -113,9 +123,9 @@ export const scannerGuard: RequestHandler = (req, res, next) => {
   const bucket = incrementScannerBucket(ip);
   console.warn(JSON.stringify({
     event: "blocked_scanner_probe",
-    path: req.originalUrl || req.path,
+    path: req.path,
     method: req.method,
-    ip,
+    ipHash: hashIp(ip),
     userAgent: req.headers["user-agent"] || null,
     requestId: getRequestId(req),
   }));

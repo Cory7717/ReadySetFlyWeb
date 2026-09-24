@@ -17,7 +17,7 @@ import { trackEvent } from "@/lib/analytics";
 
 const CONCEPT_ART_PATH = "/downloads/the-grasp-concept-art.png";
 const CORY_BIO_IMAGE_PATH = "/downloads/cory-armer-creator-bio.png";
-const SCREENPLAY_EXCERPT_PATH = "/the-grasp-excerpt.pdf";
+const SCREENPLAY_EXCERPT_PATH = "/downloads/the-grasp-screenplay-excerpt.pdf";
 const ONE_PAGER_PATH = "/downloads/the-grasp-one-pager.pdf";
 const FEATURE_BIBLE_PATH = "/downloads/the-grasp-feature-bible.pdf";
 const THE_GRASP_DESCRIPTION =

@@ -124,6 +124,19 @@ const useOfFunds = [
 ];
 const teamProfiles = [
   {
+    role: "Producer",
+    name: "Scott Rosenfelt",
+    imagePath: SCOTT_BIO_IMAGE_PATH,
+    teaser:
+      "Veteran producer and writer bringing major feature credibility, market trust, and experienced packaging guidance.",
+    paragraphs: [
+      "Scott Rosenfelt is one of Hollywood's most accomplished independent producers, with a body of work that includes Home Alone, Mystic Pizza, Teen Wolf, Smoke Signals, and Extremities. His producing career spans commercially successful studio films, acclaimed independent features, documentaries, and television projects, giving him rare credibility on both the creative and market sides of development.",
+      "Recent and current work includes the series SellBlock, the feature Bukinawa, and upcoming projects such as Lips Like Sugar, Sinta Ko, Empress Wu, Choices, and Under The Boards. He also produced Critical Thinking, directed by and starring John Leguizamo, which was selected for SXSW and went on to a successful release and streaming run.",
+      "Rosenfelt was also producer and writer on The Jade Pendant and wrote, produced, and directed the pilot Main Street. Through ShadowCatcher Entertainment, which he co-founded, he produced the Sundance-winning Smoke Signals, one of the landmark independent films of its era.",
+      "In addition to his production work, Rosenfelt has written, directed, taught, and lectured widely. He is a member of the Directors Guild of America, the Writers Guild of America, and the Academy of Motion Picture Arts and Sciences, and is a graduate of NYU's Tisch School of the Arts.",
+    ],
+  },
+  {
     role: "Creator / Writer",
     name: "Cory Armer",
     imagePath: CORY_BIO_IMAGE_PATH,
@@ -149,19 +162,6 @@ const teamProfiles = [
       "At Marc Production Enterprises in Austin, he has helped develop and produce projects including Road to Juarez, Critical Thinking, Sno Cone Stand Inc., and The LookOut Creek, while also supporting current titles in development such as Ladies Forbidden G.O.L.F. and Crossed Love. His work has included producing, acting, directing support, and hands-on project assembly across multiple stages of production.",
       "Ramirez has collaborated with notable industry talent including Scott Rosenfelt, Sean McNamara, and John Leguizamo. He specializes in identifying strong material, refining projects in development, coordinating talent and production teams, securing resources, and helping guide films toward distribution and audience readiness.",
       "Outside film production, he has held senior roles in operations, product development, and international sales, including leadership positions at Skintiva, Robusto International Corporation, and International Space Optics. That operating discipline continues to inform his producing work, giving him a grounded, solutions-first approach to building ambitious projects.",
-    ],
-  },
-  {
-    role: "Producer",
-    name: "Scott Rosenfelt",
-    imagePath: SCOTT_BIO_IMAGE_PATH,
-    teaser:
-      "Veteran producer and writer bringing major feature credibility, market trust, and experienced packaging guidance.",
-    paragraphs: [
-      "Scott Rosenfelt is one of Hollywood's most accomplished independent producers, with a body of work that includes Home Alone, Mystic Pizza, Teen Wolf, Smoke Signals, and Extremities. His producing career spans commercially successful studio films, acclaimed independent features, documentaries, and television projects, giving him rare credibility on both the creative and market sides of development.",
-      "Recent and current work includes the series SellBlock, the feature Bukinawa, and upcoming projects such as Lips Like Sugar, Sinta Ko, Empress Wu, Choices, and Under The Boards. He also produced Critical Thinking, directed by and starring John Leguizamo, which was selected for SXSW and went on to a successful release and streaming run.",
-      "Rosenfelt was also producer and writer on The Jade Pendant and wrote, produced, and directed the pilot Main Street. Through ShadowCatcher Entertainment, which he co-founded, he produced the Sundance-winning Smoke Signals, one of the landmark independent films of its era.",
-      "In addition to his production work, Rosenfelt has written, directed, taught, and lectured widely. He is a member of the Directors Guild of America, the Writers Guild of America, and the Academy of Motion Picture Arts and Sciences, and is a graduate of NYU's Tisch School of the Arts.",
     ],
   },
 ];

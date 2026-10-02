@@ -363,14 +363,33 @@ export default function NoiseAndFuryPage() {
           <div className="mx-auto max-w-5xl text-center">
             <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[#C59A5E]">The Series Promise</div>
             <h2 className="mt-6 font-display text-4xl font-semibold leading-[1.08] tracking-[-0.05em] text-white sm:text-6xl">
-              This is a story about brotherhood.
+              They were just making music.
             </h2>
-            <p className="mx-auto mt-7 max-w-4xl text-lg leading-9 text-[#E5D8CC] sm:text-2xl sm:leading-10">
-              Noise &amp; Fury is ultimately a story about brotherhood—about four very different people who created
-              something bigger than themselves; how that bond carried them through fame, loss, and change; and how
-              the music they made became something none of them could have fully understood at the time. Something
-              that outlived the moment, outgrew the people who created it, and will endure long after all of us are gone.
-            </p>
+            <div className="mx-auto mt-7 max-w-4xl space-y-6 text-left text-lg leading-9 text-[#E5D8CC] sm:text-xl sm:leading-10">
+              <p>
+                <em>Noise &amp; Fury</em> is really about a generation of artists who came up at a time when they had room
+                to figure out who they were before the whole world was watching. They were influenced by the people
+                around them, the places they came from, the things they lost and the things they were trying to survive,
+                but they weren&apos;t being told every second what people thought of them or what they should become.
+              </p>
+              <p>
+                And what makes that so powerful now is that the music didn&apos;t stay in that time. It kept moving forward.
+                People who weren&apos;t even alive when these songs were written still hear themselves in them today.
+              </p>
+              <p>
+                That&apos;s what I think <em>Noise &amp; Fury</em> is ultimately about. The world around the music has changed
+                completely, but the reasons people connect to it haven&apos;t. Loss still feels like loss. Loneliness still
+                feels like loneliness. Friendship still matters. Anger, addiction, grief, love, insecurity, all of it is
+                still there.
+              </p>
+              <p>
+                These artists had no idea they were creating something that would become part of somebody else&apos;s life
+                thirty years later. They were trying to make something honest in the moment.
+              </p>
+              <p className="text-center font-display text-3xl font-semibold text-[#D3A869] sm:text-4xl">
+                And somehow, that honesty lasted.
+              </p>
+            </div>
           </div>
         </section>
 

@@ -395,7 +395,7 @@ export default function NoiseAndFuryPage() {
           </div>
         </section>
 
-        <section className="order-3 mt-10 grid gap-8 lg:grid-cols-[1.15fr_0.85fr]">
+        <section className="order-4 mt-10 grid gap-8 lg:grid-cols-[1.15fr_0.85fr]">
           <div className="space-y-6 rounded-[30px] border border-[#8E6B3B]/18 bg-[linear-gradient(180deg,rgba(17,14,12,0.94)_0%,rgba(8,8,9,0.98)_100%)] p-7 shadow-[0_18px_60px_rgba(0,0,0,0.25)] sm:p-9">
             <div className="space-y-3">
               <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">Why This Story Matters</div>
@@ -490,7 +490,7 @@ export default function NoiseAndFuryPage() {
           </div>
         </section>
 
-        <section id="season-overview" className="order-5 mt-16 scroll-mt-24">
+        <section id="season-overview" className="order-6 mt-16 scroll-mt-24">
           <div className="mx-auto max-w-3xl text-center">
             <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">Season One Overview</div>
             <h2 className="mt-3 font-display text-4xl font-semibold tracking-[-0.05em] text-white sm:text-5xl">
@@ -540,7 +540,7 @@ export default function NoiseAndFuryPage() {
           </div>
         </section>
 
-        <section id="series-excerpts" className="order-6 mt-16 scroll-mt-24">
+        <section id="series-excerpts" className="order-3 mt-16 scroll-mt-24">
           <div className="overflow-hidden rounded-[30px] border border-[#8E6B3B]/22 bg-[linear-gradient(135deg,rgba(25,19,14,0.98)_0%,rgba(8,8,9,0.98)_72%)] p-7 shadow-[0_24px_80px_rgba(0,0,0,0.28)] sm:p-9">
             <div className="mx-auto max-w-4xl text-center">
               <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">A Moment from the Series</div>
@@ -639,7 +639,7 @@ export default function NoiseAndFuryPage() {
           </div>
         </section>
 
-        <section className="order-4 mt-16 grid gap-8 lg:grid-cols-2">
+        <section className="order-5 mt-16 grid gap-8 lg:grid-cols-2">
           <div className="rounded-[30px] border border-[#8E6B3B]/18 bg-[linear-gradient(180deg,rgba(15,12,10,0.96)_0%,rgba(9,9,10,0.98)_100%)] p-7 sm:p-8">
             <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">The Human Core</div>
             <h3 className="mt-3 font-display text-3xl font-semibold tracking-[-0.05em] text-white">The brotherhood—and the lives around it.</h3>

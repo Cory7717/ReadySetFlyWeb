@@ -13,9 +13,9 @@ function trackPortfolioAction(action: string, label: string, destination?: strin
 }
 
 const momentumItems = [
-  "Noise & Fury currently in early development",
+  "Noise & Fury Season One complete: eight hour-long teleplays",
   "Producer attached: Scott Rosenfelt - Home Alone, Teen Wolf, Mystic Pizza",
-  "Active outreach and relationship-building with key Seattle music stakeholders",
+  "Noise & Fury season bible and one-pager complete",
   "Multiple completed television and feature packages",
   "Founder of Ready Set Fly, a live aviation technology platform serving the general aviation community",
 ];
@@ -32,11 +32,11 @@ const projects = [
   },
   {
     title: "NOISE & FURY",
-    genre: "Prestige Anthology Drama Series",
-    cue: "Seattle music / legacy / addiction",
+    genre: "Prestige Dramatic Series",
+    cue: "Seattle music / brotherhood / legacy",
     description:
-      "A character-driven anthology exploring the artists who defined a generation and the personal cost of fame, addiction, creativity, and legacy. Season One follows Layne Staley and Jerry Cantrell as Alice in Chains rises from Seattle clubs to international fame while the bond that built the band is tested by success and addiction.",
-    badges: ["Pilot Complete", "7 of 8 Episodes Complete", "Series Bible Complete", "Pitch Deck Complete", "Producer Attached", "Early Development"],
+      "A character-driven dramatic series about four musicians whose bond creates something bigger than any one of them. Season One follows Alice in Chains from its original partnership through fame, painful change and the choice to carry the music forward without erasing the people who made it.",
+    badges: ["8 Teleplays Complete", "Season Bible Complete", "One-Pager Complete", "Producer Attached", "Private Creative Review"],
     href: "/noiseandfury",
   },
   {

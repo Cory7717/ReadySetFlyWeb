@@ -10450,22 +10450,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
           firstName: data.firstName,
           lastName: data.lastName,
           email: data.email,
-          subject: `[Noise & Fury Investor] ${data.subject}`,
+          subject: `[Noise & Fury Project] ${data.subject}`,
           message: data.message,
           ipAddress: ip,
         });
 
         sendContactFormEmail({
           ...data,
-          subject: `[Noise & Fury Investor] ${data.subject}`,
+          subject: `[Noise & Fury Project] ${data.subject}`,
           recipientEmail: "coryarmer@gmail.com",
           ccEmail: "ceo@marcmovies.com",
           brandName: "Noise & Fury",
-          headerTitle: "Noise & Fury Investor Inquiry",
-          headerSubtitle: "New investor message received",
+          headerTitle: "Noise & Fury Project Inquiry",
+          headerSubtitle: "New project message received",
           headerColor: "#3a2515",
           messageAccentColor: "#b89258",
-          footerText: "Noise & Fury - Investor Relations",
+          footerText: "Noise & Fury - Project Inquiries",
         })
           .then(async () => {
             await storage.updateContactSubmissionEmailStatus(
@@ -10475,17 +10475,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
           })
           .catch((error) => {
             console.error(
-              `Failed to send Noise & Fury investor email for submission ${submission.id}:`,
+              `Failed to send Noise & Fury project email for submission ${submission.id}:`,
               error,
             );
           });
 
         return res.json({ success: true });
       } catch (error) {
-        console.error("Noise & Fury investor contact form error:", error);
+        console.error("Noise & Fury project contact form error:", error);
         return res
           .status(500)
-          .json({ error: "Failed to process investor inquiry" });
+          .json({ error: "Failed to process project inquiry" });
       }
     },
   );

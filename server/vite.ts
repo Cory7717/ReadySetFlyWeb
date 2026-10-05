@@ -38,8 +38,8 @@ const routeSeo: Record<string, SeoMeta> = {
     image: "/downloads/coryarmer-portfolio-background.png",
   },
   "/noiseandfury": {
-    title: "Noise & Fury | Prestige Anthology Drama Series",
-    description: "A prestige anthology drama series exploring the artists who defined a generation and the personal cost of fame, addiction, creativity, and legacy.",
+    title: "Noise & Fury | Season One: Alice in Chains",
+    description: "A complete eight-episode dramatic season about the brotherhood that made Alice in Chains, the lives around the music, and what it means to carry that music forward.",
     image: "/downloads/noise-and-fury-hero.jpg",
   },
   "/thegrasp": {

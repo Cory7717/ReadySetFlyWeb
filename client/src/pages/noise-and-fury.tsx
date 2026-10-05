@@ -10,9 +10,8 @@ import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 import { trackEvent } from "@/lib/analytics";
 import { useToast } from "@/hooks/use-toast";
-import { BookOpen, ChevronDown, Download, ExternalLink, Shield } from "lucide-react";
+import { BookOpen, ChevronDown, Shield } from "lucide-react";
 
-const PDF_PATH = "/downloads/noise-and-fury-investor-v2.pdf";
 const HERO_IMAGE_PATH = "/downloads/noise-and-fury-hero.jpg";
 const MARC_LOGO_PATH = "/downloads/marc-production-logo.jpg";
 const CORY_BIO_IMAGE_PATH = "/downloads/noise-and-fury-cory.jpg";
@@ -20,85 +19,86 @@ const CESAR_BIO_IMAGE_PATH = "/downloads/noise-and-fury-cesar.jpg";
 const SCOTT_BIO_IMAGE_PATH = "/downloads/noise-and-fury-scott.jpg";
 
 const highlightStats = [
-  { value: "8", label: "Prestige episodes", detail: "Season one mapped end-to-end" },
-  { value: "7 of 8", label: "Scripts written", detail: "Series bible and scripts already underway" },
+  { value: "8", label: "Completed teleplays", detail: "One complete season arc" },
+  { value: "1", label: "Complete season bible", detail: "Alice in Chains / Season One" },
   { value: "2", label: "WGA registrations", detail: "#2317225 / #2333978" },
-  { value: "Active", label: "Development status", detail: "Creative and producing conversations underway" },
+  { value: "Complete", label: "Writing status", detail: "Ready for focused creative review" },
 ];
 
 const episodeRun = [
   {
-    title: '"We Die Young"',
-    theme: "Birth of the Band / Reckless Youth / Early Promise",
+    title: "We Die Young",
+    years: "1987–1988",
+    theme: "Recognition and formation",
     summary:
-      "Seattle, 1988. Before the spotlight. Before expectations. Before anyone understands what this is about to become. Layne realizes in a rehearsal room that when he sings, the room changes. We meet Demri as a fully present force in her own right, Jerry arrives from the edge of the scene, and the first rehearsal reveals a chemistry nobody can manufacture.",
-    turningPoint:
-      'Layne tells Jerry, "If I cannot feel it, I cannot sing," revealing exactly what the next fourteen years will cost.',
+      "Jerry first hears Layne sing outside Tacoma Little Theatre, then the story moves through the lives, losses and financial limits that bring Layne, Jerry, Sean and Mike Starr into the same rehearsal rooms. In the Music Bank, a messy collaboration begins to sound like something that belongs to all four of them.",
+    turningPoint: "The band and its new sound emerge from a genuine partnership rather than an overnight discovery.",
   },
   {
-    title: '"Man in the Box"',
-    theme: "Trapped by Choices / The Machine Begins",
+    title: "Man in the Box",
+    years: "1989–1990",
+    theme: "The machine begins",
     summary:
-      "Alice in Chains walks into Columbia and into the Facelift era as total outsiders. The band locks into its studio rhythm, Dave Jerden pushes confession over performance, MTV starts to notice, and the first real machine of fame begins moving around them while Layne's private reality starts slipping out of sync with what the public sees.",
-    turningPoint:
-      "Layne performs through his first serious withdrawal, and the gap between the crowd's version of him and the truth widens for the first time.",
+      "A packed Seattle bill and growing label attention move Alice in Chains from local rooms toward Columbia, Los Angeles and the making of Facelift. As radio, MTV and touring expand the band's public life, backstage humor and ordinary domestic moments reveal how quickly private reality can fall out of step with a public image.",
+    turningPoint: "Artistic breakthrough and the first unmistakable private danger arrive together.",
   },
   {
-    title: '"Rooster"',
-    theme: "The Band's War / External and Internal",
+    title: "Rooster",
+    years: "1990–1992",
+    theme: "Family history becomes music",
     summary:
-      "Success makes everything louder. Jerry's time with Chris Cornell and his father's Vietnam trauma shape Rooster while the band records Dirt with confidence, danger, and mounting strain. The music is undeniable, right up to the moment Layne's overdose stops everything cold.",
-    turningPoint:
-      "Layne is revived, touring is disrupted, and the band faces the first real choice between protecting the music and protecting the person making it.",
+      "Jerry's relationship with his father and the legacy of Vietnam frame the writing of “Rooster.” As recording and touring demands intensify, the song becomes an exchange between father and son—and an example of what the band can carry together when direct conversation falls short.",
+    turningPoint: "A private family history becomes music that reaches far beyond the people who first lived it.",
   },
   {
-    title: '"Would?"',
-    theme: "Grief and Survivor's Guilt",
+    title: "Would?",
+    years: "1990–1992, revisited",
+    theme: "Grief within a scene",
     summary:
-      "Andrew Wood's overdose changes the Seattle scene before the rest of the world even knows the scene exists. Jerry responds by writing Would? while Demri's health begins to decline and Layne absorbs the grief instead of speaking it. The scene, the friendships, and the private emotional damage all begin to merge.",
-    turningPoint:
-      "The recording of Would? becomes the first moment where the art and the life are completely indistinguishable.",
+      "The season returns to Andrew Wood's death and a Seattle music community confronting the fragility of its world. Through memorials, rehearsal, recording and the Singles film set, “Would?” becomes part of a larger ecosystem of remembrance, collaboration and uneasy survival.",
+    turningPoint: "Communal grief becomes a song whose ambiguity is part of its lasting force.",
   },
   {
-    title: '"Angry Chair"',
-    theme: "The Last Outward Resistance",
+    title: "Angry Chair",
+    years: "1993–1994",
+    theme: "A changing lineup",
     summary:
-      "The Metallica tour pushes the band into international pressure, public tension, and growing internal collapse. Layne confronts ugliness in the crowd, Mike Starr spirals, and the machinery around the band starts pushing for control just as everything inside the band is becoming unstable.",
-    turningPoint:
-      "Alice in Chains withdraws from the Metallica tour, the machine finally stops, and Layne's resistance turns inward from that point on.",
+      "The original four can still make one another laugh after a show, but international touring deepens pressures music alone cannot resolve. Mike Starr's departure changes the group materially, and Mike Inez enters as a musician with his own instincts while the band searches for a new equilibrium.",
+    turningPoint: "The band survives a major personnel change without solving the troubles beneath it.",
   },
   {
-    title: '"Nutshell"',
-    theme: "The Accidental Masterpiece / The Season's Emotional Center",
+    title: "Nutshell",
+    years: "1994–1996",
+    theme: "Openness and public exposure",
     summary:
-      "Jar of Flies is born in a week of burnout and isolation and becomes an accidental masterpiece. Then MTV Unplugged places Layne in front of the world as he is visibly fading, making public honesty feel unbearable to witness and impossible to forget.",
-    turningPoint:
-      "Nutshell live becomes the season's emotional center, the most honest public moment any of them will ever have.",
+      "Layne's work with Mike McCready, John Baker Saunders and Barrett Martin reveals a less pressurized musical space. Alice in Chains' acoustic work and MTV Unplugged create a brief, deeply musical moment of connection, even as private spaces become harder for friends and family to enter.",
+    turningPoint: "An extraordinary public connection cannot restore ordinary life.",
   },
   {
-    title: '"Sea of Sorrow"',
-    theme: "The Permanent Withdrawal / The Last Tether Snaps",
+    title: "Sea of Sorrow",
+    years: "1996–2002",
+    theme: "The distance no one can close",
     summary:
-      "After Unplugged, the world thinks Layne came back. Layne knows he cannot do that again. Isolation becomes chosen and total, Jerry starts adapting toward survival, Demri's health collapses, and after her death, Layne does not explode so much as disappear. The band dissolves as a living organism.",
-    turningPoint:
-      'Layne calls his mother and says, "I am so tired," the last outward reach before the drowning is complete.',
+      "Following the band's last major public chapter, Layne lives at a growing distance from the people who care about him, while ordinary visits still reveal warmth and humor. Jerry continues to write and work; later recording sessions offer flashes of the old chemistry as contact becomes harder to sustain.",
+    turningPoint: "No single confrontation can neatly represent a withdrawal that unfolds over years.",
   },
   {
-    title: '"Rain When I Die"',
-    theme: "Endings and Continuation / Legacy Without Erasure",
+    title: "Rain When I Die",
+    years: "2002–present day",
+    theme: "Grief, mourning and continuation",
     summary:
-      "April 2002. Layne is found, Seattle mourns, and Jerry and Sean are left with the grief of having seen the end coming and still being shattered by it. The final movement of the season is not about replacement, but about the decision to continue creating without erasing what was lost.",
-    turningPoint:
-      "Jerry steps back to the microphone and chooses continuation as an act of honoring rather than escape.",
+      "An ordinary afternoon between Layne and Mike Starr gives way to loss, mourning and memories that still make people laugh. The season then follows the musicians through separate work, reunion and a changed lineup, carrying the story into a present where the music continues without erasing anyone who came before.",
+    turningPoint: "Continuation becomes a choice made without erasure, replacement or triumphalism.",
   },
 ];
 
 const characterCards = [
-  { name: "Layne Staley", summary: "The voice. Funny, magnetic, and fully alive before the cost arrives." },
-  { name: "Jerry Cantrell", summary: "The witness. The survivor. Still here. Still carrying the music." },
-  { name: "Sean Kinney", summary: "The pulse. Instinctive, irreverent, and essential to the chemistry that made four people sound like one." },
-  { name: "Mike Starr", summary: "The foundation of the original four—and a brother whose own struggle complicates every easy version of the story." },
-  { name: "Demri Parrott", summary: "An essential presence in their human orbit. Not a muse. Not a victim. A fully realized person with her own gravity." },
+  { name: "Layne Staley", summary: "The voice, the wit and the inward turn. Incisive, playful and affectionate; never reduced to an illness or an ending." },
+  { name: "Jerry Cantrell", summary: "The collaborator and carrier. A musician who keeps returning to the work, even as grief and change reshape it." },
+  { name: "Sean Kinney", summary: "The pulse and ballast. Funny, exacting and central to the bond that survives the years when the band barely functions." },
+  { name: "Mike Starr", summary: "The first foundation. His momentum, humor, musicianship and place in the original four remain essential to the story." },
+  { name: "Mike Inez", summary: "Continuity through change. A distinct musician who joins an evolving chemistry and builds his own history with the band." },
+  { name: "Demri Parrott", summary: "A life in her own right: wit, tenderness, friendships, work, difficult choices and a place in Seattle's community." },
 ];
 
 const toneReferences = [
@@ -115,12 +115,11 @@ const safeguards = [
   "The dignity of every real person depicted is non-negotiable",
 ];
 
-const useOfFunds = [
-  "Complete the eight-episode first-season script package",
-  "Engage artists and participants who can strengthen authenticity",
-  "Attach the right showrunner and executive-producing partners",
-  "Advance music, legal, clearance, and chain-of-title strategy",
-  "Refine the buyer-facing series package and presentation materials",
+const currentPriorities = [
+  "Focused conversations with artists, representatives, families and historical consultants",
+  "Music, archival, likeness, legal and chain-of-title planning before production",
+  "Creative and producing partnerships aligned with the season's human focus",
+  "Final factual review across all eight teleplays before any production draft",
 ];
 const teamProfiles = [
   {
@@ -145,7 +144,7 @@ const teamProfiles = [
     teaser:
       "Creator of Noise & Fury and founder of RSF, with the core operating and creative context behind the project.",
     paragraphs: [
-      "Cory Armer is the creator and writer of Noise & Fury, a prestige anthology series exploring the rise, impact, and legacy of iconic rock bands. The project is currently in early development and has already generated strong interest from established industry professionals, with active outreach underway for showrunners and executive producers. Built around emotionally driven storytelling and cultural authenticity, Noise & Fury is designed to deliver a cinematic, character-first experience for modern streaming audiences.",
+      "Cory Armer is the creator and writer of Noise & Fury, a prestige dramatic series whose complete first season follows Alice in Chains. Across eight finished teleplays, the project approaches music history through brotherhood, creative collaboration and the lives that continue beyond loss. It is designed as cinematic, character-first storytelling for a modern television audience.",
       "Cory brings a distinct, non-traditional path into the entertainment industry. With over 15 years of experience leading large-scale, branded hospitality operations, he has built a career grounded in execution, leadership, and performance. Managing high-volume environments and delivering consistent results within structured systems has shaped a disciplined, solutions-oriented approach that now carries into his creative work.",
       "He is also the founder of Ready Set Fly (RSF), an aviation platform built to modernize how pilots plan, train, and access aircraft. The platform reflects his ability to identify gaps in traditional industries and build scalable, real-world solutions, with early traction validating both the concept and execution.",
       "As a creator, Cory represents a rare combination of operational discipline, entrepreneurial vision, and creative ambition. His focus is on developing projects that are both culturally resonant and commercially viable, with Noise & Fury serving as the foundation for a broader slate of film and television development.",
@@ -166,7 +165,7 @@ const teamProfiles = [
   },
 ];
 
-const investorContactSchema = z.object({
+const projectContactSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
   email: z.string().email("Valid email is required"),
@@ -174,11 +173,7 @@ const investorContactSchema = z.object({
   message: z.string().min(10, "Message must be at least 10 characters"),
 });
 
-type InvestorContactValues = z.infer<typeof investorContactSchema>;
-
-function trackDownload(label: string, path: string) {
-  trackEvent("cta_click", { label, target: path });
-}
+type ProjectContactValues = z.infer<typeof projectContactSchema>;
 
 function excerpt(text: string, max = 172) {
   if (text.length <= max) return text;
@@ -187,7 +182,7 @@ function excerpt(text: string, max = 172) {
 
 export default function NoiseAndFuryPage() {
   const { toast } = useToast();
-  const [openEpisodeTitle, setOpenEpisodeTitle] = useState('"We Die Young"');
+  const [openEpisodeTitle, setOpenEpisodeTitle] = useState<string | null>("We Die Young");
 
   function scrollToSection(sectionId: string) {
     const section = document.getElementById(sectionId);
@@ -200,8 +195,8 @@ export default function NoiseAndFuryPage() {
     trackEvent("noise_fury_project_page_view", { page: "/noiseandfury" });
   }, []);
 
-  const form = useForm<InvestorContactValues>({
-    resolver: zodResolver(investorContactSchema),
+  const form = useForm<ProjectContactValues>({
+    resolver: zodResolver(projectContactSchema),
     defaultValues: {
       firstName: "",
       lastName: "",
@@ -211,12 +206,12 @@ export default function NoiseAndFuryPage() {
     },
   });
 
-  const sendInvestorContactMutation = useMutation({
-    mutationFn: async (values: InvestorContactValues) =>
+  const sendProjectContactMutation = useMutation({
+    mutationFn: async (values: ProjectContactValues) =>
       apiRequest("POST", "/api/noise-and-fury/investor-contact", values),
     onSuccess: () => {
       trackEvent("cta_click", {
-        label: "noise_fury_investor_contact_submit",
+        label: "noise_fury_project_contact_submit",
         target: "/api/noise-and-fury/investor-contact",
       });
       toast({
@@ -270,9 +265,13 @@ export default function NoiseAndFuryPage() {
                   <h1 className="max-w-4xl font-display text-5xl font-semibold tracking-[-0.06em] text-white sm:text-6xl lg:text-8xl">
                     Noise &amp; Fury
                   </h1>
-                  <p className="max-w-3xl text-lg leading-8 text-[#F0E1D2] sm:text-xl">
-                    Four very different people created something bigger than themselves—and music that would
-                    outlive the moment, outgrow its creators, and endure long after all of us are gone.
+                  <p className="max-w-3xl font-display text-2xl font-semibold uppercase tracking-[0.08em] text-[#F0E1D2] sm:text-3xl">
+                    They were just making music.
+                  </p>
+                  <p className="max-w-4xl text-base leading-8 text-[#E6D9CD] sm:text-lg">
+                    In late-1980s Seattle, four young musicians forge the bond that makes Alice in Chains a defining
+                    voice of their generation. As success brings addiction, loss and painful changes to the band, the
+                    people who made the music must find a way to carry it forward without forgetting who they were together.
                   </p>
                 </div>
 
@@ -282,8 +281,8 @@ export default function NoiseAndFuryPage() {
                     <div className="mt-2 max-w-[22rem] text-base font-semibold leading-7 text-white">Cory Armer and Cesar R. Ramirez</div>
                   </div>
                   <div className="border-l border-[#D3A869]/45 bg-black/28 px-4 py-3 backdrop-blur sm:min-h-[112px]">
-                    <div className="text-[11px] uppercase tracking-[0.28em] text-[#B89258]">ACTIVE DEVELOPMENT</div>
-                    <div className="mt-2 max-w-[22rem] text-base font-semibold leading-7 text-white">An eight-episode prestige drama about brotherhood, music, fame, loss, and change</div>
+                    <div className="text-[11px] uppercase leading-5 tracking-[0.28em] text-[#B89258]">SEASON ONE COMPLETE — EIGHT TELEPLAYS</div>
+                    <div className="mt-2 max-w-[22rem] text-base font-semibold leading-7 text-white">Eight completed hour-long teleplays</div>
                   </div>
                 </div>
 
@@ -304,20 +303,12 @@ export default function NoiseAndFuryPage() {
                 </div>
 
                 <div className="flex flex-wrap gap-3 pt-2">
-                  <Button asChild size="lg" className="bg-[#D3A869] text-[#141414] hover:bg-[#deb980]">
-                    <a
-                      href={PDF_PATH}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={() => trackDownload("noise_fury_download_pdf", PDF_PATH)}
-                    >
-                      <Download className="mr-2 h-4 w-4" />
-                      View project overview
-                    </a>
-                  </Button>
-                  <Button size="lg" variant="outline" className="border-white/15 bg-black/35 text-white hover:bg-black/50" onClick={() => scrollToSection("series-promise")}>
+                  <Button size="lg" className="bg-[#D3A869] text-[#141414] hover:bg-[#deb980]" onClick={() => scrollToSection("series-promise")}>
                     <BookOpen className="mr-2 h-4 w-4" />
                     Explore the series
+                  </Button>
+                  <Button size="lg" variant="outline" className="border-white/15 bg-black/35 text-white hover:bg-black/50" onClick={() => scrollToSection("project-contact")}>
+                    Start a conversation
                   </Button>
                 </div>
 
@@ -398,20 +389,19 @@ export default function NoiseAndFuryPage() {
             <div className="space-y-3">
               <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">Why This Story Matters</div>
               <h2 className="font-display text-4xl font-semibold tracking-[-0.05em] text-white sm:text-5xl">
-                Not a rock poster. A human story with market gravity.
+                Brotherhood before mythology.
               </h2>
             </div>
             <div className="grid gap-5 text-[15px] leading-8 text-[#D7CCC2] md:grid-cols-2">
               <p>
-                This is not a nostalgia play or a conventional rise-and-fall music biography. It is a modern
-                prestige drama about brotherhood, fame, addiction, friendship, grief, ambition, and the emotional
-                residue left after a cultural moment burns hot and disappears.
+                This is not a nostalgia exercise or a conventional rise-and-fall biography. It begins with Layne,
+                Jerry, Sean and Mike Starr as working musicians—carrying amplifiers, arguing, making one another laugh
+                and discovering a sound no one of them could have created alone.
               </p>
               <p>
-                At its center are four distinct people whose chemistry created a sound none of them could have made
-                alone. The series treats that shared achievement—and the cost of carrying it—with emotional honesty,
-                cultural specificity, and respect for the people who lived it. The right voices and attachments matter
-                more than fast ones.
+                That bond carries them through fame, private loss and a changing lineup. Mike Inez becomes part of the
+                band's evolving chemistry, and the season ultimately moves beyond Layne's death toward the people and
+                music that continue—without pretending anyone can be replaced or forgotten.
               </p>
             </div>
           </div>
@@ -419,17 +409,17 @@ export default function NoiseAndFuryPage() {
           <div className="grid gap-4">
             <div className="rounded-[28px] border border-[#8E6B3B]/18 bg-black/45 p-6">
               <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[#C59A5E]">Development Status</div>
-              <div className="mt-3 text-4xl font-semibold tracking-[-0.05em] text-white">Written with purpose. Building the right circle.</div>
+              <div className="mt-3 text-4xl font-semibold tracking-[-0.05em] text-white">The complete season is on the page.</div>
               <div className="mt-2 text-sm leading-7 text-[#CFC2B5]">
-                Seven of eight scripts are written, the season architecture is established, and the project is now
-                opening conversations with musicians, creative partners, showrunners, producers, and strategic allies
-                who understand both the music and the responsibility of telling this story.
+                Eight completed hour-long teleplays. A complete season bible. A complete one-pager. Final research,
+                rights clearances and consultation remain essential before production; the completed writing package
+                provides the basis for those focused conversations.
               </div>
             </div>
             <div className="rounded-[28px] border border-[#8E6B3B]/18 bg-black/45 p-6">
               <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[#C59A5E]">Current Priorities</div>
               <div className="mt-4 space-y-3">
-                {useOfFunds.map((item) => (
+                {currentPriorities.map((item) => (
                   <div key={item} className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-[#E4D7C9]">
                     {item}
                   </div>
@@ -442,7 +432,7 @@ export default function NoiseAndFuryPage() {
         <section className="order-7 mt-16 scroll-mt-24">
           <div className="rounded-[30px] border border-[#8E6B3B]/18 bg-[linear-gradient(180deg,rgba(17,14,12,0.94)_0%,rgba(8,8,9,0.98)_100%)] p-7 shadow-[0_18px_60px_rgba(0,0,0,0.22)] sm:p-9">
             <div className="mx-auto max-w-4xl text-center">
-              <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">For Artists &amp; Creative Partners</div>
+              <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">Authenticity &amp; Stewardship</div>
               <h2 className="mt-3 font-display text-4xl font-semibold tracking-[-0.05em] text-white sm:text-5xl">
                 An invitation to help protect the truth, humanity, and musical integrity of the story.
               </h2>
@@ -451,6 +441,13 @@ export default function NoiseAndFuryPage() {
                 connected to the history it portrays. We welcome conversations with people who can help the series feel
                 lived-in, honest, and worthy of the music at its center.
               </p>
+            </div>
+
+            <div className="mx-auto mt-8 max-w-5xl border border-[#D3A869]/25 bg-[#16110D]/70 px-5 py-5 text-sm leading-7 text-[#E2D6CA] sm:px-7">
+              Public performances, releases, collaborations and losses provide the historical framework. Private
+              conversations and emotional transitions are dramatized and should be tested against primary records and
+              first-person testimony as the work advances. This independent development presentation does not imply
+              authorization, participation or endorsement by Alice in Chains, its members, their families or representatives.
             </div>
 
             <div className="mt-8 grid gap-4 lg:grid-cols-3">
@@ -486,10 +483,11 @@ export default function NoiseAndFuryPage() {
           <div className="mx-auto max-w-3xl text-center">
             <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">Season One Overview</div>
             <h2 className="mt-3 font-display text-4xl font-semibold tracking-[-0.05em] text-white sm:text-5xl">
-              Eight episodes. One emotional descent.
+              Eight episodes. One complete arc.
             </h2>
             <p className="mt-4 text-base leading-8 text-[#CEC1B5] sm:text-lg">
-              An episode-by-episode view of the season architecture, emotional engine, and the turning points that define the buyer-facing shape of the story.
+              Becoming. Fracture. Continuing. The season follows the original partnership, the years of change and the
+              musicians who carry the work forward.
             </p>
           </div>
 
@@ -500,12 +498,13 @@ export default function NoiseAndFuryPage() {
                 <button
                   key={episode.title}
                   type="button"
-                  onClick={() => setOpenEpisodeTitle(isOpen ? '"We Die Young"' : episode.title)}
+                  aria-expanded={isOpen}
+                  onClick={() => setOpenEpisodeTitle(isOpen ? null : episode.title)}
                   className="group rounded-[28px] border border-[#8E6B3B]/18 bg-[linear-gradient(180deg,rgba(15,12,10,0.96)_0%,rgba(9,9,10,0.98)_100%)] p-6 text-left transition hover:border-[#B88A50]/55 hover:bg-[linear-gradient(180deg,rgba(22,17,13,0.98)_0%,rgba(10,10,11,1)_100%)]"
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <div className="text-[11px] uppercase tracking-[0.28em] text-[#B89258]">EP {index + 1}</div>
+                      <div className="text-[11px] uppercase tracking-[0.28em] text-[#B89258]">EP {index + 1} · {episode.years}</div>
                       <div className="mt-2 font-display text-3xl font-semibold tracking-[-0.05em] text-white">
                         {episode.title}
                       </div>
@@ -520,7 +519,7 @@ export default function NoiseAndFuryPage() {
 
                   {isOpen ? (
                     <div className="mt-5 rounded-[22px] border border-[#8E6B3B]/20 bg-[#16110D]/85 px-4 py-4">
-                      <div className="text-[11px] uppercase tracking-[0.28em] text-[#C59A5E]">Turning Point</div>
+                      <div className="text-[11px] uppercase tracking-[0.28em] text-[#C59A5E]">The Turn</div>
                       <div className="mt-2 text-sm leading-7 text-[#F0E4D6]">{episode.turningPoint}</div>
                     </div>
                   ) : null}
@@ -579,7 +578,7 @@ export default function NoiseAndFuryPage() {
         <section className="order-4 mt-16 grid gap-8 lg:grid-cols-2">
           <div className="rounded-[30px] border border-[#8E6B3B]/18 bg-[linear-gradient(180deg,rgba(15,12,10,0.96)_0%,rgba(9,9,10,0.98)_100%)] p-7 sm:p-8">
             <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">The Human Core</div>
-            <h3 className="mt-3 font-display text-3xl font-semibold tracking-[-0.05em] text-white">The brotherhood—and the people held in its gravity.</h3>
+            <h3 className="mt-3 font-display text-3xl font-semibold tracking-[-0.05em] text-white">The brotherhood—and the lives around it.</h3>
             <div className="mt-6 grid gap-4">
               {characterCards.map((character) => (
                 <div key={character.name} className="rounded-[24px] border border-white/10 bg-white/[0.03] px-5 py-4">
@@ -617,35 +616,28 @@ export default function NoiseAndFuryPage() {
           </div>
         </section>
 
-        <section id="investor-contact" className="order-8 mt-16 grid gap-8 scroll-mt-24 lg:grid-cols-[0.95fr_1.05fr]">
+        <section id="project-contact" className="order-8 mt-16 grid gap-8 scroll-mt-24 lg:grid-cols-[0.95fr_1.05fr]">
           <div className="space-y-6 rounded-[30px] border border-[#8E6B3B]/18 bg-[linear-gradient(180deg,rgba(15,12,10,0.96)_0%,rgba(9,9,10,0.98)_100%)] p-7 sm:p-8">
             <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">Continue the Conversation</div>
             <h3 className="font-display text-4xl font-semibold tracking-[-0.05em] text-white">There are different ways into the project.</h3>
             <p className="text-base leading-8 text-[#D3C6BA]">
-              Inquiries are sent directly to Cory Armer and copied to the producing team. Musicians, artists, creative
-              collaborators, producers, and strategic partners are invited to identify the kind of conversation they want to have.
+              Inquiries are sent directly to Cory Armer and copied to the producing team. Artists, representatives,
+              historians, creative collaborators, producers and potential partners are invited to identify the kind of
+              conversation they want to have.
             </p>
             <p className="text-sm leading-7 text-[#BCAEA0]">
-              Creative and music-industry conversations begin with the story and its authenticity. Financing and strategic
-              partnership conversations remain available as a separate, private development path.
+              The eight teleplays and revised development documents are private materials. Appropriate review access can
+              be arranged directly with the team; no scripts or confidential package materials are published here.
             </p>
             <div className="rounded-[22px] border border-white/10 bg-white/[0.03] px-4 py-4 text-sm leading-7 text-[#E7DACD]">
-              Tell us what connects you to Noise &amp; Fury—its music, its people, its history, or its path toward the screen—and
+              Tell us what connects you to <em>Noise &amp; Fury</em>—its music, its people, its history, or its path toward the screen—and
               the team will respond with the most relevant next step.
-            </div>
-            <div className="flex flex-wrap gap-3">
-              <Button asChild variant="outline" className="border-white/15 bg-black/35 text-white hover:bg-black/50">
-                <a href="mailto:coryarmer@gmail.com?cc=ceo@marcmovies.com&subject=Noise%20%26%20Fury%20Project%20Conversation">
-                  <ExternalLink className="mr-2 h-4 w-4" />
-                  Email directly
-                </a>
-              </Button>
             </div>
           </div>
 
           <div className="rounded-[30px] border border-[#8E6B3B]/18 bg-[linear-gradient(180deg,rgba(15,12,10,0.96)_0%,rgba(9,9,10,0.98)_100%)] p-7 sm:p-8">
             <Form {...form}>
-              <form onSubmit={form.handleSubmit((values) => sendInvestorContactMutation.mutate(values))} className="space-y-5">
+              <form onSubmit={form.handleSubmit((values) => sendProjectContactMutation.mutate(values))} className="space-y-5">
                 <div className="grid gap-5 sm:grid-cols-2">
                   <FormField
                     control={form.control}
@@ -717,8 +709,8 @@ export default function NoiseAndFuryPage() {
                   )}
                 />
 
-                <Button type="submit" className="w-full bg-[#D3A869] text-[#141414] hover:bg-[#deb980]" disabled={sendInvestorContactMutation.isPending}>
-                  {sendInvestorContactMutation.isPending ? "Sending inquiry..." : "Start the conversation"}
+                <Button type="submit" className="w-full bg-[#D3A869] text-[#141414] hover:bg-[#deb980]" disabled={sendProjectContactMutation.isPending}>
+                  {sendProjectContactMutation.isPending ? "Sending inquiry..." : "Start the conversation"}
                 </Button>
               </form>
             </Form>

@@ -18,11 +18,12 @@ import cors from "cors";
 import { prewarmOperationalCaches, registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { startFinanceAlertsJob } from "./jobs/financeAlerts";
-import { buildCorsOptions } from "./corsOptions";
+import { buildCorsOptions, CorsOriginDeniedError, corsRejectionDiagnostics } from "./corsOptions";
 import { cloudflareGuard } from "./middleware/impressionMiddleware";
 import { scannerGuard } from "./middleware/scannerGuard";
 import { securityHeaders } from "./middleware/securityHeaders";
 import { apiNotFound } from "./middleware/apiNotFound";
+import { canonicalFrontendHost } from "./middleware/canonicalFrontendHost";
 
 const app = express();
 // Behind Render's proxy; required for secure cookies/session in OAuth flows
@@ -31,6 +32,8 @@ app.set("trust proxy", 1);
 // Block automated secret/config probes before body parsing, routes, static assets, or app fallback.
 app.use(scannerGuard);
 app.use(securityHeaders);
+app.use(canonicalFrontendHost);
+app.use(corsRejectionDiagnostics);
 
 // CORS configuration - allow same-origin production traffic and explicit web origins.
 app.use(cors(buildCorsOptions()));
@@ -105,6 +108,16 @@ app.use((req, res, next) => {
   app.use("/api", apiNotFound);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+    if (err instanceof CorsOriginDeniedError || err?.code === "CORS_ORIGIN_DENIED") {
+      if (!res.headersSent) {
+        res.status(403).json({
+          message: "Origin not allowed",
+          requestId: res.locals.requestId || undefined,
+        });
+      }
+      return;
+    }
+
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 

@@ -1,3 +1,5 @@
+import crypto from "crypto";
+import type { RequestHandler } from "express";
 import type { CorsOptions } from "cors";
 
 const DEFAULT_WEB_ORIGINS = [
@@ -19,6 +21,82 @@ const API_ONLY_ORIGINS = new Set([
 function normalizeOrigin(origin: string): string {
   return origin.trim().replace(/\/+$/, "");
 }
+
+export class CorsOriginDeniedError extends Error {
+  status = 403;
+  statusCode = 403;
+  code = "CORS_ORIGIN_DENIED";
+
+  constructor() {
+    super("Origin not allowed");
+    this.name = "CorsOriginDeniedError";
+  }
+}
+
+function safeHeader(value: unknown, maxLength = 160): string | null {
+  const normalized = String(value || "").replace(/[\r\n\t]/g, " ").trim();
+  return normalized ? normalized.slice(0, maxLength) : null;
+}
+
+function safeCorrelationId(value: unknown): string | null {
+  const normalized = String(value || "").trim();
+  return /^[A-Za-z0-9._:-]{1,128}$/.test(normalized) ? normalized : null;
+}
+
+function safeOriginForLog(value: string | undefined): string | null {
+  if (!value) return null;
+  try {
+    return new URL(value).origin;
+  } catch {
+    return "invalid";
+  }
+}
+
+function coarseUserAgent(value: unknown): string {
+  const userAgent = String(value || "");
+  if (!userAgent) return "unknown";
+  if (/(bot|crawler|spider|headless|lighthouse|monitor|uptime)/i.test(userAgent)) return "automation";
+  if (/(wv\)|webview|; wv)/i.test(userAgent)) return "webview";
+  if (/(okhttp|dart|expo|reactnative|readysetfly)/i.test(userAgent)) return "native-client";
+  if (/Edg\//i.test(userAgent)) return "edge";
+  if (/Firefox\//i.test(userAgent)) return "firefox";
+  if (/Chrome\//i.test(userAgent)) return "chrome";
+  if (/Safari\//i.test(userAgent)) return "safari";
+  return "other";
+}
+
+function isRejectedOrigin(origin: string | undefined, allowedOrigins: string[]): boolean {
+  if (!origin) return false;
+  return !allowedOrigins.includes(normalizeOrigin(origin));
+}
+
+export const corsRejectionDiagnostics: RequestHandler = (req, res, next) => {
+  const origin = typeof req.headers.origin === "string" ? req.headers.origin : undefined;
+  const allowedOrigins = getConfiguredOrigins();
+  if (!isRejectedOrigin(origin, allowedOrigins)) return next();
+
+  const incomingRequestId = safeCorrelationId(req.headers["x-request-id"]);
+  const cloudflareRay = safeCorrelationId(req.headers["cf-ray"]);
+  const requestId = incomingRequestId || cloudflareRay || crypto.randomUUID();
+  res.locals.requestId = requestId;
+  res.setHeader("X-Request-ID", requestId);
+
+  console.warn(JSON.stringify({
+    event: API_ONLY_ORIGINS.has(normalizeOrigin(origin!))
+      ? "cors_api_origin_rejected"
+      : "cors_origin_rejected",
+    requestId,
+    method: req.method,
+    pathname: String(req.path || "/").slice(0, 300),
+    host: safeHeader(req.get("host"), 255),
+    origin: safeOriginForLog(origin),
+    cloudflareRay,
+    secFetchSite: safeHeader(req.headers["sec-fetch-site"], 32),
+    userAgentClass: coarseUserAgent(req.headers["user-agent"]),
+  }));
+
+  return next();
+};
 
 function getConfiguredOrigins(): string[] {
   const envOrigins = [
@@ -66,16 +144,7 @@ export function buildCorsOptions(): CorsOptions {
         return;
       }
 
-      if (API_ONLY_ORIGINS.has(normalizedOrigin)) {
-        console.warn(JSON.stringify({
-          event: "cors_api_origin_rejected",
-          origin: normalizedOrigin,
-          reason: "Browser-facing auth or app flow is using the API origin instead of the frontend origin.",
-          expectedFrontendOrigin: "https://readysetfly.us",
-        }));
-      }
-
-      callback(new Error(`CORS origin not allowed: ${normalizedOrigin}`));
+      callback(new CorsOriginDeniedError());
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],

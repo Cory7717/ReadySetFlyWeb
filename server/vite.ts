@@ -8,6 +8,7 @@ import { nanoid } from "nanoid";
 import { and, eq, lte, or } from "drizzle-orm";
 import { aviationBriefings } from "@shared/schema";
 import { db } from "./db";
+import { getFrontendBaseUrl } from "./authRedirectUrls";
 
 const viteLogger = createLogger();
 
@@ -58,11 +59,20 @@ const routeSeo: Record<string, SeoMeta> = {
   },
 };
 
-function absoluteUrl(req: { protocol?: string; get?: (header: string) => string | undefined; originalUrl?: string }, pathOrUrl: string) {
+function assetAbsoluteUrl(req: { protocol?: string; get?: (header: string) => string | undefined; originalUrl?: string }, pathOrUrl: string) {
   if (/^https?:\/\//i.test(pathOrUrl)) return pathOrUrl;
+  if (!pathOrUrl.startsWith("/api/")) return frontendAbsoluteUrl(pathOrUrl);
   const host = req.get?.("host") || "readysetfly.us";
   const proto = req.get?.("x-forwarded-proto") || req.protocol || "https";
   return `${proto}://${host}${pathOrUrl.startsWith("/") ? pathOrUrl : `/${pathOrUrl}`}`;
+}
+
+export function frontendAbsoluteUrl(pathOrUrl: string) {
+  try {
+    return new URL(pathOrUrl, getFrontendBaseUrl()).toString();
+  } catch {
+    return getFrontendBaseUrl();
+  }
 }
 
 function escapeHtml(value: string) {
@@ -129,8 +139,8 @@ async function injectSeoMeta(html: string, req: { path?: string; protocol?: stri
   const meta = await seoForPath(pathname);
   const title = escapeHtml(meta.title);
   const description = escapeHtml(meta.description);
-  const image = escapeHtml(absoluteUrl(req, meta.image));
-  const url = escapeHtml(absoluteUrl(req, meta.canonicalPath || pathname));
+  const image = escapeHtml(assetAbsoluteUrl(req, meta.image));
+  const url = escapeHtml(frontendAbsoluteUrl(meta.canonicalPath || pathname));
   const tags = [
     `<title>${title}</title>`,
     `<meta name="description" content="${description}" />`,

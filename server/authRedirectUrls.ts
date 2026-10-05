@@ -142,17 +142,25 @@ export function buildFrontendUrl(pathOrUrl: string, req?: Request): string {
 }
 
 export function redactSensitiveUrlForAuthLog(value: string | null | undefined): string | null {
-  const normalized = normalizeUrlOrigin(value);
-  if (!normalized && !value) return null;
+  if (!value) return null;
 
   try {
-    const parsed = new URL(String(value));
-    for (const key of ["token", "code", "state", "access_token", "refresh_token", "id_token"]) {
-      if (parsed.searchParams.has(key)) parsed.searchParams.set(key, "[redacted]");
-    }
-    return parsed.toString();
+    const raw = String(value).trim();
+    const isAbsolute = /^https?:\/\//i.test(raw);
+    const parsed = new URL(raw, DEFAULT_FRONTEND_BASE_URL);
+    return isAbsolute ? `${parsed.origin}${parsed.pathname}` : parsed.pathname;
   } catch {
-    return normalized || String(value || "").replace(/(token=)[^&]+/gi, "$1[redacted]");
+    return null;
+  }
+}
+
+export function sanitizeAuthReferrerForLog(value: string | null | undefined): string | null {
+  if (!value) return null;
+  try {
+    const parsed = new URL(String(value), DEFAULT_FRONTEND_BASE_URL);
+    return `${parsed.origin}${parsed.pathname}`.slice(0, 500);
+  } catch {
+    return null;
   }
 }
 
@@ -169,8 +177,8 @@ export function logAuthRedirectDiagnostic(
   const payload = {
     event,
     requestHost: req?.get("host") || null,
-    requestOrigin: req?.get("origin") || null,
-    requestReferer: req?.get("referer") || req?.get("referrer") || null,
+    requestOrigin: normalizeUrlOrigin(req?.get("origin")),
+    requestReferer: sanitizeAuthReferrerForLog(req?.get("referer") || req?.get("referrer")),
     ...details,
   };
 

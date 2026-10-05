@@ -1,4 +1,32 @@
 const AUTH_PATHS = new Set(["/login", "/register"]);
+const CANONICAL_FRONTEND_ORIGIN = "https://readysetfly.us";
+const API_ONLY_HOSTS = new Set([
+  "api.readysetfly.us",
+  "readysetfly-api.onrender.com",
+]);
+
+function safeFrontendPath(value: string): string {
+  if (!value.startsWith("/") || value.startsWith("//")) return "/";
+
+  try {
+    const parsed = new URL(value, CANONICAL_FRONTEND_ORIGIN);
+    return `${parsed.pathname}${parsed.search}${parsed.hash}`;
+  } catch {
+    return "/";
+  }
+}
+
+export function frontendUrlForHostname(path: string, hostname: string): string {
+  const safePath = safeFrontendPath(path);
+  return API_ONLY_HOSTS.has(String(hostname || "").trim().toLowerCase())
+    ? `${CANONICAL_FRONTEND_ORIGIN}${safePath}`
+    : safePath;
+}
+
+export function frontendUrl(path: string): string {
+  if (typeof window === "undefined") return safeFrontendPath(path);
+  return frontendUrlForHostname(path, window.location.hostname);
+}
 
 export function normalizeReturnTo(value?: string | null): string {
   if (!value) return "/";

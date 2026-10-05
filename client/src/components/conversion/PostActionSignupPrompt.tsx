@@ -2,9 +2,8 @@ import { useEffect, useRef } from "react";
 import { X } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
-import { withReturnTo } from "@/lib/returnTo";
+import { frontendUrl, withReturnTo } from "@/lib/returnTo";
 
 type PostActionSignupPromptProps = {
   visible: boolean;
@@ -54,7 +53,7 @@ export function PostActionSignupPrompt({
             className="flex-1"
             onClick={() => {
               trackEvent("signup_after_action", { source, target: "/register" });
-              window.location.href = apiUrl(withReturnTo("/register", returnTo));
+              window.location.href = frontendUrl(withReturnTo("/register", returnTo));
             }}
           >
             Create free account

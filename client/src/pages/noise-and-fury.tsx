@@ -11,6 +11,10 @@ import { apiRequest } from "@/lib/queryClient";
 import { trackEvent } from "@/lib/analytics";
 import { useToast } from "@/hooks/use-toast";
 import { BookOpen, ChevronDown, Shield } from "lucide-react";
+import {
+  NoiseAndFuryExcerptDialog,
+  type NoiseAndFuryExcerptId,
+} from "@/components/noise-and-fury/NoiseAndFuryExcerptDialog";
 
 const HERO_IMAGE_PATH = "/downloads/noise-and-fury-hero.jpg";
 const MARC_LOGO_PATH = "/downloads/marc-production-logo.jpg";
@@ -183,6 +187,13 @@ function excerpt(text: string, max = 172) {
 export default function NoiseAndFuryPage() {
   const { toast } = useToast();
   const [openEpisodeTitle, setOpenEpisodeTitle] = useState<string | null>("We Die Young");
+  const [excerptOpen, setExcerptOpen] = useState(false);
+  const [selectedExcerptId, setSelectedExcerptId] = useState<NoiseAndFuryExcerptId>("first-jam");
+
+  function openExcerpt(excerptId: NoiseAndFuryExcerptId) {
+    setSelectedExcerptId(excerptId);
+    setExcerptOpen(true);
+  }
 
   function scrollToSection(sectionId: string) {
     const section = document.getElementById(sectionId);
@@ -429,7 +440,7 @@ export default function NoiseAndFuryPage() {
           </div>
         </section>
 
-        <section className="order-7 mt-16 scroll-mt-24">
+        <section className="order-8 mt-16 scroll-mt-24">
           <div className="rounded-[30px] border border-[#8E6B3B]/18 bg-[linear-gradient(180deg,rgba(17,14,12,0.94)_0%,rgba(8,8,9,0.98)_100%)] p-7 shadow-[0_18px_60px_rgba(0,0,0,0.22)] sm:p-9">
             <div className="mx-auto max-w-4xl text-center">
               <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">Authenticity &amp; Stewardship</div>
@@ -529,7 +540,60 @@ export default function NoiseAndFuryPage() {
           </div>
         </section>
 
-        <section id="team-section" className="order-6 mt-16 scroll-mt-24">
+        <section id="series-excerpts" className="order-6 mt-16 scroll-mt-24">
+          <div className="overflow-hidden rounded-[30px] border border-[#8E6B3B]/22 bg-[linear-gradient(135deg,rgba(25,19,14,0.98)_0%,rgba(8,8,9,0.98)_72%)] p-7 shadow-[0_24px_80px_rgba(0,0,0,0.28)] sm:p-9">
+            <div className="mx-auto max-w-4xl text-center">
+              <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">A Moment from the Series</div>
+              <h2 className="mt-4 font-display text-3xl font-semibold leading-tight tracking-[-0.04em] text-white sm:text-5xl">
+                Before the records, tours, and expectations, there were four musicians finding their way to each other.
+              </h2>
+            </div>
+
+            <div className="mt-9 grid gap-4 lg:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => openExcerpt("first-jam")}
+                className="group rounded-[26px] border border-white/10 bg-black/30 p-6 text-left transition hover:-translate-y-0.5 hover:border-[#D3A869]/60 hover:bg-black/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D3A869] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0a0a]"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.26em] text-[#B89258]">Episode 1: We Die Young · Scenes 14–15</div>
+                    <h3 className="mt-3 font-display text-3xl font-semibold uppercase tracking-[-0.03em] text-white">The First Jam</h3>
+                  </div>
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#D3A869]/35 bg-[#D3A869]/10 text-[#D3A869] transition group-hover:bg-[#D3A869] group-hover:text-[#141414]">
+                    <BookOpen className="h-5 w-5" />
+                  </span>
+                </div>
+                <p className="mt-5 text-base leading-7 text-[#D8CCC0]">Four musicians discover what happens when they play together.</p>
+                <div className="mt-6 text-[11px] font-semibold uppercase tracking-[0.22em] text-[#D3A869]">Read complete excerpt</div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => openExcerpt("the-name")}
+                className="group rounded-[26px] border border-white/10 bg-black/30 p-6 text-left transition hover:-translate-y-0.5 hover:border-[#D3A869]/60 hover:bg-black/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D3A869] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0a0a]"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <div className="text-[10px] font-semibold uppercase tracking-[0.26em] text-[#B89258]">Episode 1: We Die Young · Scenes 22–23</div>
+                    <h3 className="mt-3 font-display text-3xl font-semibold uppercase tracking-[-0.03em] text-white">The Name</h3>
+                  </div>
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#D3A869]/35 bg-[#D3A869]/10 text-[#D3A869] transition group-hover:bg-[#D3A869] group-hover:text-[#141414]">
+                    <BookOpen className="h-5 w-5" />
+                  </span>
+                </div>
+                <p className="mt-5 text-base leading-7 text-[#D8CCC0]">Layne makes a decision. The band finds its name.</p>
+                <div className="mt-6 text-[11px] font-semibold uppercase tracking-[0.22em] text-[#D3A869]">Read complete excerpt</div>
+              </button>
+            </div>
+
+            <p className="mx-auto mt-6 max-w-4xl text-center text-xs leading-6 text-[#9F9387]">
+              Dramatized scenes inspired by historical events. Dialogue and private interactions have been fictionalized. Not presented as a verbatim historical record.
+            </p>
+          </div>
+        </section>
+
+        <section id="team-section" className="order-7 mt-16 scroll-mt-24">
           <div className="mx-auto max-w-3xl text-center">
             <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">Writer and Producer Bios</div>
             <h2 className="mt-3 font-display text-4xl font-semibold tracking-[-0.05em] text-white sm:text-5xl">
@@ -616,7 +680,7 @@ export default function NoiseAndFuryPage() {
           </div>
         </section>
 
-        <section id="project-contact" className="order-8 mt-16 grid gap-8 scroll-mt-24 lg:grid-cols-[0.95fr_1.05fr]">
+        <section id="project-contact" className="order-9 mt-16 grid gap-8 scroll-mt-24 lg:grid-cols-[0.95fr_1.05fr]">
           <div className="space-y-6 rounded-[30px] border border-[#8E6B3B]/18 bg-[linear-gradient(180deg,rgba(15,12,10,0.96)_0%,rgba(9,9,10,0.98)_100%)] p-7 sm:p-8">
             <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">Continue the Conversation</div>
             <h3 className="font-display text-4xl font-semibold tracking-[-0.05em] text-white">There are different ways into the project.</h3>
@@ -717,6 +781,12 @@ export default function NoiseAndFuryPage() {
           </div>
         </section>
       </main>
+      <NoiseAndFuryExcerptDialog
+        open={excerptOpen}
+        excerptId={selectedExcerptId}
+        onExcerptChange={setSelectedExcerptId}
+        onOpenChange={setExcerptOpen}
+      />
     </div>
   );
 }

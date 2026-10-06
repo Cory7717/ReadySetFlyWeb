@@ -269,10 +269,10 @@ export default function NoiseAndFuryPage() {
 
           <div className="mt-8 flex flex-1 items-end">
             <div className="mx-auto w-full max-w-6xl">
-              <div className="max-w-4xl space-y-6">
+              <div className="mx-auto max-w-4xl space-y-6 text-center">
                 <div className="space-y-5">
                   <h1 className="sr-only">Noise &amp; Fury</h1>
-                  <div className="max-w-[920px] bg-[radial-gradient(ellipse_at_center,_rgba(213,171,105,0.24)_0%,_rgba(26,18,12,0.5)_48%,_rgba(6,6,7,0)_74%)] px-2 py-3 sm:px-3 sm:py-4">
+                  <div className="mx-auto max-w-[920px] bg-[radial-gradient(ellipse_at_center,_rgba(213,171,105,0.24)_0%,_rgba(26,18,12,0.5)_48%,_rgba(6,6,7,0)_74%)] px-2 py-3 sm:px-3 sm:py-4">
                     <img
                       src={NOISE_AND_FURY_LOGO_PATH}
                       alt=""
@@ -280,7 +280,7 @@ export default function NoiseAndFuryPage() {
                       className="h-auto w-full object-contain [filter:drop-shadow(0_0_12px_rgba(211,168,105,0.26))_drop-shadow(0_16px_26px_rgba(0,0,0,0.9))]"
                     />
                   </div>
-                  <div className="max-w-[920px] text-center">
+                  <div className="mx-auto max-w-[920px] text-center">
                     <div className="font-display text-[11px] font-semibold uppercase tracking-[0.22em] text-[#E8DED2] [text-shadow:0_2px_12px_rgba(0,0,0,0.95)] sm:text-sm sm:tracking-[0.38em]">
                       Season One <span className="text-[#C99A58]">—</span> Alice in Chains
                     </div>
@@ -291,10 +291,10 @@ export default function NoiseAndFuryPage() {
                       </span>
                     </div>
                   </div>
-                  <p className="max-w-3xl font-display text-2xl font-semibold uppercase tracking-[0.08em] text-[#F0E1D2] sm:text-3xl">
+                  <p className="mx-auto max-w-3xl font-display text-2xl font-semibold uppercase tracking-[0.08em] text-[#F0E1D2] sm:text-3xl">
                     They were just making music.
                   </p>
-                  <p className="max-w-4xl text-base leading-8 text-[#E6D9CD] sm:text-lg">
+                  <p className="mx-auto max-w-4xl text-base leading-8 text-[#E6D9CD] sm:text-lg">
                     In late-1980s Seattle, four young musicians forge the bond that makes Alice in Chains a defining
                     voice of their generation. As success brings addiction, loss and painful changes to the band, the
                     people who made the music must find a way to carry it forward without forgetting who they were together.
@@ -304,16 +304,16 @@ export default function NoiseAndFuryPage() {
                 <div className="grid gap-3 pt-2 sm:grid-cols-2">
                   <div className="border-l border-[#D3A869]/45 bg-black/28 px-4 py-3 backdrop-blur sm:min-h-[112px]">
                     <div className="text-[11px] uppercase tracking-[0.28em] text-[#B89258]">CREATED AND WRITTEN BY</div>
-                    <div className="mt-2 max-w-[22rem] text-base font-semibold leading-7 text-white">Cory Armer and Cesar R. Ramirez</div>
+                    <div className="mx-auto mt-2 max-w-[22rem] text-base font-semibold leading-7 text-white">Cory Armer and Cesar R. Ramirez</div>
                   </div>
                   <div className="border-l border-[#D3A869]/45 bg-black/28 px-4 py-3 backdrop-blur sm:min-h-[112px]">
                     <div className="text-[11px] uppercase leading-5 tracking-[0.28em] text-[#B89258]">SEASON ONE COMPLETE — EIGHT TELEPLAYS</div>
-                    <div className="mt-2 max-w-[22rem] text-base font-semibold leading-7 text-white">Eight completed hour-long teleplays</div>
+                    <div className="mx-auto mt-2 max-w-[22rem] text-base font-semibold leading-7 text-white">Eight completed hour-long teleplays</div>
                   </div>
                 </div>
 
-                <div className="flex max-w-2xl flex-col gap-3 border border-[#D3A869]/45 bg-[linear-gradient(90deg,rgba(30,22,15,0.92),rgba(9,9,10,0.72))] px-5 py-4 shadow-[0_18px_50px_rgba(0,0,0,0.3)] backdrop-blur sm:flex-row sm:items-center sm:justify-between">
-                  <div className="flex items-center gap-3">
+                <div className="mx-auto flex max-w-2xl flex-col items-center gap-3 border border-[#D3A869]/45 bg-[linear-gradient(90deg,rgba(30,22,15,0.92),rgba(9,9,10,0.72))] px-5 py-4 shadow-[0_18px_50px_rgba(0,0,0,0.3)] backdrop-blur sm:flex-row sm:justify-center">
+                  <div className="flex items-center justify-center gap-3 text-left">
                     <span className="flex h-10 w-10 shrink-0 items-center justify-center border border-[#D3A869]/55 bg-[#D3A869]/10 text-[#E0BF84]">
                       <Shield className="h-5 w-5" />
                     </span>
@@ -322,13 +322,13 @@ export default function NoiseAndFuryPage() {
                       <div className="mt-1 text-sm text-[#E9DED2]">Writers Guild of America registrations</div>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-2 font-mono text-sm font-semibold tracking-[0.08em] text-white">
+                  <div className="flex flex-wrap justify-center gap-2 font-mono text-sm font-semibold tracking-[0.08em] text-white">
                     <span className="border border-[#D3A869]/35 bg-black/35 px-3 py-2">WGA #2317225</span>
                     <span className="border border-[#D3A869]/35 bg-black/35 px-3 py-2">WGA #2333978</span>
                   </div>
                 </div>
 
-                <div className="flex flex-wrap gap-3 pt-2">
+                <div className="flex flex-wrap justify-center gap-3 pt-2">
                   <Button size="lg" className="bg-[#D3A869] text-[#141414] hover:bg-[#deb980]" onClick={() => scrollToSection("series-promise")}>
                     <BookOpen className="mr-2 h-4 w-4" />
                     Explore the series
@@ -338,7 +338,7 @@ export default function NoiseAndFuryPage() {
                   </Button>
                 </div>
 
-                <div className="flex flex-wrap gap-3 pt-1">
+                <div className="flex flex-wrap justify-center gap-3 pt-1">
                   <Button
                     type="button"
                     variant="outline"
@@ -355,7 +355,7 @@ export default function NoiseAndFuryPage() {
                   >
                     About the Season
                   </Button>
-                  <div className="flex items-center text-xs uppercase tracking-[0.24em] text-[#A79278]">
+                  <div className="flex w-full items-center justify-center text-center text-xs uppercase tracking-[0.24em] text-[#A79278]">
                     For creative, music-industry, producing, and strategic conversations
                   </div>
                 </div>

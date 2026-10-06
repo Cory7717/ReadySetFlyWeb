@@ -769,14 +769,14 @@ function parseRevenueAdjustments(file: Express.Multer.File, rows: string[][], co
     const key = transaction.guest.replace(/\s+/g, " ").trim().toUpperCase();
     grouped.set(key, [...(grouped.get(key) || []), transaction]);
   }
-  const adjustments = [...grouped.entries()]
+  const adjustments = Array.from(grouped.entries())
     .map(([guestKey, transactions]) => {
       const isTaxOrFee = (row: typeof transactions[number]) => /^z/i.test(row.itemCode) || /\b(?:tax|fee|pid)\b/i.test(row.itemName);
       const baseTransactions = transactions.filter((row) => !isTaxOrFee(row));
       const feeTransactions = transactions.filter(isTaxOrFee);
-      const reasons = [...new Set(baseTransactions.map((row) => row.itemName).filter(Boolean))];
-      const accountCodes = [...new Set(transactions.map((row) => row.accountCode).filter(Boolean))];
-      const dates = [...new Set(transactions.map((row) => row.propertyDate).filter(Boolean))].sort();
+      const reasons = Array.from(new Set(baseTransactions.map((row) => row.itemName).filter(Boolean)));
+      const accountCodes = Array.from(new Set(transactions.map((row) => row.accountCode).filter(Boolean)));
+      const dates = Array.from(new Set(transactions.map((row) => row.propertyDate).filter(Boolean))).sort();
       const chargeTotal = round(baseTransactions.reduce((total, row) => total + row.amount, 0), 2);
       const feeTotal = round(feeTransactions.reduce((total, row) => total + row.amount, 0), 2);
       const amount = round(chargeTotal + feeTotal, 2);

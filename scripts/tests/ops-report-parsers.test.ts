@@ -17,6 +17,35 @@ function csvFile(originalname: string, body: string) {
 
 const roomPmHeader = "Floor Number,Room Number,Room Type,Status,Inspection Status,Completed By,Completed On,Inspected By,Inspected On";
 
+test("STAY revenue adjustment exports combine room charges and taxes into one total per guest", async () => {
+  const report = await parseOpsReportFile(csvFile("transactions-export.csv", [
+    "propertyCode,propertyDate,postedDateTime,itemCode,itemName,glCode,accountType,accountCode,accountName,Cashier,Tran Type,QTY,Amount ($)",
+    'AUSNL," Sep 26, 2026"," Sep 27, 2026 12:06 AM",C3,Guest Room Cancellation, ,Res,QPSRGPFNJ,DAVID CABE,bfiel284,ADJUSTMENT,1,-101.92',
+    'AUSNL," Sep 26, 2026"," Sep 27, 2026 12:06 AM",ZIE,AUSTIN TOURISM PID FEE 2% Ex, ,Res,QPSRGPFNJ,DAVID CABE,bfiel284,ADJUSTMENT,1,-2.04',
+    'AUSNL," Sep 26, 2026"," Sep 27, 2026 12:06 AM",ZPE,FEE STATE TAX 6.12% Ex, ,Res,QPSRGPFNJ,DAVID CABE,bfiel284,ADJUSTMENT,1,-6.24',
+    'AUSNL," Sep 26, 2026"," Sep 27, 2026 12:06 AM",ZTE,FEE CITY TAX 11.22% Ex, ,Res,QPSRGPFNJ,DAVID CABE,bfiel284,ADJUSTMENT,1,-11.44',
+    'AUSNL," Oct 02, 2026"," Oct 02, 2026 1:12 PM",C3,Guest Room Cancellation, ,Res,47982V75D,TERI FLEMING,bfiel284,ADJUSTMENT,1,-57.00',
+    'AUSNL," Oct 02, 2026"," Oct 02, 2026 1:12 PM",ZIE,AUSTIN TOURISM PID FEE 2% Ex, ,Res,47982V75D,TERI FLEMING,bfiel284,ADJUSTMENT,1,-1.14',
+    'AUSNL," Oct 02, 2026"," Oct 02, 2026 1:12 PM",ZPE,FEE STATE TAX 6.12% Ex, ,Res,47982V75D,TERI FLEMING,bfiel284,ADJUSTMENT,1,-3.49',
+    'AUSNL," Oct 02, 2026"," Oct 02, 2026 1:12 PM",ZTE,FEE CITY TAX 11.22% Ex, ,Res,47982V75D,TERI FLEMING,bfiel284,ADJUSTMENT,1,-6.40',
+    'AUSNL," Oct 02, 2026"," Oct 02, 2026 1:14 PM",C3,Guest Room Cancellation, ,Res,JBKFYYZ3J,TERI FLEMING,bfiel284,ADJUSTMENT,1,-57.00',
+    'AUSNL," Oct 02, 2026"," Oct 02, 2026 1:14 PM",ZIE,AUSTIN TOURISM PID FEE 2% Ex, ,Res,JBKFYYZ3J,TERI FLEMING,bfiel284,ADJUSTMENT,1,-1.14',
+    'AUSNL," Oct 02, 2026"," Oct 02, 2026 1:14 PM",ZPE,FEE STATE TAX 6.12% Ex, ,Res,JBKFYYZ3J,TERI FLEMING,bfiel284,ADJUSTMENT,1,-3.49',
+    'AUSNL," Oct 02, 2026"," Oct 02, 2026 1:14 PM",ZTE,FEE CITY TAX 11.22% Ex, ,Res,JBKFYYZ3J,TERI FLEMING,bfiel284,ADJUSTMENT,1,-6.40',
+  ].join("\n")), { weekStart: "2026-09-26", weekEnd: "2026-10-02", reportMonth: "2026-10", importTarget: "revenue_adjustments" });
+
+  assert.equal(report.reportType, "revenue_adjustments");
+  assert.equal(report.mapping.adjustments.length, 2);
+  assert.deepEqual(report.mapping.adjustments.map((row: any) => [row.guest, row.amount, row.accountCodes.length]), [
+    ["David Cabe", -121.64, 1],
+    ["Teri Fleming", -136.06, 2],
+  ]);
+  assert.equal(report.mapping.sourceLineCount, 12);
+  assert.equal(report.mapping.sourceTotal, -257.7);
+  assert.match(report.mapping.adjustments[1].comment, /2 reservations/);
+  assert.match(report.mapping.adjustments[1].comment, /taxes\/fees -\$22\.06/);
+});
+
 test("Kipsu All Rooms PM exports summarize completed and remaining rooms", async () => {
   const report = await parseOpsReportFile(csvFile("Guest Room PM - Hotel.csv", [
     "Report Type:,All Rooms",

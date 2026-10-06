@@ -3248,13 +3248,13 @@ export default function OpsReportPage() {
               />
               <EditableTable columns={[{ key: "no", label: "S No" }, { key: "room", label: "Room No" }, { key: "startDate", label: "OOO Start Date" }, { key: "returnDate", label: "Expected Return" }, { key: "comment", label: "Comment", wide: true }]} rows={oooRooms} onChange={setOooRooms} />
             </Section>
-            <Section id="revenue-adjustments" title="Week's Total Revenue Adjustments" right={<Badge variant="outline">{money(adjustmentTotal)}</Badge>}>
+            <Section id="revenue-adjustments" title="Week's Total Revenue Adjustments" right={<Badge variant="outline">{money2(adjustmentTotal)}</Badge>}>
               <SectionReportUpload
                 reports={reportGuideFor("Revenue Adjustments")}
                 uploading={opsReportUpload.isPending}
                 onUpload={(files) => uploadSectionReports("Revenue Adjustments", files)}
               />
-              <EditableTable columns={[{ key: "no", label: "S No" }, { key: "room", label: "Room No" }, { key: "guest", label: "Guest Name" }, { key: "amount", label: "Adjustment Amount" }, { key: "comment", label: "Reason/Comment", wide: true }]} rows={adjustments} onChange={setAdjustments} />
+              <EditableTable columns={[{ key: "no", label: "S No" }, { key: "room", label: "Room / Reservation" }, { key: "guest", label: "Guest Name" }, { key: "amount", label: "Adjustment Amount" }, { key: "comment", label: "Reason/Comment", wide: true }]} rows={adjustments} onChange={setAdjustments} />
             </Section>
             <Section id="accounts-receivable" title="Accounts Receivable / Aging" right={<Badge variant="outline">Total {money(arTotal)}</Badge>}>
               <SectionReportUpload

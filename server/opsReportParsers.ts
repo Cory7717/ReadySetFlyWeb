@@ -786,10 +786,10 @@ function parseRevenueAdjustments(file: Express.Multer.File, rows: string[][], co
         `base charges ${signedCurrency(chargeTotal)}`,
         feeTransactions.length ? `taxes/fees ${signedCurrency(feeTotal)}` : "",
         dates.length ? `property date${dates.length === 1 ? "" : "s"} ${dates.join(", ")}` : "",
-      ].filter(Boolean).join(" · ");
+      ].filter(Boolean).join(" | ");
       return {
         guest: titleCaseName(guestKey),
-        room: "",
+        room: accountCodes.join(", "),
         amount,
         comment: detail,
         accountCodes,

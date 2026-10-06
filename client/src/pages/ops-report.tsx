@@ -1876,24 +1876,12 @@ export default function OpsReportPage() {
       ...(() => {
         const department = String(row.department || "").trim();
         const estimate = scheduledLabor.data?.wageEstimates?.[department];
-        const reportedPayroll = abacusLabor?.departments.find((item) => item.department === department);
         const actualHours = num(row.actualHours);
         const hasActualHours = String(row.actualHours || "").trim() !== "";
-        const hourlyWages = reportedPayroll
-          ? reportedPayroll.totalPayroll
-          : estimate
-            ? actualHours * estimate.blendedHourlyRate
-            : null;
-        const wagesWithSalary = reportedPayroll
-          ? reportedPayroll.totalPayroll
-          : estimate
-            ? actualHours * estimate.blendedRateIncludingSalary
-            : null;
         return {
           ...row,
-          estimatedActualWages: hasActualHours && hourlyWages != null ? money(hourlyWages) : "",
-          estimatedActualWagesWithSalary: hasActualHours && wagesWithSalary != null ? money(wagesWithSalary) : "",
-          wageSource: reportedPayroll ? "Abacus actual payroll" : estimate ? "Schedule blended-rate estimate" : "No wage source available",
+          estimatedActualWages: hasActualHours && estimate ? money(actualHours * estimate.blendedHourlyRate) : "",
+          estimatedActualWagesWithSalary: hasActualHours && estimate ? money(actualHours * estimate.blendedRateIncludingSalary) : "",
           ownershipVariance: hasActualHours && String(row.ownershipTargetHours || "").trim() !== ""
             ? fmtHours(actualHours - num(row.ownershipTargetHours))
             : "",
@@ -1929,7 +1917,7 @@ export default function OpsReportPage() {
         comments: "Calculated total",
       },
     ];
-  }, [effectiveLabor, scheduledLabor.data?.wageEstimates, abacusLabor]);
+  }, [effectiveLabor, scheduledLabor.data?.wageEstimates]);
   const laborDepartmentPreview = useMemo(() => {
     const breakdown = scheduledLabor.data?.breakdown || {};
     return (row: Row, column: { key: string; label: string }) => {
@@ -1952,26 +1940,19 @@ export default function OpsReportPage() {
         ]
         : [];
       const estimate = scheduledLabor.data?.wageEstimates?.[department];
-      const reportedPayroll = abacusLabor?.departments.find((item) => item.department === department);
-      const wageLines = reportedPayroll
+      const wageLines = estimate
         ? [
-          "",
-          `Abacus actual payroll: ${money2(reportedPayroll.totalPayroll)}`,
-          `Regular: ${money2(reportedPayroll.regularPayroll)} · OT: ${money2(reportedPayroll.overtimePayroll)} · Other: ${money2(reportedPayroll.otherPayroll)}`,
-        ]
-        : estimate
-          ? [
           "",
           `Blended hourly rate: ${money(estimate.blendedHourlyRate)}/hr`,
           `Blended rate with salary: ${money(estimate.blendedRateIncludingSalary)}/hr`,
-          ]
-          : ["", "No wage source is available. Import Abacus actual labor or add the employee pay rate to Schedule."];
+        ]
+        : ["", "No wage source is available. Add the employee pay rate to Schedule."];
       return {
         label: `${department} schedule detail`,
         text: [`Scheduled total: ${fmtHours(total)} hrs`, "", ...lines, ...housekeepingModelLines, ...wageLines].join("\n"),
       };
     };
-  }, [scheduledLabor.data?.breakdown, scheduledLabor.data?.wageEstimates, abacusLabor]);
+  }, [scheduledLabor.data?.breakdown, scheduledLabor.data?.wageEstimates]);
   const adjustmentTotal = useMemo(() => adjustments.reduce((sum, row) => sum + num(row.amount), 0), [adjustments]);
   const arTotal = num(ar.current) + num(ar.d30) + num(ar.d60) + num(ar.d90);
   const previousGssRows = (previousDraft.data?.draft?.payload?.gssRows || []) as Row[];
@@ -3479,18 +3460,14 @@ export default function OpsReportPage() {
                   { key: "actualHours", label: "Actual Hours" },
                   { key: "budget", label: "Operational Expected", readOnly: true },
                   { key: "variance", label: "Operational Variance", readOnly: true, operationalVariance: true },
-                  ...(abacusLabor
-                    ? [{ key: "estimatedActualWages", label: "Actual Payroll", readOnly: true }]
-                    : [
-                      { key: "estimatedActualWages", label: "Est. Wages", readOnly: true },
-                      { key: "estimatedActualWagesWithSalary", label: "Est. Wages w/ Salary", readOnly: true },
-                    ]),
+                  { key: "estimatedActualWages", label: "Est. Wages", readOnly: true },
+                  { key: "estimatedActualWagesWithSalary", label: "Est. Wages w/ Salary", readOnly: true },
                   { key: "comments", label: "Comments", wide: true },
                 ]}
                 rows={laborRows}
                 onChange={(rows) => setLabor(rows
                   .filter((row) => row.__readOnly !== "true")
-                  .map(({ __readOnly, variance, ownershipTargetHours, ownershipVariance, roomAttendantExpectedHours, laundryExpectedHours, supervisorInspectorExpectedHours, housepersonPublicAreaExpectedHours, baseOutletExpectedHours, confirmedEventExpectedHours, tentativeEventExpectedHours, estimatedActualWages, estimatedActualWagesWithSalary, wageSource, calculatedMpor, targetMpor, mporVariance, ...row }) => row))}
+                  .map(({ __readOnly, variance, ownershipTargetHours, ownershipVariance, roomAttendantExpectedHours, laundryExpectedHours, supervisorInspectorExpectedHours, housepersonPublicAreaExpectedHours, baseOutletExpectedHours, confirmedEventExpectedHours, tentativeEventExpectedHours, estimatedActualWages, estimatedActualWagesWithSalary, calculatedMpor, targetMpor, mporVariance, ...row }) => row))}
                 getCellPreview={laborDepartmentPreview}
                 renderSubRow={(row) => String(row.department || "").trim().toUpperCase() === "HOUSEKEEPING HOURS" ? <div className="flex flex-wrap items-center gap-2 px-3 py-2.5"><span className="mr-1 text-xs font-bold uppercase tracking-[0.12em] text-[#315f86]">Housekeeping MPOR</span><span className="rounded-full border border-[#cbd5df] bg-white px-3 py-1 text-xs text-[#425466]">Actual <strong className="ml-1 text-[#201814]">{row.calculatedMpor || "—"}</strong></span><span className="rounded-full border border-[#cbd5df] bg-white px-3 py-1 text-xs text-[#425466]">Target <strong className="ml-1 text-[#201814]">{row.targetMpor || "30.0"}</strong></span><span className={`rounded-full border px-3 py-1 text-xs ${varianceTone(-num(row.mporVariance))}`}>Variance <strong className="ml-1">{row.mporVariance || "—"}</strong></span><span className="text-xs text-[#5f5247]">minutes per occupied room · full department</span></div> : null}
               />

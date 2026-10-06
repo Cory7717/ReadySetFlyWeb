@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { excelDateToIso, parseOooText, parseOpsReportFile } from "../../server/opsReportParsers";
-import { addLaborWageEstimate, emptyLaborWageEstimates, finalizeLaborWageEstimates, parseLaborSummaryText, opsLaborBreakdownLabelForSchedule, opsLaborBucketForSchedule } from "../../server/routes/opsReport";
+import { addLaborWageEstimate, emptyLaborWageEstimates, finalizeLaborWageEstimates, hourlyRateForOpsAssignment, parseLaborSummaryText, opsLaborBreakdownLabelForSchedule, opsLaborBucketForSchedule } from "../../server/routes/opsReport";
 import { ABACUS_LABOR_DEPARTMENT_MAP, parseAbacusLaborCsv } from "../../server/abacusLaborParser";
 
 const context = { weekStart: "2026-05-30", weekEnd: "2026-06-05", reportMonth: "2026-06" };
@@ -158,6 +158,25 @@ test("OpsReport scheduled labor counts front desk supervisor with Front Desk and
     department: "BREAKFAST / BISTRO HOURS",
     label: "Bistro Manager",
   });
+});
+
+test("OpsReport uses the employee Maintenance designation and rate for generic shifts", () => {
+  const maintenanceEmployee = {
+    displayName: "Maintenance Associate",
+    department: "Maintenance",
+    position: "Maintenance Technician",
+    rolesJson: ["Maintenance"],
+    roleRatesJson: { Engineer: "24.50" },
+    hourlyRate: "0",
+  };
+  const assignment = { roleWorked: "", shiftDate: "2026-10-05" };
+  const genericShift = { label: "7-3", departmentHint: "" };
+
+  assert.deepEqual(opsLaborBucketForSchedule(maintenanceEmployee, assignment, genericShift), {
+    department: "MAINTENANCE HOURS",
+    label: "Maintenance",
+  });
+  assert.equal(hourlyRateForOpsAssignment(maintenanceEmployee, assignment, genericShift), 24.50);
 });
 
 test("OpsReport Front Desk and Night Audit hover labels stay aggregated", () => {

@@ -209,11 +209,18 @@ function shiftHours(assignment: any, shiftType: any) {
   return Math.max(0, (duration - breakMinutes) / 60);
 }
 
-function hourlyRateForOpsAssignment(employee: any, assignment: any, shiftType: any) {
+export function hourlyRateForOpsAssignment(employee: any, assignment: any, shiftType: any) {
   const roleRates = employee?.roleRatesJson && typeof employee.roleRatesJson === "object"
     ? employee.roleRatesJson as Record<string, unknown>
     : {};
-  const candidates = [assignment?.roleWorked, shiftType?.label]
+  const candidates = [
+    assignment?.roleWorked,
+    shiftType?.label,
+    shiftType?.departmentHint,
+    employee?.department,
+    employee?.position,
+    ...(Array.isArray(employee?.rolesJson) ? employee.rolesJson : []),
+  ]
     .map((value) => String(value || "").trim().toLowerCase())
     .filter(Boolean);
   for (const candidate of candidates) {
@@ -221,6 +228,13 @@ function hourlyRateForOpsAssignment(employee: any, assignment: any, shiftType: a
     if (!match) continue;
     const rate = Number(match[1]);
     if (Number.isFinite(rate) && rate >= 0) return rate;
+  }
+  const designatedDepartment = opsDepartmentForEmployee(employee);
+  if (designatedDepartment !== "OTHER") {
+    const departmentRate = Object.entries(roleRates).find(([role, rate]) =>
+      opsDepartmentFromText(role) === designatedDepartment && Number.isFinite(Number(rate)) && Number(rate) >= 0,
+    );
+    if (departmentRate) return Number(departmentRate[1]);
   }
   const fallbackRate = Number(employee?.hourlyRate || 0);
   return Number.isFinite(fallbackRate) && fallbackRate >= 0 ? fallbackRate : 0;
@@ -335,8 +349,12 @@ export function opsLaborBucketForSchedule(employee: any, assignment: any, shiftT
   const text = String(shiftText || employee?.department || "").toLowerCase();
   if (text.includes("audit") || text.includes("night")) return { department: "FRONT DESK / NIGHT AUDIT HOURS", label: "Night Audit" };
   if (text.includes("front") || text.includes("fd ") || text === "fd" || text.includes("desk")) return { department: "FRONT DESK / NIGHT AUDIT HOURS", label: "Front Desk" };
-  const department = opsDepartmentFromText(text);
-  const labelText = department === "OTHER"
+  const shiftDepartment = opsDepartmentFromText(text);
+  const employeeDepartment = opsDepartmentForEmployee(employee);
+  const department = shiftDepartment === "OTHER" && employeeDepartment !== "OTHER"
+    ? employeeDepartment
+    : shiftDepartment;
+  const labelText = shiftDepartment === "OTHER"
     ? [text, employee?.department, employee?.position, ...(Array.isArray(employee?.rolesJson) ? employee.rolesJson : [])].filter(Boolean).join(" ")
     : text;
   return { department, label: canonicalOpsLaborLabel(labelText) };

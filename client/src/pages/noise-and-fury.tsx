@@ -17,7 +17,7 @@ import {
 } from "@/components/noise-and-fury/NoiseAndFuryExcerptDialog";
 
 const HERO_IMAGE_PATH = "/downloads/noise-and-fury-hero-textless.png";
-const NOISE_AND_FURY_LOGO_PATH = "/downloads/noise-and-fury-distressed-logo.png";
+const NOISE_AND_FURY_LOGO_PATH = "/downloads/noise-and-fury-grunge-logo.png";
 const MARC_LOGO_PATH = "/downloads/marc-production-logo.jpg";
 const CORY_BIO_IMAGE_PATH = "/downloads/noise-and-fury-cory.jpg";
 const CESAR_BIO_IMAGE_PATH = "/downloads/noise-and-fury-cesar.jpg";
@@ -270,10 +270,7 @@ export default function NoiseAndFuryPage() {
           <div className="mt-8 flex flex-1 items-end">
             <div className="mx-auto w-full max-w-6xl">
               <div className="max-w-4xl space-y-6">
-                <div className="space-y-4">
-                  <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[#E0BF84]">
-                    Season One: Alice in Chains
-                  </div>
+                <div className="space-y-5">
                   <h1 className="sr-only">Noise &amp; Fury</h1>
                   <div className="max-w-[920px] bg-[radial-gradient(ellipse_at_center,_rgba(213,171,105,0.24)_0%,_rgba(26,18,12,0.5)_48%,_rgba(6,6,7,0)_74%)] px-2 py-3 sm:px-3 sm:py-4">
                     <img
@@ -282,6 +279,17 @@ export default function NoiseAndFuryPage() {
                       aria-hidden="true"
                       className="h-auto w-full object-contain [filter:drop-shadow(0_0_12px_rgba(211,168,105,0.26))_drop-shadow(0_16px_26px_rgba(0,0,0,0.9))]"
                     />
+                  </div>
+                  <div className="max-w-[920px] text-center">
+                    <div className="font-display text-[11px] font-semibold uppercase tracking-[0.22em] text-[#E8DED2] [text-shadow:0_2px_12px_rgba(0,0,0,0.95)] sm:text-sm sm:tracking-[0.38em]">
+                      Season One <span className="text-[#C99A58]">—</span> Alice in Chains
+                    </div>
+                    <div aria-hidden="true" className="relative mx-auto mt-4 h-5 w-[82%] max-w-[720px]">
+                      <span className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2 bg-[linear-gradient(90deg,transparent,_rgba(226,210,190,0.72)_18%,_rgba(201,154,88,0.82)_50%,_rgba(226,210,190,0.72)_82%,transparent)]" />
+                      <span className="absolute left-1/2 top-1/2 flex h-4 w-4 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-[#D5B27B]/80 bg-[#0A0908] shadow-[0_0_14px_rgba(201,154,88,0.35)]">
+                        <span className="h-1 w-1 rounded-full bg-[#E0BF84]" />
+                      </span>
+                    </div>
                   </div>
                   <p className="max-w-3xl font-display text-2xl font-semibold uppercase tracking-[0.08em] text-[#F0E1D2] sm:text-3xl">
                     They were just making music.

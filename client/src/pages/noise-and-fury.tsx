@@ -17,6 +17,7 @@ import {
 } from "@/components/noise-and-fury/NoiseAndFuryExcerptDialog";
 
 const HERO_IMAGE_PATH = "/downloads/noise-and-fury-hero.jpg";
+const NOISE_AND_FURY_LOGO_PATH = "/downloads/noise-and-fury-distressed-logo.png";
 const MARC_LOGO_PATH = "/downloads/marc-production-logo.jpg";
 const CORY_BIO_IMAGE_PATH = "/downloads/noise-and-fury-cory.jpg";
 const CESAR_BIO_IMAGE_PATH = "/downloads/noise-and-fury-cesar.jpg";
@@ -273,9 +274,15 @@ export default function NoiseAndFuryPage() {
                   <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[#E0BF84]">
                     Season One: Alice in Chains
                   </div>
-                  <h1 className="max-w-4xl font-display text-5xl font-semibold tracking-[-0.06em] text-white sm:text-6xl lg:text-8xl">
-                    Noise &amp; Fury
-                  </h1>
+                  <h1 className="sr-only">Noise &amp; Fury</h1>
+                  <div className="max-w-[860px] bg-[radial-gradient(ellipse_at_center,_rgba(213,171,105,0.18)_0%,_rgba(6,6,7,0)_72%)] py-2 sm:py-3">
+                    <img
+                      src={NOISE_AND_FURY_LOGO_PATH}
+                      alt=""
+                      aria-hidden="true"
+                      className="h-auto w-full object-contain drop-shadow-[0_14px_24px_rgba(0,0,0,0.82)]"
+                    />
+                  </div>
                   <p className="max-w-3xl font-display text-2xl font-semibold uppercase tracking-[0.08em] text-[#F0E1D2] sm:text-3xl">
                     They were just making music.
                   </p>

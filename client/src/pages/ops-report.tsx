@@ -1097,6 +1097,15 @@ function varianceTone(value: number) {
   return value > 0 ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-rose-200 bg-rose-50 text-rose-800";
 }
 
+function operationalLaborVariance(value: string | number | undefined) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return { label: "—", className: "border-slate-200 bg-slate-50 text-slate-700" };
+  const hours = num(raw);
+  if (Math.abs(hours) < 0.005) return { label: "On target", className: "border-slate-300 bg-slate-50 text-slate-700" };
+  if (hours < 0) return { label: `Saved ${fmtHours(Math.abs(hours))} hrs`, className: "border-emerald-300 bg-emerald-50 text-emerald-900" };
+  return { label: `Over ${fmtHours(hours)} hrs`, className: "border-rose-300 bg-rose-50 text-rose-900" };
+}
+
 function gssScoreTone(value: number) {
   if (value >= 80) return { label: "Green: 80+", className: "border-emerald-600 bg-emerald-500" };
   if (value >= 61) return { label: "Clear: 61–79.9", className: "border-[#b9aa98] bg-white" };
@@ -1186,10 +1195,10 @@ function EditableTable({
   allowRowActions = false,
   addRowLabel = "Add row",
 }: {
-  columns: Array<{ key: string; label: string; wide?: boolean; readOnly?: boolean; visualVariance?: boolean; visualScore?: boolean }>;
+  columns: Array<{ key: string; label: string; wide?: boolean; readOnly?: boolean; visualVariance?: boolean; visualScore?: boolean; operationalVariance?: boolean }>;
   rows: Row[];
   onChange: (rows: Row[]) => void;
-  getCellPreview?: (row: Row, column: { key: string; label: string; wide?: boolean; readOnly?: boolean; visualVariance?: boolean; visualScore?: boolean }) => { label: string; text: string } | null;
+  getCellPreview?: (row: Row, column: { key: string; label: string; wide?: boolean; readOnly?: boolean; visualVariance?: boolean; visualScore?: boolean; operationalVariance?: boolean }) => { label: string; text: string } | null;
   renderSubRow?: (row: Row) => ReactNode;
   allowRowActions?: boolean;
   addRowLabel?: string;
@@ -1208,7 +1217,7 @@ function EditableTable({
     const nextRows = rows.filter((_, index) => index !== rowIndex);
     onChange(renumberRows(nextRows.length ? nextRows : [editableColumns.reduce<Row>((row, column) => ({ ...row, [column.key]: column.key === "no" ? "1" : "" }), {})]));
   };
-  const showPreview = (event: MouseEvent<HTMLInputElement> | FocusEvent<HTMLInputElement>, row: Row, column: { key: string; label: string; wide?: boolean; readOnly?: boolean; visualVariance?: boolean; visualScore?: boolean }) => {
+  const showPreview = (event: MouseEvent<HTMLInputElement> | FocusEvent<HTMLInputElement>, row: Row, column: { key: string; label: string; wide?: boolean; readOnly?: boolean; visualVariance?: boolean; visualScore?: boolean; operationalVariance?: boolean }) => {
     const customPreview = getCellPreview?.(row, column);
     const text = customPreview?.text || String(row[column.key] || "").trim();
     const label = customPreview?.label || column.label;
@@ -1252,11 +1261,16 @@ function EditableTable({
                 const readOnly = row.__readOnly === "true" || column.readOnly || column.key === "priorWeek" || column.key === "weekVariance";
                 const scoreValue = column.visualScore ? numericScore(rawValue) : null;
                 const scoreTone = scoreValue == null ? null : gssScoreTone(scoreValue);
+                const laborResult = column.operationalVariance ? operationalLaborVariance(rawValue) : null;
                 return <td key={column.key} className="border border-[#e0d3c1] p-1 align-top">
                   <div className="relative">
                     {column.visualVariance && <VarianceIcon aria-hidden="true" className={`pointer-events-none absolute left-2 top-1/2 z-10 h-4 w-4 -translate-y-1/2 ${varianceValue > 0 ? "text-emerald-700" : varianceValue < 0 ? "text-rose-700" : "text-slate-500"}`} />}
                     {scoreTone && <span className={`pointer-events-none absolute right-2 top-1/2 z-10 h-3 w-3 -translate-y-1/2 rounded-full border shadow-sm ${scoreTone.className}`} title={scoreTone.label} aria-label={scoreTone.label} />}
-                  <Input
+                  {laborResult ? (
+                    <div className={`flex h-9 items-center justify-center rounded-md border px-2 text-xs font-bold whitespace-nowrap ${laborResult.className}`} title={rawValue ? `${rawValue} hours (Actual minus Expected)` : "No actual variance available"}>
+                      {laborResult.label}
+                    </div>
+                  ) : <Input
                     readOnly={readOnly}
                     className={`h-9 border-transparent bg-transparent px-2 text-sm font-medium text-[#201814] placeholder:text-[#7c6e61] focus:border-[#b98435] focus:bg-white ${column.visualVariance ? `pl-8 font-bold ${varianceClass}` : readOnly ? "!bg-[#f3efe7] !text-[#5f5247]" : ""} ${scoreTone ? "pr-7" : ""}`}
                     value={row[column.key] || ""}
@@ -1277,7 +1291,7 @@ function EditableTable({
                       const next = rows.map((item, index) => index === rowIndex ? { ...item, [column.key]: event.target.value } : item);
                       onChange(next);
                     }}
-                  />
+                  />}
                   </div>
                 </td>
               })}
@@ -1840,7 +1854,11 @@ export default function OpsReportPage() {
   }, [effectiveLabor, bistroEventLaborModel.availableHoursPerAdditionalAssociate]);
   const laborTotal = actualLaborTotal || scheduledLaborTotal;
   const laborBudget = useMemo(() => effectiveLabor.reduce((sum, row) => sum + num(row.budget), 0), [effectiveLabor]);
-  const laborVariance = actualLaborTotal ? actualLaborTotal - laborBudget : 0;
+  const hasActualLabor = effectiveLabor.some((row) => String(row.actualHours || "").trim() !== "");
+  const laborVariance = hasActualLabor ? actualLaborTotal - laborBudget : 0;
+  const laborVarianceResult = hasActualLabor
+    ? operationalLaborVariance(String(laborVariance))
+    : { label: "Awaiting actual hours", className: "border-slate-200 bg-slate-50 text-slate-700" };
   const laborRows = useMemo(() => {
     const rows: Row[] = effectiveLabor.map((row): Row => ({
       ...(() => {
@@ -3226,12 +3244,12 @@ export default function OpsReportPage() {
                 onChange={setLedgerExceptions}
               />
             </Section>
-            <Section id="department-labor" title="Department Labor Review (Controllable)" right={<Badge variant="outline">Actual vs Expected {fmtHours(laborVariance)}</Badge>}>
+            <Section id="department-labor" title="Department Labor Review (Controllable)" right={<Badge variant="outline" className={laborVarianceResult.className}>{laborVarianceResult.label}</Badge>}>
               <div className="flex flex-col gap-3 border-b border-[#e0d3c1] p-4 lg:flex-row lg:items-end lg:justify-between">
                 <div>
                   <div className="text-sm font-semibold text-[#201814]">Scheduled, Actual, and Expected Hours</div>
                   <p className="mt-1 max-w-2xl text-sm text-[#5f5247]">
-                    Every department's hours variance is Actual Hours minus Expected Hours. Expected Hours are modeled from final occupancy or rooms sold, not a pre-period labor budget.
+                    Results compare Actual Hours with Expected Hours and display the difference as hours saved or hours over. Expected Hours are modeled from final occupancy or rooms sold, not a pre-period labor budget.
                   </p>
                   <div className="mt-2 rounded-lg border border-[#d7c8b5] bg-[#fbf6ee] p-2 text-xs text-[#5f5247]">
                     <span className="font-semibold text-[#201814]">Required actual-hours report:</span>{" "}
@@ -3412,7 +3430,7 @@ export default function OpsReportPage() {
                   { key: "scheduledHours", label: "Scheduled Hours" },
                   { key: "actualHours", label: "Actual Hours" },
                   { key: "budget", label: "Operational Expected", readOnly: true },
-                  { key: "variance", label: "Operational Variance", readOnly: true },
+                  { key: "variance", label: "Operational Variance", readOnly: true, operationalVariance: true },
                   { key: "estimatedActualWages", label: "Est. Wages", readOnly: true },
                   { key: "estimatedActualWagesWithSalary", label: "Est. Wages w/ Salary", readOnly: true },
                   { key: "comments", label: "Comments", wide: true },

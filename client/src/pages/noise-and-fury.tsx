@@ -16,7 +16,7 @@ import {
   type NoiseAndFuryExcerptId,
 } from "@/components/noise-and-fury/NoiseAndFuryExcerptDialog";
 
-const HERO_IMAGE_PATH = "/downloads/noise-and-fury-hero.jpg";
+const HERO_IMAGE_PATH = "/downloads/noise-and-fury-hero-textless.png";
 const NOISE_AND_FURY_LOGO_PATH = "/downloads/noise-and-fury-distressed-logo.png";
 const MARC_LOGO_PATH = "/downloads/marc-production-logo.jpg";
 const CORY_BIO_IMAGE_PATH = "/downloads/noise-and-fury-cory.jpg";

@@ -99,6 +99,7 @@ test("Abacus September 12-18 fixture reproduces department and hotel totals exac
   assert.equal(departments["FRONT DESK / NIGHT AUDIT HOURS"].totalHours, 187.29);
   assert.equal(departments["BREAKFAST / BISTRO HOURS"].totalHours, 113.85);
   assert.equal(departments["MAINTENANCE HOURS"].totalHours, 59.17);
+  assert.equal(departments["MAINTENANCE HOURS"].totalPayroll, 1513.00);
   assert.equal(parsed.hotelTotal.regularHours, 589.77);
   assert.equal(parsed.hotelTotal.overtimeHours, 92.72);
   assert.equal(parsed.hotelTotal.memoHours, 14.02);

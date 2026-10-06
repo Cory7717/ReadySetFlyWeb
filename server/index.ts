@@ -18,13 +18,19 @@ import cors from "cors";
 import { prewarmOperationalCaches, registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { startFinanceAlertsJob } from "./jobs/financeAlerts";
-import { buildCorsOptions, CorsOriginDeniedError, corsRejectionDiagnostics } from "./corsOptions";
+import {
+  buildCorsOptions,
+  CorsOriginDeniedError,
+  createCorsRejectionDiagnostics,
+  getAllowedOrigins,
+} from "./corsOptions";
 import { cloudflareGuard } from "./middleware/impressionMiddleware";
 import { scannerGuard } from "./middleware/scannerGuard";
 import { securityHeaders } from "./middleware/securityHeaders";
 import { apiNotFound } from "./middleware/apiNotFound";
 import { canonicalFrontendHost } from "./middleware/canonicalFrontendHost";
 
+const allowedBrowserOrigins = getAllowedOrigins();
 const app = express();
 // Behind Render's proxy; required for secure cookies/session in OAuth flows
 app.set("trust proxy", 1);
@@ -33,10 +39,10 @@ app.set("trust proxy", 1);
 app.use(scannerGuard);
 app.use(securityHeaders);
 app.use(canonicalFrontendHost);
-app.use(corsRejectionDiagnostics);
+app.use(createCorsRejectionDiagnostics(allowedBrowserOrigins));
 
 // CORS configuration - allow same-origin production traffic and explicit web origins.
-app.use(cors(buildCorsOptions()));
+app.use(cors(buildCorsOptions(allowedBrowserOrigins)));
 
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ extended: false, limit: "5mb" }));

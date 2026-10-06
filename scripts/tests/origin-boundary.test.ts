@@ -7,7 +7,8 @@ import cors from "cors";
 import {
   buildCorsOptions,
   CorsOriginDeniedError,
-  corsRejectionDiagnostics,
+  createCorsRejectionDiagnostics,
+  getAllowedOrigins,
 } from "../../server/corsOptions";
 import {
   buildCanonicalFrontendRedirect,
@@ -24,13 +25,25 @@ import {
 } from "../../client/src/lib/returnTo";
 import { getQueryFn } from "../../client/src/lib/queryClient";
 
-const startTestServer = async () => {
+const representativeApiPaths = [
+  "/api/airports/search",
+  "/api/airports/KAUS/runway-briefing",
+  "/api/notams",
+  "/api/rentals",
+  "/api/courtyard/sales-intelligence/me",
+  "/api/courtyard/sales-intelligence/meeting-calendar",
+  "/api/schedule/requests",
+  "/api/opsreport",
+];
+
+const startTestServer = async (allowedOrigins = getAllowedOrigins()) => {
   const app = express();
   app.set("trust proxy", 1);
   app.use(canonicalFrontendHost);
-  app.use(corsRejectionDiagnostics);
-  app.use(cors(buildCorsOptions()));
+  app.use(createCorsRejectionDiagnostics(allowedOrigins));
+  app.use(cors(buildCorsOptions(allowedOrigins)));
   app.get("/api/ping", (_req, res) => res.json({ ok: true }));
+  app.get(representativeApiPaths, (_req, res) => res.json({ ok: true }));
   app.get("/api/auth/google/callback", (_req, res) => res.json({ callback: true }));
   app.get("/healthz", (_req, res) => res.json({ ok: true }));
   app.use((err: unknown, _req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -52,6 +65,41 @@ const startTestServer = async () => {
     }),
   };
 };
+
+test("configured API hosts are excluded once during initialization, not revalidated per request", async () => {
+  const warnings: string[] = [];
+  const allowedOrigins = getAllowedOrigins(
+    {
+      NODE_ENV: "production",
+      WEB_ORIGIN: "https://readysetfly.us,https://readysetfly-api.onrender.com",
+      CORS_ORIGIN: "https://readysetfly-api.onrender.com",
+    },
+    (...args: unknown[]) => warnings.push(args.map(String).join(" ")),
+  );
+
+  assert.equal(allowedOrigins.includes("https://readysetfly.us"), true);
+  assert.equal(allowedOrigins.includes("https://readysetfly-api.onrender.com"), false);
+  assert.equal(warnings.length, 1);
+  assert.deepEqual(JSON.parse(warnings[0]), {
+    event: "cors_configured_api_origin_ignored",
+    origin: "https://readysetfly-api.onrender.com",
+    configuredBy: ["CORS_ORIGIN", "WEB_ORIGIN"],
+    reason: "API-only origins are not valid browser app origins.",
+  });
+
+  const server = await startTestServer(allowedOrigins);
+  try {
+    for (let requestIndex = 0; requestIndex < 3; requestIndex += 1) {
+      const response = await fetch(`${server.baseUrl}/api/ping`, {
+        headers: { Origin: "https://readysetfly.us" },
+      });
+      assert.equal(response.status, 200);
+    }
+    assert.equal(warnings.length, 1);
+  } finally {
+    await server.close();
+  }
+});
 
 test("signup navigation preserves a safe returnTo and escapes API-only hosts", () => {
   const priorWindow = globalThis.window;
@@ -133,6 +181,15 @@ test("CORS allows frontend and no-origin traffic and handles preflight", async (
     assert.equal(allowed.headers.get("access-control-allow-origin"), "https://readysetfly.us");
     assert.equal(allowed.headers.get("access-control-allow-credentials"), "true");
 
+    for (const path of representativeApiPaths) {
+      const response = await fetch(`${server.baseUrl}${path}`, {
+        headers: { Origin: "https://readysetfly.us" },
+      });
+      assert.equal(response.status, 200, path);
+      assert.equal(response.headers.get("access-control-allow-origin"), "https://readysetfly.us", path);
+      assert.equal(response.headers.get("access-control-allow-credentials"), "true", path);
+    }
+
     const preflight = await fetch(`${server.baseUrl}/api/ping`, {
       method: "OPTIONS",
       headers: {
@@ -145,6 +202,10 @@ test("CORS allows frontend and no-origin traffic and handles preflight", async (
     const noOrigin = await fetch(`${server.baseUrl}/api/ping`);
     assert.equal(noOrigin.status, 200);
     assert.equal(noOrigin.headers.get("access-control-allow-origin"), null);
+
+    const nativeApiRequest = await fetch(`${server.baseUrl}/api/airports/search`);
+    assert.equal(nativeApiRequest.status, 200);
+    assert.equal(nativeApiRequest.headers.get("access-control-allow-origin"), null);
   } finally {
     await server.close();
   }
@@ -185,6 +246,29 @@ test("CORS denial is a quiet 403 and diagnostics exclude secrets", async () => {
       },
     });
     assert.equal(deniedPreflight.status, 403);
+  } finally {
+    console.warn = originalWarn;
+    await server.close();
+  }
+});
+
+test("unauthorized browser origins remain rejected across RSF and Courtyard APIs", async () => {
+  const server = await startTestServer();
+  const warnings: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => warnings.push(args.map(String).join(" "));
+  try {
+    for (const path of ["/api/airports/search", "/api/courtyard/sales-intelligence/me"]) {
+      const response = await fetch(`${server.baseUrl}${path}`, {
+        headers: { Origin: "https://unauthorized.example" },
+      });
+      assert.equal(response.status, 403, path);
+      assert.equal(response.headers.get("access-control-allow-origin"), null, path);
+    }
+    assert.equal(warnings.length, 2);
+    for (const warning of warnings) {
+      assert.equal(JSON.parse(warning).event, "cors_origin_rejected");
+    }
   } finally {
     console.warn = originalWarn;
     await server.close();

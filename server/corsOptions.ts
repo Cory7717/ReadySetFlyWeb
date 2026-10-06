@@ -18,6 +18,13 @@ const API_ONLY_ORIGINS = new Set([
   "https://readysetfly-api.onrender.com",
 ]);
 
+const BROWSER_ORIGIN_ENV_KEYS = [
+  "WEB_ORIGIN",
+  "CORS_ORIGIN",
+  "CLIENT_URL",
+  "APP_URL",
+] as const;
+
 function normalizeOrigin(origin: string): string {
   return origin.trim().replace(/\/+$/, "");
 }
@@ -70,66 +77,74 @@ function isRejectedOrigin(origin: string | undefined, allowedOrigins: string[]):
   return !allowedOrigins.includes(normalizeOrigin(origin));
 }
 
-export const corsRejectionDiagnostics: RequestHandler = (req, res, next) => {
-  const origin = typeof req.headers.origin === "string" ? req.headers.origin : undefined;
-  const allowedOrigins = getConfiguredOrigins();
-  if (!isRejectedOrigin(origin, allowedOrigins)) return next();
+export function createCorsRejectionDiagnostics(allowedOrigins: readonly string[]): RequestHandler {
+  const configuredOrigins = [...allowedOrigins];
+  return (req, res, next) => {
+    const origin = typeof req.headers.origin === "string" ? req.headers.origin : undefined;
+    if (!isRejectedOrigin(origin, configuredOrigins)) return next();
 
-  const incomingRequestId = safeCorrelationId(req.headers["x-request-id"]);
-  const cloudflareRay = safeCorrelationId(req.headers["cf-ray"]);
-  const requestId = incomingRequestId || cloudflareRay || crypto.randomUUID();
-  res.locals.requestId = requestId;
-  res.setHeader("X-Request-ID", requestId);
+    const incomingRequestId = safeCorrelationId(req.headers["x-request-id"]);
+    const cloudflareRay = safeCorrelationId(req.headers["cf-ray"]);
+    const requestId = incomingRequestId || cloudflareRay || crypto.randomUUID();
+    res.locals.requestId = requestId;
+    res.setHeader("X-Request-ID", requestId);
 
-  console.warn(JSON.stringify({
-    event: API_ONLY_ORIGINS.has(normalizeOrigin(origin!))
-      ? "cors_api_origin_rejected"
-      : "cors_origin_rejected",
-    requestId,
-    method: req.method,
-    pathname: String(req.path || "/").slice(0, 300),
-    host: safeHeader(req.get("host"), 255),
-    origin: safeOriginForLog(origin),
-    cloudflareRay,
-    secFetchSite: safeHeader(req.headers["sec-fetch-site"], 32),
-    userAgentClass: coarseUserAgent(req.headers["user-agent"]),
-  }));
+    console.warn(JSON.stringify({
+      event: API_ONLY_ORIGINS.has(normalizeOrigin(origin!))
+        ? "cors_api_origin_rejected"
+        : "cors_origin_rejected",
+      requestId,
+      method: req.method,
+      pathname: String(req.path || "/").slice(0, 300),
+      host: safeHeader(req.get("host"), 255),
+      origin: safeOriginForLog(origin),
+      cloudflareRay,
+      secFetchSite: safeHeader(req.headers["sec-fetch-site"], 32),
+      userAgentClass: coarseUserAgent(req.headers["user-agent"]),
+    }));
 
-  return next();
-};
+    return next();
+  };
+}
 
-function getConfiguredOrigins(): string[] {
-  const envOrigins = [
-    process.env.WEB_ORIGIN,
-    process.env.CORS_ORIGIN,
-    process.env.CLIENT_URL,
-    process.env.APP_URL,
-  ]
-    .flatMap((value) => (value ? value.split(",") : []))
-    .map((value) => normalizeOrigin(value))
-    .filter(Boolean)
-    .filter((value) => {
-      if (!API_ONLY_ORIGINS.has(value)) return true;
-      console.warn(JSON.stringify({
-        event: "cors_configured_api_origin_ignored",
-        origin: value,
-        reason: "API-only origins are not valid browser app origins.",
-      }));
+export function getAllowedOrigins(
+  environment: NodeJS.ProcessEnv = process.env,
+  warn: (...data: unknown[]) => void = console.warn,
+): string[] {
+  const ignoredApiOrigins = new Map<string, Set<string>>();
+  const envOrigins = BROWSER_ORIGIN_ENV_KEYS.flatMap((source) =>
+    (environment[source] ? environment[source]!.split(",") : []).map((value) => ({
+      origin: normalizeOrigin(value),
+      source,
+    })),
+  )
+    .filter(({ origin }) => Boolean(origin))
+    .filter(({ origin, source }) => {
+      if (!API_ONLY_ORIGINS.has(origin)) return true;
+      const sources = ignoredApiOrigins.get(origin) || new Set<string>();
+      sources.add(source);
+      ignoredApiOrigins.set(origin, sources);
       return false;
-    });
+    })
+    .map(({ origin }) => origin);
 
-  const defaults = process.env.NODE_ENV === "production"
+  ignoredApiOrigins.forEach((sources, origin) => {
+    warn(JSON.stringify({
+      event: "cors_configured_api_origin_ignored",
+      origin,
+      configuredBy: Array.from(sources).sort(),
+      reason: "API-only origins are not valid browser app origins.",
+    }));
+  });
+
+  const defaults = environment.NODE_ENV === "production"
     ? DEFAULT_WEB_ORIGINS
     : [...DEFAULT_WEB_ORIGINS, ...LOCAL_DEV_ORIGINS];
   return Array.from(new Set([...defaults, ...envOrigins]));
 }
 
-export function getAllowedOrigins(): string[] {
-  return getConfiguredOrigins();
-}
-
-export function buildCorsOptions(): CorsOptions {
-  const allowedOrigins = getConfiguredOrigins();
+export function buildCorsOptions(allowedOrigins: readonly string[] = getAllowedOrigins()): CorsOptions {
+  const configuredOrigins = [...allowedOrigins];
 
   return {
     origin(origin, callback) {
@@ -139,7 +154,7 @@ export function buildCorsOptions(): CorsOptions {
       }
 
       const normalizedOrigin = normalizeOrigin(origin);
-      if (allowedOrigins.includes(normalizedOrigin)) {
+      if (configuredOrigins.includes(normalizedOrigin)) {
         callback(null, true);
         return;
       }

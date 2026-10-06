@@ -8,7 +8,6 @@ import { pipeline } from "stream/promises";
 import crypto from "crypto";
 import zlib from "zlib";
 import AdmZip from "adm-zip";
-import cors from "cors";
 import { createServer, type Server } from "http";
 import { WebSocketServer, WebSocket } from "ws";
 import multer from "multer";
@@ -195,7 +194,6 @@ import {
 import { maybeSyncLogbookProSubscription } from "./paypal-subscription-sync";
 import { buildMarketplaceListingFeeBreakdown } from "./marketplace-fees";
 import { resolveTfmsAccess } from "./lib/tier";
-import { buildCorsOptions } from "./corsOptions";
 import { getFrontendBaseUrl } from "./authRedirectUrls";
 import { normalizeMembershipTier } from "@shared/membership-plans";
 import {
@@ -6909,8 +6907,6 @@ const isVerified = async (req: any, res: any, next: any) => {
 
 export async function registerRoutes(app: Express): Promise<Server> {
   startPlateCacheCron();
-  // CORS is also applied at app boot. Keep this aligned for routes registered later in startup.
-  app.use(cors(buildCorsOptions()));
 
   // Auth middleware
   await setupAuth(app);

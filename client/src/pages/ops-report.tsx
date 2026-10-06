@@ -118,7 +118,7 @@ type OpsImportResponse = {
   uploadId: string;
   originalFileName: string;
   sourceFileName: string;
-  reportType: "previous_week_otb" | "current_month_otb" | "remaining_month_otb" | "next_month_otb" | "current_month_sdly_otb" | "next_month_sdly_otb" | "analytical_account_tracking" | "detailed_flash" | "room_pm" | "ooo_rooms" | "gss_scores" | "marriott_responses" | "ar_aging" | "credit_limit" | "unknown";
+  reportType: "previous_week_otb" | "current_month_otb" | "remaining_month_otb" | "next_month_otb" | "current_month_sdly_otb" | "next_month_sdly_otb" | "analytical_account_tracking" | "detailed_flash" | "room_pm" | "ooo_rooms" | "gss_scores" | "marriott_responses" | "revenue_adjustments" | "ar_aging" | "credit_limit" | "unknown";
   status: "parsed" | "warning" | "failed";
   warnings: string[];
   selectedWeek: string;
@@ -255,6 +255,7 @@ const REPORT_TYPE_LABELS: Record<OpsImportResponse["reportType"], string> = {
   ooo_rooms: "OOO Rooms",
   gss_scores: "GSS Scores",
   marriott_responses: "Marriott Responses",
+  revenue_adjustments: "Revenue Adjustments",
   ar_aging: "AR Aging",
   credit_limit: "Credit Limit / Guest Ledger",
   unknown: "Unrecognized / Failed",
@@ -265,6 +266,7 @@ function opsImportTarget(sourceLabel: string) {
   if (sourceLabel === "Current Month") return "current_month";
   if (sourceLabel === "Next Month") return "next_month";
   if (sourceLabel === "Guest Satisfaction") return "guest_satisfaction";
+  if (sourceLabel === "Revenue Adjustments") return "revenue_adjustments";
   return "other";
 }
 
@@ -541,6 +543,7 @@ const REPORT_PAYLOAD_KEYS: Record<OpsImportResponse["reportType"], string[]> = {
   ooo_rooms: ["oooRooms"],
   gss_scores: ["gssRows", "gssWaveRows"],
   marriott_responses: ["positiveReviews", "negativeReviews"],
+  revenue_adjustments: ["adjustments"],
   ar_aging: ["ar"],
   credit_limit: ["ledger", "ledgerExceptions"],
   unknown: [],
@@ -580,6 +583,7 @@ function compactReportMapping(reportType: OpsImportResponse["reportType"], mappi
   if (reportType === "ooo_rooms") return { rooms: mapping.rooms, reportRange: mapping.reportRange };
   if (reportType === "gss_scores") return { gssRows: normalizeGssRows(mapping.gssRows), gssWaveRows: normalizeGssRows(mapping.gssWaveRows) };
   if (reportType === "marriott_responses") return { positiveReviews: mapping.positiveReviews, negativeReviews: mapping.negativeReviews };
+  if (reportType === "revenue_adjustments") return { adjustments: mapping.adjustments, sourceLineCount: mapping.sourceLineCount, guestCount: mapping.guestCount, sourceTotal: mapping.sourceTotal };
   if (reportType === "ar_aging") return { summary: mapping.summary };
   if (reportType === "credit_limit") return { entries: mapping.entries, summary: mapping.summary };
   return {};
@@ -781,6 +785,15 @@ function applyOpsReportToPayload(payload: Record<string, any>, report: OpsImport
   if (report.reportType === "marriott_responses") {
     next.positiveReviews = fillRows(mapping.positiveReviews || []);
     next.negativeReviews = fillRows(mapping.negativeReviews || []);
+  }
+  if (report.reportType === "revenue_adjustments") {
+    next.adjustments = (mapping.adjustments || []).map((entry: Record<string, any>, index: number) => ({
+      no: String(index + 1),
+      room: String(entry.room || ""),
+      guest: String(entry.guest || ""),
+      amount: accounting(entry.amount),
+      comment: String(entry.comment || ""),
+    }));
   }
   if (report.reportType === "ar_aging") {
     const summary = mapping.summary || {};
@@ -2246,6 +2259,12 @@ export default function OpsReportPage() {
       fileName: "MMDDYYYY_OOO Rooms.pdf",
     },
     {
+      name: "Revenue Adjustments",
+      scope: `${displayOpsDate(topMetrics.weekStart)} through ${displayOpsDate(weekEnd)}`,
+      parameters: "Upload the STAY transactions adjustment CSV. Room charges, taxes, and fees are combined into one total per guest for the selected week; multiple reservations for the same guest are consolidated.",
+      fileName: "transactions-export.csv",
+    },
+    {
       name: "GSS Scores",
       scope: monthLabelFromKey(reportMonthKey),
       parameters: "Use the Satisfaction sheet. The selected month column supplies MTD; the Total column supplies Wave-to-Date.",
@@ -3230,6 +3249,11 @@ export default function OpsReportPage() {
               <EditableTable columns={[{ key: "no", label: "S No" }, { key: "room", label: "Room No" }, { key: "startDate", label: "OOO Start Date" }, { key: "returnDate", label: "Expected Return" }, { key: "comment", label: "Comment", wide: true }]} rows={oooRooms} onChange={setOooRooms} />
             </Section>
             <Section id="revenue-adjustments" title="Week's Total Revenue Adjustments" right={<Badge variant="outline">{money(adjustmentTotal)}</Badge>}>
+              <SectionReportUpload
+                reports={reportGuideFor("Revenue Adjustments")}
+                uploading={opsReportUpload.isPending}
+                onUpload={(files) => uploadSectionReports("Revenue Adjustments", files)}
+              />
               <EditableTable columns={[{ key: "no", label: "S No" }, { key: "room", label: "Room No" }, { key: "guest", label: "Guest Name" }, { key: "amount", label: "Adjustment Amount" }, { key: "comment", label: "Reason/Comment", wide: true }]} rows={adjustments} onChange={setAdjustments} />
             </Section>
             <Section id="accounts-receivable" title="Accounts Receivable / Aging" right={<Badge variant="outline">Total {money(arTotal)}</Badge>}>

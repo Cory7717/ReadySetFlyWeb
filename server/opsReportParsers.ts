@@ -21,6 +21,7 @@ export type OpsReportType =
   | "ooo_rooms"
   | "gss_scores"
   | "marriott_responses"
+  | "revenue_adjustments"
   | "ar_aging"
   | "credit_limit";
 
@@ -30,7 +31,7 @@ export type OpsParserContext = {
   reportMonth?: string;
   businessDate?: string;
   totalRooms?: number;
-  importTarget?: "weekly_performance" | "current_month" | "next_month" | "guest_satisfaction" | "other";
+  importTarget?: "weekly_performance" | "current_month" | "next_month" | "guest_satisfaction" | "revenue_adjustments" | "other";
 };
 
 type ParsedReport = {
@@ -275,6 +276,11 @@ export function detectOpsReportType(fileName: string, rows: string[][], context:
   const name = fileName.toLowerCase();
   const flattenedHeaders = rows.slice(0, 12).flat().map(normalizedHeader);
   if (context.importTarget === "guest_satisfaction") return "gss_scores";
+  if (context.importTarget === "revenue_adjustments") return "revenue_adjustments";
+  if (flattenedHeaders.includes("property date")
+    && flattenedHeaders.includes("account name")
+    && flattenedHeaders.includes("tran type")
+    && flattenedHeaders.some((value) => value === "amount" || value.startsWith("amount "))) return "revenue_adjustments";
   if (/analytical\s*account\s*tracking/.test(name) || (
     flattenedHeaders.includes("global ultimate account name")
     && flattenedHeaders.includes("current room revenue")
@@ -697,6 +703,111 @@ function parseAr(file: Express.Multer.File, rows: string[][], context: OpsParser
   return { ...baseReport(file, "ar_aging", context, warnings), preview: accounts.slice(0, 10), mapping: { accounts, summary } };
 }
 
+function titleCaseName(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/(^|[\s'-])([a-z])/g, (_match, prefix: string, character: string) => `${prefix}${character.toUpperCase()}`);
+}
+
+function signedCurrency(value: number) {
+  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(round(value, 2));
+}
+
+function parseRevenueAdjustments(file: Express.Multer.File, rows: string[][], context: OpsParserContext): ParsedReport {
+  const warnings: string[] = [];
+  const headerIndex = findHeaderByAliases(rows, [
+    ["propertyDate", "property date"],
+    ["accountName", "account name"],
+    ["Tran Type", "transaction type"],
+    ["Amount ($)", "amount"],
+  ]);
+  if (headerIndex < 0) throw new Error("Revenue adjustment transaction headers were not found.");
+  const header = rows[headerIndex];
+  const index = {
+    propertyDate: findColumnByAliases(header, ["propertyDate", "property date"]),
+    postedDateTime: findColumnByAliases(header, ["postedDateTime", "posted date time", "posted date"]),
+    itemCode: findColumnByAliases(header, ["itemCode", "item code"]),
+    itemName: findColumnByAliases(header, ["itemName", "item name"]),
+    accountCode: findColumnByAliases(header, ["accountCode", "account code"]),
+    accountName: findColumnByAliases(header, ["accountName", "account name", "guest name"]),
+    transactionType: findColumnByAliases(header, ["Tran Type", "transaction type", "tran type"]),
+    amount: findColumnByAliases(header, ["Amount ($)", "amount"]),
+  };
+  const allTransactions = rows.slice(headerIndex + 1).flatMap((row) => {
+    const guest = String(row[index.accountName] || "").trim();
+    const amountRaw = String(row[index.amount] || "").trim();
+    if (!guest || !amountRaw) return [];
+    const transactionType = String(row[index.transactionType] || "").trim();
+    if (transactionType && !/adjustment/i.test(transactionType)) return [];
+    const propertyDate = excelDateToIso(row[index.propertyDate]);
+    const postedDate = excelDateToIso(row[index.postedDateTime]);
+    return [{
+      guest,
+      propertyDate: propertyDate || postedDate,
+      postedDate,
+      itemCode: String(row[index.itemCode] || "").trim(),
+      itemName: String(row[index.itemName] || "").trim(),
+      accountCode: String(row[index.accountCode] || "").trim(),
+      amount: numeric(amountRaw),
+    }];
+  });
+  const selectedTransactions = allTransactions.filter((row) =>
+    (!context.weekStart || !row.propertyDate || row.propertyDate >= context.weekStart)
+    && (!context.weekEnd || !row.propertyDate || row.propertyDate <= context.weekEnd)
+  );
+  if (!allTransactions.length) throw new Error("No adjustment transactions were found in this export.");
+  if (!selectedTransactions.length) {
+    const dates = allTransactions.map((row) => row.propertyDate).filter(Boolean).sort();
+    throw new Error(`No revenue adjustments fell inside the selected report week${dates.length ? `. Uploaded property dates run ${dates[0]} to ${dates[dates.length - 1]}` : ""}.`);
+  }
+  const excludedCount = allTransactions.length - selectedTransactions.length;
+  if (excludedCount) warnings.push(`${excludedCount} transaction line${excludedCount === 1 ? " was" : "s were"} outside the selected report week and excluded.`);
+
+  const grouped = new Map<string, typeof selectedTransactions>();
+  for (const transaction of selectedTransactions) {
+    const key = transaction.guest.replace(/\s+/g, " ").trim().toUpperCase();
+    grouped.set(key, [...(grouped.get(key) || []), transaction]);
+  }
+  const adjustments = [...grouped.entries()]
+    .map(([guestKey, transactions]) => {
+      const isTaxOrFee = (row: typeof transactions[number]) => /^z/i.test(row.itemCode) || /\b(?:tax|fee|pid)\b/i.test(row.itemName);
+      const baseTransactions = transactions.filter((row) => !isTaxOrFee(row));
+      const feeTransactions = transactions.filter(isTaxOrFee);
+      const reasons = [...new Set(baseTransactions.map((row) => row.itemName).filter(Boolean))];
+      const accountCodes = [...new Set(transactions.map((row) => row.accountCode).filter(Boolean))];
+      const dates = [...new Set(transactions.map((row) => row.propertyDate).filter(Boolean))].sort();
+      const chargeTotal = round(baseTransactions.reduce((total, row) => total + row.amount, 0), 2);
+      const feeTotal = round(feeTransactions.reduce((total, row) => total + row.amount, 0), 2);
+      const amount = round(chargeTotal + feeTotal, 2);
+      const detail = [
+        reasons.join(" / ") || "Revenue adjustment",
+        `${accountCodes.length || 1} reservation${(accountCodes.length || 1) === 1 ? "" : "s"}`,
+        `base charges ${signedCurrency(chargeTotal)}`,
+        feeTransactions.length ? `taxes/fees ${signedCurrency(feeTotal)}` : "",
+        dates.length ? `property date${dates.length === 1 ? "" : "s"} ${dates.join(", ")}` : "",
+      ].filter(Boolean).join(" · ");
+      return {
+        guest: titleCaseName(guestKey),
+        room: "",
+        amount,
+        comment: detail,
+        accountCodes,
+        lineItemCount: transactions.length,
+      };
+    })
+    .sort((a, b) => a.guest.localeCompare(b.guest))
+    .map((row, index) => ({ no: String(index + 1), ...row }));
+  const sourceTotal = round(selectedTransactions.reduce((total, row) => total + row.amount, 0), 2);
+  const groupedTotal = round(adjustments.reduce((total, row) => total + row.amount, 0), 2);
+  if (sourceTotal !== groupedTotal) warnings.push(`Grouped total ${signedCurrency(groupedTotal)} does not reconcile to source total ${signedCurrency(sourceTotal)}.`);
+  return {
+    ...baseReport(file, "revenue_adjustments", context, warnings),
+    preview: adjustments.slice(0, 10),
+    mapping: { adjustments, sourceLineCount: selectedTransactions.length, guestCount: adjustments.length, sourceTotal },
+  };
+}
+
 function parseRoomPm(file: Express.Multer.File, rows: string[][], context: OpsParserContext): ParsedReport {
   const warnings: string[] = [];
   const headerIndex = findHeader(rows, ["Floor Number", "Room Number", "Status"]);
@@ -1091,6 +1202,7 @@ export async function parseOpsReportFile(file: Express.Multer.File, context: Ops
   if (reportType === "room_pm") return parseRoomPm(file, rows, context);
   if (reportType === "gss_scores") return parseGss(file, sheets, context);
   if (reportType === "marriott_responses") return parseResponses(file, rows, context);
+  if (reportType === "revenue_adjustments") return parseRevenueAdjustments(file, rows, context);
   if (reportType === "ar_aging") return parseAr(file, rows, context);
   throw new Error(`Unsupported ops report type: ${reportType}.`);
 }

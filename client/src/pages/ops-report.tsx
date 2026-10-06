@@ -270,6 +270,61 @@ function opsImportTarget(sourceLabel: string) {
 const emptyRows = (count: number, keys: string[]) =>
   Array.from({ length: count }, (_, index) => keys.reduce<Row>((row, key) => ({ ...row, [key]: key === "no" ? String(index + 1) : "" }), {}));
 
+const CHARGEBACK_KEYS = [
+  "guest",
+  "caseId",
+  "reason",
+  "amount",
+  "responseDue",
+  "decision",
+  "outcome",
+  "notes",
+  "owner",
+  "evidenceStatus",
+  "submittedDate",
+  "confirmationNumber",
+  "followUpDate",
+  "evidenceNotes",
+] as const;
+
+function emptyChargebackRow(): Row {
+  return CHARGEBACK_KEYS.reduce<Row>((row, key) => ({ ...row, [key]: "" }), {
+    decision: "review",
+    outcome: "pending",
+    evidenceStatus: "not-started",
+  });
+}
+
+function chargebackHasContent(row: Row): boolean {
+  return CHARGEBACK_KEYS.some((key) => {
+    const value = String(row[key] || "").trim();
+    return Boolean(value) && !["review", "pending", "not-started"].includes(value);
+  });
+}
+
+function chargebackDateValue(value: string | undefined): string {
+  const raw = String(value || "").trim();
+  if (!raw || /^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const match = raw.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2}|\d{4})$/);
+  if (!match) return raw;
+  const year = match[3].length === 2 ? `20${match[3]}` : match[3];
+  return `${year}-${match[1].padStart(2, "0")}-${match[2].padStart(2, "0")}`;
+}
+
+function normalizeChargebackRows(rows: Row[] | undefined | null): Row[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((row) => ({
+    ...emptyChargebackRow(),
+    ...row,
+    guest: row.guest || row.guestName || "",
+    responseDue: chargebackDateValue(row.responseDue || row.respondDate),
+    notes: row.notes || row.comment || "",
+    decision: ["review", "accepted", "challenged"].includes(row.decision) ? row.decision : "review",
+    outcome: ["pending", "won", "lost", "n/a"].includes(row.outcome) ? row.outcome : "pending",
+    evidenceStatus: ["not-started", "collecting", "submitted"].includes(row.evidenceStatus) ? row.evidenceStatus : "not-started",
+  })).filter(chargebackHasContent);
+}
+
 const GSS_TRACKED_LABELS = ["ITR", "Elite Appreciation", "Cleanliness", "Staff Service", "Maintenance", "Food & Beverage"];
 
 function isTrackedGssLabel(value: unknown) {
@@ -1269,6 +1324,138 @@ function EditableTable({
   );
 }
 
+function ChargebackTracker({ rows, onChange }: { rows: Row[]; onChange: (rows: Row[]) => void }) {
+  const [expandedRows, setExpandedRows] = useState<Set<number>>(new Set());
+  const activeRows = rows.filter(chargebackHasContent);
+  const totalExposure = activeRows.reduce((sum, row) => sum + num(row.amount), 0);
+  const challengedAmount = activeRows.filter((row) => row.decision === "challenged").reduce((sum, row) => sum + num(row.amount), 0);
+  const acceptedAmount = activeRows.filter((row) => row.decision === "accepted").reduce((sum, row) => sum + num(row.amount), 0);
+  const wonAmount = activeRows.filter((row) => row.outcome === "won").reduce((sum, row) => sum + num(row.amount), 0);
+  const lostAmount = activeRows.filter((row) => row.outcome === "lost").reduce((sum, row) => sum + num(row.amount), 0);
+  const resolvedChallenges = activeRows.filter((row) => row.decision === "challenged" && ["won", "lost"].includes(row.outcome));
+  const wonChallenges = resolvedChallenges.filter((row) => row.outcome === "won").length;
+  const winRate = resolvedChallenges.length ? `${((wonChallenges / resolvedChallenges.length) * 100).toFixed(0)}%` : "—";
+
+  const updateRow = (rowIndex: number, patch: Row) => {
+    onChange(rows.map((row, index) => index === rowIndex ? { ...row, ...patch } : row));
+  };
+  const setDecision = (rowIndex: number, decision: string) => {
+    updateRow(rowIndex, {
+      decision,
+      outcome: decision === "accepted" ? "n/a" : rows[rowIndex].outcome === "n/a" ? "pending" : rows[rowIndex].outcome,
+    });
+  };
+  const removeRow = (rowIndex: number) => {
+    onChange(rows.filter((_, index) => index !== rowIndex));
+    setExpandedRows(new Set());
+  };
+  const toggleDetails = (rowIndex: number) => {
+    setExpandedRows((current) => {
+      const next = new Set(current);
+      next.has(rowIndex) ? next.delete(rowIndex) : next.add(rowIndex);
+      return next;
+    });
+  };
+
+  const summary = [
+    ["Total exposure", money2(totalExposure)],
+    ["Challenged", money2(challengedAmount)],
+    ["Accepted", money2(acceptedAmount)],
+    ["Won", money2(wonAmount)],
+    ["Lost after challenge", money2(lostAmount)],
+    ["Challenge win rate", winRate],
+  ];
+
+  return (
+    <div className="space-y-4">
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
+        {summary.map(([label, value]) => (
+          <div key={label} className="rounded-lg border border-[#d7c8b5] bg-[#fffaf2] px-3 py-2">
+            <div className="text-[10px] font-semibold uppercase tracking-[0.12em] text-[#6d5c4c]">{label}</div>
+            <div className="mt-1 text-lg font-bold text-[#201814]">{value}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="overflow-x-auto rounded-lg border border-[#d7c8b5]">
+        <table className="w-full min-w-[1320px] border-collapse text-sm">
+          <thead>
+            <tr className={C.header}>
+              <th className="min-w-[170px] border border-[#c9d2d8] px-2 py-2 text-left">Guest Name</th>
+              <th className="min-w-[145px] border border-[#c9d2d8] px-2 py-2 text-left">Case / Dispute ID</th>
+              <th className="min-w-[210px] border border-[#c9d2d8] px-2 py-2 text-left">Reason</th>
+              <th className="min-w-[115px] border border-[#c9d2d8] px-2 py-2 text-left">Amount</th>
+              <th className="min-w-[145px] border border-[#c9d2d8] px-2 py-2 text-left">Response Due</th>
+              <th className="min-w-[245px] border border-[#c9d2d8] px-2 py-2 text-left">Decision</th>
+              <th className="min-w-[130px] border border-[#c9d2d8] px-2 py-2 text-left">Outcome</th>
+              <th className="min-w-[220px] border border-[#c9d2d8] px-2 py-2 text-left">Notes</th>
+              <th className="w-[112px] border border-[#c9d2d8] px-2 py-2 text-left">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {!rows.length && (
+              <tr><td colSpan={9} className="px-4 py-8 text-center text-sm text-[#6d5c4c]">No chargebacks entered for this week.</td></tr>
+            )}
+            {rows.map((row, rowIndex) => (
+              <Fragment key={rowIndex}>
+                <tr className="odd:bg-white even:bg-[#fbf6ee]">
+                  <td className="border border-[#e0d3c1] p-1"><Input aria-label="Guest name" className={`h-9 ${C.field}`} value={row.guest || ""} onChange={(event) => updateRow(rowIndex, { guest: event.target.value })} /></td>
+                  <td className="border border-[#e0d3c1] p-1"><Input aria-label="Case or dispute ID" className={`h-9 ${C.field}`} value={row.caseId || ""} onChange={(event) => updateRow(rowIndex, { caseId: event.target.value })} /></td>
+                  <td className="border border-[#e0d3c1] p-1"><Input aria-label="Chargeback reason" className={`h-9 ${C.field}`} value={row.reason || ""} onChange={(event) => updateRow(rowIndex, { reason: event.target.value })} /></td>
+                  <td className="border border-[#e0d3c1] p-1"><Input aria-label="Chargeback amount" inputMode="decimal" className={`h-9 ${C.field}`} value={row.amount || ""} onBlur={() => updateRow(rowIndex, { amount: accounting(row.amount || "") })} onChange={(event) => updateRow(rowIndex, { amount: event.target.value })} /></td>
+                  <td className="border border-[#e0d3c1] p-1"><Input aria-label="Response due date" type={!row.responseDue || /^\d{4}-\d{2}-\d{2}$/.test(row.responseDue) ? "date" : "text"} className={`h-9 ${C.field}`} value={row.responseDue || ""} onChange={(event) => updateRow(rowIndex, { responseDue: event.target.value })} /></td>
+                  <td className="border border-[#e0d3c1] p-1">
+                    <div className="grid h-9 grid-cols-3 overflow-hidden rounded-md border border-[#cdbda8] bg-white" aria-label="Chargeback decision">
+                      {[['review', 'Review'], ['accepted', 'Accepted'], ['challenged', 'Challenged']].map(([value, label]) => (
+                        <button key={value} type="button" aria-pressed={row.decision === value} onClick={() => setDecision(rowIndex, value)} className={`px-2 text-xs font-semibold transition-colors ${row.decision === value ? value === "challenged" ? "bg-[#2f5f46] text-white" : value === "accepted" ? "bg-[#8a4b3b] text-white" : "bg-[#243746] text-white" : "text-[#5f5247] hover:bg-[#f8efe2]"}`}>{label}</button>
+                      ))}
+                    </div>
+                  </td>
+                  <td className="border border-[#e0d3c1] p-1">
+                    <Select disabled={row.decision === "accepted"} value={row.decision === "accepted" ? "n/a" : row.outcome || "pending"} onValueChange={(value) => updateRow(rowIndex, { outcome: value })}>
+                      <SelectTrigger aria-label="Chargeback outcome" className={`h-9 ${C.field}`}><SelectValue /></SelectTrigger>
+                      <SelectContent className={C.menu}>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="won">Won</SelectItem>
+                        <SelectItem value="lost">Lost</SelectItem>
+                        <SelectItem value="n/a">N/A</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </td>
+                  <td className="border border-[#e0d3c1] p-1"><Input aria-label="Chargeback notes" className={`h-9 ${C.field}`} value={row.notes || ""} onChange={(event) => updateRow(rowIndex, { notes: event.target.value })} /></td>
+                  <td className="border border-[#e0d3c1] p-1">
+                    <div className="flex gap-1">
+                      <Button type="button" variant="outline" className={`h-9 px-2 text-xs ${C.outline}`} onClick={() => toggleDetails(rowIndex)}>{expandedRows.has(rowIndex) ? "Hide" : "Details"}</Button>
+                      <Button type="button" variant="outline" size="icon" className={`h-9 w-9 ${C.outline}`} onClick={() => removeRow(rowIndex)} title="Remove chargeback" aria-label="Remove chargeback"><Trash2 className="h-4 w-4" /></Button>
+                    </div>
+                  </td>
+                </tr>
+                {expandedRows.has(rowIndex) && (
+                  <tr>
+                    <td colSpan={9} className="border border-[#e0d3c1] bg-[#f4f7f9] p-3">
+                      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                        <div><Label>Owner</Label><Input className={`mt-1 ${C.field}`} value={row.owner || ""} onChange={(event) => updateRow(rowIndex, { owner: event.target.value })} /></div>
+                        <div><Label>Evidence status</Label><Select value={row.evidenceStatus || "not-started"} onValueChange={(value) => updateRow(rowIndex, { evidenceStatus: value })}><SelectTrigger className={`mt-1 ${C.field}`}><SelectValue /></SelectTrigger><SelectContent className={C.menu}><SelectItem value="not-started">Not started</SelectItem><SelectItem value="collecting">Collecting</SelectItem><SelectItem value="submitted">Submitted</SelectItem></SelectContent></Select></div>
+                        <div><Label>Submitted date</Label><Input type="date" className={`mt-1 ${C.field}`} value={row.submittedDate || ""} onChange={(event) => updateRow(rowIndex, { submittedDate: event.target.value })} /></div>
+                        <div><Label>Confirmation number</Label><Input className={`mt-1 ${C.field}`} value={row.confirmationNumber || ""} onChange={(event) => updateRow(rowIndex, { confirmationNumber: event.target.value })} /></div>
+                        <div><Label>Follow-up date</Label><Input type="date" className={`mt-1 ${C.field}`} value={row.followUpDate || ""} onChange={(event) => updateRow(rowIndex, { followUpDate: event.target.value })} /></div>
+                        <div className="md:col-span-2 xl:col-span-5"><Label>Evidence / follow-up notes</Label><Textarea className={`mt-1 min-h-20 ${C.field}`} value={row.evidenceNotes || ""} onChange={(event) => updateRow(rowIndex, { evidenceNotes: event.target.value })} /></div>
+                      </div>
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <div className="flex justify-end">
+        <Button type="button" className={C.green} onClick={() => onChange([...rows, emptyChargebackRow()])}><Plus className="mr-2 h-4 w-4" />Add chargeback</Button>
+      </div>
+    </div>
+  );
+}
+
 export default function OpsReportPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -1295,7 +1482,7 @@ export default function OpsReportPage() {
     { label: "SDLY OTB FOR NEXT MONTH", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
     { label: "PACING VARIANCE TO LY", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
   ]);
-  const [chargebacks, setChargebacks] = useState<Row[]>(emptyRows(5, ["no", "reason", "respondDate", "amount", "comment"]));
+  const [chargebacks, setChargebacks] = useState<Row[]>([]);
   const [maintenance, setMaintenance] = useState<Row[]>(emptyRows(5, ["no", "rooms", "area", "hours", "comment"]));
   const [oooRooms, setOooRooms] = useState<Row[]>(emptyRows(5, ["no", "room", "startDate", "returnDate", "comment"]));
   const [adjustments, setAdjustments] = useState<Row[]>(emptyRows(5, ["no", "room", "guest", "amount", "comment"]));
@@ -2180,7 +2367,7 @@ export default function OpsReportPage() {
       { label: "SDLY OTB FOR NEXT MONTH", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
       { label: "PACING VARIANCE TO LY", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
     ]);
-    setChargebacks(emptyRows(5, ["no", "reason", "respondDate", "amount", "comment"]));
+    setChargebacks([]);
     setMaintenance(emptyRows(5, ["no", "rooms", "area", "hours", "comment"]));
     setOooRooms(emptyRows(5, ["no", "room", "startDate", "returnDate", "comment"]));
     setAdjustments(emptyRows(5, ["no", "room", "guest", "amount", "comment"]));
@@ -2212,7 +2399,7 @@ export default function OpsReportPage() {
     if (payload.topMetrics) setTopMetrics(payload.topMetrics);
     if (payload.monthRows) setMonthRows(normalizeCurrentMonthRows(payload.monthRows));
     if (payload.nextMonthRows) setNextMonthRows(normalizeNextMonthRows(payload.nextMonthRows));
-    if (payload.chargebacks) setChargebacks(payload.chargebacks);
+    if (payload.chargebacks) setChargebacks(normalizeChargebackRows(payload.chargebacks));
     if (payload.maintenance) setMaintenance(payload.maintenance);
     if (payload.oooRooms) setOooRooms(payload.oooRooms);
     if (payload.adjustments) setAdjustments(payload.adjustments);
@@ -2985,7 +3172,7 @@ export default function OpsReportPage() {
               <EditableTable columns={[{ key: "label", label: "Next Month", wide: true }, { key: "occupancy", label: "Occupancy" }, { key: "rooms", label: "Rooms" }, { key: "adr", label: "ADR" }, { key: "revenue", label: "Room Revenue" }, { key: "comments", label: "Comments", wide: true }]} rows={nextMonthRows} onChange={setNextMonthRows} />
             </Section>
             <Section id="weekly-chargebacks" title="Weekly Chargebacks">
-              <EditableTable columns={[{ key: "no", label: "S No" }, { key: "reason", label: "Reason", wide: true }, { key: "respondDate", label: "Respond Date" }, { key: "amount", label: "Total Amount" }, { key: "comment", label: "Comment", wide: true }]} rows={chargebacks} onChange={setChargebacks} />
+              <ChargebackTracker rows={chargebacks} onChange={setChargebacks} />
             </Section>
             <Section id="weekly-maintenance" title="Major Weekly Maintenance Tasks">
               <EditableTable

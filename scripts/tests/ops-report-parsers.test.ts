@@ -15,6 +15,54 @@ function csvFile(originalname: string, body: string) {
   } as Express.Multer.File;
 }
 
+const roomPmHeader = "Floor Number,Room Number,Room Type,Status,Inspection Status,Completed By,Completed On,Inspected By,Inspected On";
+
+test("Kipsu All Rooms PM exports summarize completed and remaining rooms", async () => {
+  const report = await parseOpsReportFile(csvFile("Guest Room PM - Hotel.csv", [
+    "Report Type:,All Rooms",
+    "Completion:,1 / 3 Rooms",
+    "Completion %:,33.3%",
+    "Reported Cycle:,4th (Oct 01' 26 - Dec 31' 26)",
+    "Exported By,Manager",
+    'Exported At,"Oct 06 2026, 10:19 AM"',
+    roomPmHeader,
+    "1,101,KSTE,Done,Passed,Engineer,Oct 05 2026,Manager,Oct 06 2026",
+    "1,102,KING,Not Done,-,-,-,-,-",
+    "1,103,KING,Not Done,-,-,-,-,-",
+  ].join("\n")), context);
+
+  assert.equal(report.reportType, "room_pm");
+  assert.deepEqual(report.mapping.completion, { completed: 1, total: 3, percentage: "33.3%" });
+  assert.deepEqual(report.mapping.maintenanceRows.map((row: any) => [row.pmStatus, row.roomCount, row.rooms]), [
+    ["Completed", "1", "101"],
+    ["Remaining", "2", "102, 103"],
+  ]);
+});
+
+test("Kipsu filtered PM exports return only their represented status", async () => {
+  const report = await parseOpsReportFile(csvFile("Guest Room PM - Rooms Complete.csv", [
+    "Report Type:,Rooms Complete",
+    "Completion:,2 / 118 Rooms",
+    "Completion %:,1.7%",
+    "Reported Cycle:,4th (Oct 01' 26 - Dec 31' 26)",
+    roomPmHeader,
+    "1,101,KSTE,Done,Passed,Engineer,Oct 05 2026,Manager,Oct 06 2026",
+    "1,102,KING,Completed,Pending,Engineer,Oct 06 2026,-,-",
+  ].join("\n")), context);
+
+  assert.equal(report.reportType, "room_pm");
+  assert.equal(report.mapping.maintenanceRows.length, 1);
+  assert.deepEqual(report.mapping.maintenanceRows[0], {
+    source: "kipsu-room-pm",
+    pmStatus: "Completed",
+    roomCount: "2",
+    rooms: "101, 102",
+    area: "Guest rooms · 4th (Oct 01' 26 - Dec 31' 26)",
+    hours: "",
+    comment: "1.7% cycle completion · Completed by Engineer · Completed Oct 05 2026, Oct 06 2026",
+  });
+});
+
 const abacusHeader = "Date,Legal Company Code,Client Name,Employee Number,Employee Name,Labor Value,Labor Title,Earnings Type,Earnings Code,Earning Title,Hours,Rate,Other,Total";
 
 function abacusRow(date: string, code: string, title: string, earningsCode: string, earningTitle: string, hours: string | number, total: string | number) {

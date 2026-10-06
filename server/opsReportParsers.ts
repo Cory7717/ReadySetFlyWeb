@@ -17,6 +17,7 @@ export type OpsReportType =
   | "next_month_sdly_otb"
   | "analytical_account_tracking"
   | "detailed_flash"
+  | "room_pm"
   | "ooo_rooms"
   | "gss_scores"
   | "marriott_responses"
@@ -280,6 +281,10 @@ export function detectOpsReportType(fileName: string, rows: string[][], context:
     && flattenedHeaders.includes("current room nights")
   )) return "analytical_account_tracking";
   if (/detailed\s*flash|detailed_flash/.test(name) || (flattenedHeaders.includes("group") && flattenedHeaders.includes("category") && flattenedHeaders.some((value) => value.includes("month to date")))) return "detailed_flash";
+  if ((/guest\s*room\s*pm/.test(name) || flattenedHeaders.includes("reported cycle"))
+    && flattenedHeaders.includes("floor number")
+    && flattenedHeaders.includes("room number")
+    && flattenedHeaders.includes("status")) return "room_pm";
   if (/ooo\s*rooms|out\s*of\s*order/.test(name)) return "ooo_rooms";
   if (/marriott[_\s-]*responses|responses[_\s-]*export/.test(name) || (flattenedHeaders.includes("response date") && flattenedHeaders.includes("overall comment"))) return "marriott_responses";
   if (/gss\s*scores?/.test(name) || (flattenedHeaders.includes("intent to recommend property") && flattenedHeaders.includes("benchmark"))) return "gss_scores";
@@ -692,6 +697,100 @@ function parseAr(file: Express.Multer.File, rows: string[][], context: OpsParser
   return { ...baseReport(file, "ar_aging", context, warnings), preview: accounts.slice(0, 10), mapping: { accounts, summary } };
 }
 
+function parseRoomPm(file: Express.Multer.File, rows: string[][], context: OpsParserContext): ParsedReport {
+  const warnings: string[] = [];
+  const headerIndex = findHeader(rows, ["Floor Number", "Room Number", "Status"]);
+  if (headerIndex < 0) throw new Error("Kipsu Guest Room PM headers were not found.");
+  const metadata = new Map(
+    rows.slice(0, headerIndex).map((row) => [String(row[0] || "").trim().toLowerCase().replace(/:\s*$/, ""), String(row[1] || "").trim()]),
+  );
+  const header = rows[headerIndex];
+  const indexes = headerIndexes(header);
+  const index = {
+    floor: indexes.find("Floor Number"),
+    room: indexes.find("Room Number"),
+    roomType: indexes.find("Room Type"),
+    status: indexes.find("Status"),
+    inspectionStatus: indexes.find("Inspection Status"),
+    completedBy: indexes.find("Completed By"),
+    completedOn: indexes.find("Completed On"),
+    inspectedBy: indexes.find("Inspected By"),
+    inspectedOn: indexes.find("Inspected On"),
+  };
+  const roomRows = rows.slice(headerIndex + 1).flatMap((row) => {
+    const room = String(row[index.room] || "").trim();
+    if (!room) return [];
+    return [{
+      floor: String(row[index.floor] || "").trim(),
+      room,
+      roomType: String(row[index.roomType] || "").trim(),
+      status: String(row[index.status] || "").trim(),
+      inspectionStatus: String(row[index.inspectionStatus] || "").trim(),
+      completedBy: String(row[index.completedBy] || "").trim().replace(/^-$/, ""),
+      completedOn: String(row[index.completedOn] || "").trim().replace(/^-$/, ""),
+      inspectedBy: String(row[index.inspectedBy] || "").trim().replace(/^-$/, ""),
+      inspectedOn: String(row[index.inspectedOn] || "").trim().replace(/^-$/, ""),
+    }];
+  });
+  if (!roomRows.length) warnings.push("No room rows were found in the Kipsu Guest Room PM export.");
+
+  const reportScope = metadata.get("report type") || "All Rooms";
+  const completionText = metadata.get("completion") || "";
+  const completionMatch = completionText.match(/(\d+)\s*\/\s*(\d+)/);
+  const completedTotal = Number(completionMatch?.[1] || 0);
+  const roomTotal = Number(completionMatch?.[2] || roomRows.length);
+  const completionPercent = metadata.get("completion")?.includes("%")
+    ? metadata.get("completion") || ""
+    : metadata.get("completion %") || (roomTotal ? `${round(completedTotal / roomTotal * 100, 1)}%` : "0%");
+  const cycle = metadata.get("reported cycle") || "";
+  const exportedAt = metadata.get("exported at") || "";
+  const isRemaining = (status: string) => /not\s*done|remaining|open|incomplete/i.test(status);
+  const completedRooms = roomRows.filter((room) => !isRemaining(room.status));
+  const remainingRooms = roomRows.filter((room) => isRemaining(room.status));
+  const normalizedScope = normalizedHeader(reportScope);
+  const includeCompleted = /all rooms/.test(normalizedScope) || /complete|done/.test(normalizedScope);
+  const includeRemaining = /all rooms/.test(normalizedScope) || /remaining|not done|incomplete|open/.test(normalizedScope);
+  const scopeFallback = !includeCompleted && !includeRemaining;
+
+  const summaryRow = (pmStatus: "Completed" | "Remaining", source: typeof roomRows) => {
+    const people = Array.from(new Set(source.map((room) => room.completedBy).filter(Boolean)));
+    const dates = Array.from(new Set(source.map((room) => room.completedOn).filter(Boolean)));
+    return {
+      source: "kipsu-room-pm",
+      pmStatus,
+      roomCount: String(source.length),
+      rooms: source.map((room) => room.room).join(", "),
+      area: cycle ? `Guest rooms · ${cycle}` : "Guest rooms",
+      hours: "",
+      comment: [
+        `${completionPercent} cycle completion`,
+        people.length ? `Completed by ${people.join(", ")}` : "",
+        dates.length ? `Completed ${dates.join(", ")}` : "",
+        exportedAt ? `Kipsu export ${exportedAt}` : "",
+      ].filter(Boolean).join(" · "),
+    };
+  };
+  const maintenanceRows = [
+    ...(includeCompleted || scopeFallback ? [summaryRow("Completed", completedRooms)] : []),
+    ...(includeRemaining || scopeFallback ? [summaryRow("Remaining", remainingRooms)] : []),
+  ];
+  if (/all rooms/.test(normalizedScope) && roomRows.length !== roomTotal) {
+    warnings.push(`Kipsu completion summary lists ${roomTotal} rooms, but ${roomRows.length} room rows were found.`);
+  }
+
+  return {
+    ...baseReport(file, "room_pm", context, warnings),
+    preview: roomRows.slice(0, 10),
+    mapping: {
+      reportScope,
+      cycle,
+      exportedAt,
+      completion: { completed: completedTotal, total: roomTotal, percentage: completionPercent },
+      maintenanceRows,
+    },
+  };
+}
+
 const OOO_DATE_PATTERN = String.raw`(?:[A-Z][a-z]{2,8}\s+\d{1,2},\s+\d{4}|\d{1,2}\/\d{1,2}\/\d{2,4}|\d{4}-\d{2}-\d{2})`;
 
 function cleanOooReason(value: unknown) {
@@ -989,6 +1088,7 @@ export async function parseOpsReportFile(file: Express.Multer.File, context: Ops
   if (["previous_week_otb", "current_month_otb", "remaining_month_otb", "next_month_otb", "next_month_sdly_otb"].includes(reportType)) return parseOtb(file, rows, reportType, context);
   if (reportType === "analytical_account_tracking") return parseAnalyticalAccountTracking(file, sheets, context);
   if (reportType === "detailed_flash") return parseDetailedFlash(file, rows, context);
+  if (reportType === "room_pm") return parseRoomPm(file, rows, context);
   if (reportType === "gss_scores") return parseGss(file, sheets, context);
   if (reportType === "marriott_responses") return parseResponses(file, rows, context);
   if (reportType === "ar_aging") return parseAr(file, rows, context);

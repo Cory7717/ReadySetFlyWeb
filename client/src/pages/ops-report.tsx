@@ -118,7 +118,7 @@ type OpsImportResponse = {
   uploadId: string;
   originalFileName: string;
   sourceFileName: string;
-  reportType: "previous_week_otb" | "current_month_otb" | "remaining_month_otb" | "next_month_otb" | "current_month_sdly_otb" | "next_month_sdly_otb" | "analytical_account_tracking" | "detailed_flash" | "ooo_rooms" | "gss_scores" | "marriott_responses" | "ar_aging" | "credit_limit" | "unknown";
+  reportType: "previous_week_otb" | "current_month_otb" | "remaining_month_otb" | "next_month_otb" | "current_month_sdly_otb" | "next_month_sdly_otb" | "analytical_account_tracking" | "detailed_flash" | "room_pm" | "ooo_rooms" | "gss_scores" | "marriott_responses" | "ar_aging" | "credit_limit" | "unknown";
   status: "parsed" | "warning" | "failed";
   warnings: string[];
   selectedWeek: string;
@@ -251,6 +251,7 @@ const REPORT_TYPE_LABELS: Record<OpsImportResponse["reportType"], string> = {
   next_month_sdly_otb: "Next Month SDLY OTB",
   analytical_account_tracking: "MTD / YTD Account Tracking",
   detailed_flash: "Detailed Flash",
+  room_pm: "Kipsu Guest Room PM",
   ooo_rooms: "OOO Rooms",
   gss_scores: "GSS Scores",
   marriott_responses: "Marriott Responses",
@@ -536,6 +537,7 @@ const REPORT_PAYLOAD_KEYS: Record<OpsImportResponse["reportType"], string[]> = {
   next_month_sdly_otb: ["nextMonthRows"],
   analytical_account_tracking: ["topMetrics"],
   detailed_flash: ["topMetrics", "monthRows", "monthlyBudgets"],
+  room_pm: ["maintenance"],
   ooo_rooms: ["oooRooms"],
   gss_scores: ["gssRows", "gssWaveRows"],
   marriott_responses: ["positiveReviews", "negativeReviews"],
@@ -565,6 +567,7 @@ function compactReportMapping(reportType: OpsImportResponse["reportType"], mappi
     };
   }
   if (reportType === "detailed_flash") return { mtd: mapping.mtd, ytd: mapping.ytd };
+  if (reportType === "room_pm") return { reportScope: mapping.reportScope, cycle: mapping.cycle, exportedAt: mapping.exportedAt, completion: mapping.completion, maintenanceRows: mapping.maintenanceRows };
   if (reportType === "analytical_account_tracking") return {
     period: mapping.period,
     comparison: mapping.comparison,
@@ -756,6 +759,15 @@ function applyOpsReportToPayload(payload: Record<string, any>, report: OpsImport
   if (report.reportType === "ooo_rooms") {
     const rooms = (mapping.rooms || []) as Row[];
     next.oooRooms = rooms.length ? rooms : emptyRows(5, ["no", "room", "startDate", "returnDate", "comment"]);
+  }
+  if (report.reportType === "room_pm") {
+    const incoming = (mapping.maintenanceRows || []) as Row[];
+    const incomingStatuses = new Set(incoming.map((row) => String(row.pmStatus || "").trim().toLowerCase()));
+    const existing = (next.maintenance || []) as Row[];
+    next.maintenance = [
+      ...incoming,
+      ...existing.filter((row) => row.source !== "kipsu-room-pm" || !incomingStatuses.has(String(row.pmStatus || "").trim().toLowerCase())),
+    ];
   }
   if (report.reportType === "gss_scores") {
     const merge = (existing: Row[], incoming: Row[]) => {
@@ -1488,7 +1500,7 @@ export default function OpsReportPage() {
     { label: "PACING VARIANCE TO LY", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
   ]);
   const [chargebacks, setChargebacks] = useState<Row[]>([]);
-  const [maintenance, setMaintenance] = useState<Row[]>(emptyRows(5, ["no", "rooms", "area", "hours", "comment"]));
+  const [maintenance, setMaintenance] = useState<Row[]>(emptyRows(3, ["pmStatus", "roomCount", "rooms", "area", "hours", "comment"]));
   const [oooRooms, setOooRooms] = useState<Row[]>(emptyRows(5, ["no", "room", "startDate", "returnDate", "comment"]));
   const [adjustments, setAdjustments] = useState<Row[]>(emptyRows(5, ["no", "room", "guest", "amount", "comment"]));
   const [ar, setAr] = useState({ current: "", d30: "", d60: "", d90: "", comments: "" });
@@ -2222,6 +2234,12 @@ export default function OpsReportPage() {
       fileName: "Analytical Account Tracking - Export.xlsx",
     },
     {
+      name: "Kipsu Guest Room PM",
+      scope: "Current preventative-maintenance cycle",
+      parameters: "Upload the Kipsu Rooms Complete and Rooms Remaining CSV exports together. All Rooms exports are also supported. Rooms are summarized into Completed and Remaining rows without duplicating repeat uploads.",
+      fileName: "Guest Room PM - Courtyard Austin Northwest Lakeline - export.csv",
+    },
+    {
       name: "OOO Rooms",
       scope: `${displayOpsDate(topMetrics.weekStart)} through ${displayOpsDate(weekEnd)}`,
       parameters: "Set the report start and end dates to the exact selected week. Include room number, reason/status, OOO start, and expected return date.",
@@ -2377,7 +2395,7 @@ export default function OpsReportPage() {
       { label: "PACING VARIANCE TO LY", occupancy: "", rooms: "", adr: "", revenue: "", comments: "" },
     ]);
     setChargebacks([]);
-    setMaintenance(emptyRows(5, ["no", "rooms", "area", "hours", "comment"]));
+    setMaintenance(emptyRows(3, ["pmStatus", "roomCount", "rooms", "area", "hours", "comment"]));
     setOooRooms(emptyRows(5, ["no", "room", "startDate", "returnDate", "comment"]));
     setAdjustments(emptyRows(5, ["no", "room", "guest", "amount", "comment"]));
     setAr({ current: "", d30: "", d60: "", d90: "", comments: "" });
@@ -2409,7 +2427,11 @@ export default function OpsReportPage() {
     if (payload.monthRows) setMonthRows(normalizeCurrentMonthRows(payload.monthRows));
     if (payload.nextMonthRows) setNextMonthRows(normalizeNextMonthRows(payload.nextMonthRows));
     if (payload.chargebacks) setChargebacks(normalizeChargebackRows(payload.chargebacks));
-    if (payload.maintenance) setMaintenance(payload.maintenance);
+    if (payload.maintenance) setMaintenance(payload.maintenance.map((row: Row) => ({
+      ...row,
+      pmStatus: row.pmStatus || (row.no ? `Task ${row.no}` : ""),
+      roomCount: row.roomCount || (String(row.rooms || "").trim() ? String(String(row.rooms).split(",").filter(Boolean).length) : ""),
+    })));
     if (payload.oooRooms) setOooRooms(payload.oooRooms);
     if (payload.adjustments) setAdjustments(payload.adjustments);
     if (payload.ar) setAr(payload.ar);
@@ -3184,10 +3206,17 @@ export default function OpsReportPage() {
               <ChargebackTracker rows={chargebacks} onChange={setChargebacks} />
             </Section>
             <Section id="weekly-maintenance" title="Major Weekly Maintenance Tasks">
+              <SectionReportUpload
+                reports={reportGuideFor("Kipsu Guest Room PM")}
+                multiple
+                uploading={opsReportUpload.isPending}
+                onUpload={(files) => uploadSectionReports("Weekly Maintenance", files)}
+              />
               <EditableTable
-                columns={[{ key: "no", label: "S No" }, { key: "rooms", label: "P.M. Rooms" }, { key: "area", label: "Area" }, { key: "hours", label: "Time Consumed Hrs" }, { key: "comment", label: "Comment", wide: true }]}
+                columns={[{ key: "pmStatus", label: "PM Status" }, { key: "roomCount", label: "Room Count" }, { key: "rooms", label: "Guest Rooms", wide: true }, { key: "area", label: "Cycle / Area" }, { key: "hours", label: "Time Hrs" }, { key: "comment", label: "Comments", wide: true }]}
                 rows={maintenance}
                 onChange={setMaintenance}
+                getCellPreview={(row, column) => column.key === "rooms" && String(row.rooms || "").trim() ? { label: `${row.pmStatus || "PM"} guest rooms`, text: row.rooms } : null}
                 allowRowActions
                 addRowLabel="Add maintenance row"
               />

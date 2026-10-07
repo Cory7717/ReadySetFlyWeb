@@ -16,7 +16,6 @@ import {
   type NoiseAndFuryExcerptId,
 } from "@/components/noise-and-fury/NoiseAndFuryExcerptDialog";
 
-const HERO_IMAGE_PATH = "/downloads/noise-and-fury-hero-textless.png";
 const ONE_PAGER_ART_PATH = "/downloads/noise-and-fury-one-pager-design.png";
 const MARC_LOGO_PATH = "/downloads/marc-production-logo.jpg";
 const CORY_BIO_IMAGE_PATH = "/downloads/noise-and-fury-cory.jpg";
@@ -250,27 +249,38 @@ export default function NoiseAndFuryPage() {
   return (
     <div className="min-h-screen overflow-hidden bg-[#e9dfce] text-[#241a13] [background-image:radial-gradient(circle_at_10%_18%,rgba(91,55,25,0.08)_0_1px,transparent_1.5px),radial-gradient(circle_at_82%_68%,rgba(91,55,25,0.06)_0_1px,transparent_1.5px)] [background-size:29px_31px,37px_41px]">
       <section className="relative overflow-hidden border-b border-[#9b682f] bg-[#080807] text-[#f2e9dc]">
-        <img src={HERO_IMAGE_PATH} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full object-cover opacity-25 mix-blend-luminosity" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(132,85,35,0.15),_rgba(4,4,4,0.96)_72%)]" />
-        <div className="absolute inset-0 opacity-35 [background-image:linear-gradient(115deg,transparent_0%,rgba(196,142,75,0.16)_48%,transparent_49%),radial-gradient(circle_at_15%_20%,rgba(255,255,255,0.08)_0_1px,transparent_1px)] [background-size:auto,9px_9px]" />
-        <div className="relative mx-auto max-w-7xl px-5 py-6 sm:px-8 sm:py-10">
-          <div className="grid grid-cols-2 items-center gap-5 text-center md:grid-cols-[0.8fr_1.35fr_0.8fr] md:gap-8 md:text-left">
-            <div aria-hidden="true" className="col-span-2 mx-auto font-display text-[clamp(3.2rem,7vw,6.8rem)] font-black uppercase leading-[0.7] tracking-[-0.095em] text-[#ded0bc] [text-shadow:2px_3px_0_rgba(105,68,31,0.55)] md:col-span-1 md:mx-0">
-              <span className="block">Noise</span>
-              <span className="block">&amp; Fury</span>
+        <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+          <img
+            src={ONE_PAGER_ART_PATH}
+            alt=""
+            className="absolute bottom-0 left-1/2 w-[1300px] max-w-none -translate-x-1/2 opacity-[0.28] mix-blend-luminosity sm:w-full sm:min-w-[900px]"
+          />
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(5,5,5,0.94)_0%,rgba(5,5,5,0.66)_48%,rgba(5,5,5,0.88)_100%)]" />
+          <div className="absolute inset-0 opacity-35 [background-image:linear-gradient(115deg,transparent_0%,rgba(196,142,75,0.16)_48%,transparent_49%),radial-gradient(circle_at_15%_20%,rgba(255,255,255,0.08)_0_1px,transparent_1px)] [background-size:auto,9px_9px]" />
+        </div>
+        <div className="relative mx-auto max-w-7xl px-5 py-5 sm:px-8 sm:py-8">
+          <div className="grid grid-cols-[1fr_1.3fr_0.85fr] items-center gap-2 text-center sm:grid-cols-[0.85fr_1.3fr_0.85fr] sm:gap-7">
+            <div className="relative mx-auto h-[84px] w-[136px] overflow-hidden sm:mx-0 sm:h-[180px] sm:w-[290px]">
+              <img
+                src={ONE_PAGER_ART_PATH}
+                alt="Noise & Fury"
+                className="absolute left-[-31px] top-[-14px] w-[520px] max-w-none sm:left-[-65px] sm:top-[-30px] sm:w-[1103px]"
+              />
             </div>
             <div className="mx-auto w-full max-w-xl text-center">
               <div className="mx-auto h-px w-3/4 bg-[linear-gradient(90deg,transparent,#bd8545,transparent)]" />
-              <div className="py-3 font-display text-lg uppercase tracking-[0.28em] text-[#e3d8c9] sm:py-5 sm:text-3xl sm:tracking-[0.42em]">A Prestige Dramatic Series</div>
+              <div className="py-2 font-serif text-[9px] uppercase leading-5 tracking-[0.22em] text-[#e3d8c9] sm:py-5 sm:text-[clamp(1rem,2vw,1.7rem)] sm:leading-normal sm:tracking-[0.38em]">
+                A Prestige Dramatic Series
+              </div>
               <div className="mx-auto h-px w-3/4 bg-[linear-gradient(90deg,transparent,#bd8545,transparent)]" />
             </div>
             <img
               src={MARC_LOGO_PATH}
               alt="MARC Production Enterprises"
-              className="mx-auto w-full max-w-[130px] border border-white/10 bg-[#0B0A0A]/80 p-2 shadow-[0_20px_55px_rgba(0,0,0,0.5)] sm:max-w-[160px] sm:p-3 md:ml-auto md:mr-0 md:max-w-[190px]"
+              className="mx-auto w-full max-w-[76px] border border-white/10 bg-[#0B0A0A]/80 p-1.5 shadow-[0_20px_55px_rgba(0,0,0,0.5)] sm:ml-auto sm:mr-0 sm:max-w-[165px] sm:p-3"
             />
           </div>
-          <div className="mt-5 border-t border-[#a66e33]/50 pt-4 text-center text-[10px] font-semibold uppercase tracking-[0.3em] text-[#d7a264] sm:mt-8 sm:pt-5 sm:text-xs sm:tracking-[0.5em]">
+          <div className="mt-4 border-t border-[#a66e33]/50 pt-4 text-center text-[10px] font-semibold uppercase tracking-[0.3em] text-[#d7a264] sm:mt-5 sm:text-xs sm:tracking-[0.5em]">
             Season One <span className="px-2 text-[#8d6541]">/</span> Alice in Chains
           </div>
         </div>
@@ -279,9 +289,9 @@ export default function NoiseAndFuryPage() {
       <section className="relative overflow-hidden border-b border-[#b4936b] bg-[#f2eadc] px-5 py-12 text-[#201711] sm:px-8 sm:py-16">
         <div className="pointer-events-none absolute inset-0 opacity-55 [background-image:radial-gradient(circle_at_12%_20%,rgba(92,56,24,0.13)_0_1px,transparent_1.5px),radial-gradient(circle_at_78%_65%,rgba(92,56,24,0.09)_0_1px,transparent_1.5px)] [background-size:23px_29px,31px_37px]" />
         <div className="relative mx-auto max-w-6xl">
-          <h1 className="font-serif text-[clamp(2.8rem,7vw,6.4rem)] font-medium italic leading-[0.98] tracking-[-0.045em] text-black">
-            <span className="block">Out of the noise came the music.</span>
-            <span className="block">Through the fury came the freedom.</span>
+          <h1 className="font-serif text-[1.45rem] font-medium italic leading-[1.02] tracking-[-0.045em] text-black sm:text-[clamp(2.3rem,5.15vw,4.65rem)]">
+            <span className="block whitespace-nowrap">Out of the noise came the music.</span>
+            <span className="block whitespace-nowrap">Through the fury came the freedom.</span>
           </h1>
           <div className="mt-8 h-0.5 w-24 bg-[#a9692c]" />
           <div className="mt-8 grid gap-4 border-b border-[#b98a58]/45 pb-9 md:grid-cols-[8rem_1fr] md:gap-8">
@@ -753,14 +763,6 @@ export default function NoiseAndFuryPage() {
           </div>
         </section>
       </main>
-      <footer className="relative h-[320px] overflow-hidden border-t border-[#9b682f] bg-[#090807] sm:h-[520px] lg:h-[620px]">
-        <img
-          src={ONE_PAGER_ART_PATH}
-          alt="Seattle skyline and Space Needle from the Noise & Fury one-pager"
-          className="absolute inset-0 h-full w-full origin-[65%_100%] scale-[3.2] object-cover object-bottom sm:origin-bottom sm:scale-100"
-        />
-        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(9,8,7,0.88)_0%,rgba(9,8,7,0.18)_26%,rgba(9,8,7,0.02)_66%,rgba(9,8,7,0.28)_100%)]" />
-      </footer>
       <NoiseAndFuryExcerptDialog
         open={excerptOpen}
         excerptId={selectedExcerptId}

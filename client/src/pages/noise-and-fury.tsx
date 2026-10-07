@@ -753,11 +753,11 @@ export default function NoiseAndFuryPage() {
           </div>
         </section>
       </main>
-      <footer className="relative h-[420px] overflow-hidden border-t border-[#9b682f] bg-[#090807] sm:h-[520px] lg:h-[620px]">
+      <footer className="relative h-[320px] overflow-hidden border-t border-[#9b682f] bg-[#090807] sm:h-[520px] lg:h-[620px]">
         <img
           src={ONE_PAGER_ART_PATH}
           alt="Seattle skyline and Space Needle from the Noise & Fury one-pager"
-          className="absolute inset-0 h-full w-full origin-bottom scale-[1.75] object-cover object-bottom sm:scale-100"
+          className="absolute inset-0 h-full w-full origin-[65%_100%] scale-[3.2] object-cover object-bottom sm:origin-bottom sm:scale-100"
         />
         <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(9,8,7,0.88)_0%,rgba(9,8,7,0.18)_26%,rgba(9,8,7,0.02)_66%,rgba(9,8,7,0.28)_100%)]" />
       </footer>

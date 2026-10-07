@@ -275,11 +275,19 @@ export default function NoiseAndFuryPage() {
               </div>
               <div className="mx-auto h-px w-3/4 bg-[linear-gradient(90deg,transparent,#bd8545,transparent)]" />
             </div>
-            <img
-              src={MARC_LOGO_PATH}
-              alt="MARC Production Enterprises"
-              className="mx-auto w-full max-w-[76px] border border-white/10 bg-[#0B0A0A]/80 p-1.5 shadow-[0_20px_55px_rgba(0,0,0,0.5)] sm:ml-auto sm:mr-0 sm:max-w-[165px] sm:p-3"
-            />
+            <a
+              href="https://marcmovies.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="Visit MARC Production Enterprises"
+              className="mx-auto block w-full max-w-[76px] transition duration-200 hover:scale-[1.03] hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7a264] focus-visible:ring-offset-2 focus-visible:ring-offset-[#080807] sm:ml-auto sm:mr-0 sm:max-w-[165px]"
+            >
+              <img
+                src={MARC_LOGO_PATH}
+                alt="MARC Production Enterprises"
+                className="w-full border border-white/10 bg-[#0B0A0A]/80 p-1.5 shadow-[0_20px_55px_rgba(0,0,0,0.5)] sm:p-3"
+              />
+            </a>
           </div>
           <div className="mt-4 border-t border-[#a66e33]/50 pt-4 text-center text-[10px] font-semibold uppercase tracking-[0.3em] text-[#d7a264] sm:mt-5 sm:text-xs sm:tracking-[0.5em]">
             Season One <span className="px-2 text-[#8d6541]">/</span> Alice in Chains

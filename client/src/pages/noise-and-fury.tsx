@@ -16,7 +16,8 @@ import {
   type NoiseAndFuryExcerptId,
 } from "@/components/noise-and-fury/NoiseAndFuryExcerptDialog";
 
-const HERO_IMAGE_PATH = "/downloads/noise-and-fury-hero.jpg";
+const HERO_IMAGE_PATH = "/downloads/noise-and-fury-hero-textless.png";
+const ONE_PAGER_ART_PATH = "/downloads/noise-and-fury-one-pager-design.png";
 const MARC_LOGO_PATH = "/downloads/marc-production-logo.jpg";
 const CORY_BIO_IMAGE_PATH = "/downloads/noise-and-fury-cory.jpg";
 const CESAR_BIO_IMAGE_PATH = "/downloads/noise-and-fury-cesar.jpg";
@@ -247,127 +248,82 @@ export default function NoiseAndFuryPage() {
   });
 
   return (
-    <div className="min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top,_rgba(145,98,42,0.16)_0%,_rgba(24,18,13,0.82)_24%,_rgba(6,6,7,1)_72%)] text-[#F4EEE9]">
-      <section className="relative overflow-hidden border-b border-[#8E6B3B]/18 sm:min-h-[92vh]">
-        <img
-          src={HERO_IMAGE_PATH}
-          alt=""
-          aria-hidden="true"
-          className="absolute inset-0 hidden h-full w-full object-cover object-[center_12%] sm:block"
-        />
-        <div className="absolute inset-0 hidden bg-[linear-gradient(180deg,rgba(6,6,7,0.18)_0%,rgba(6,6,7,0.48)_34%,rgba(6,6,7,0.78)_70%,rgba(6,6,7,0.96)_100%)] sm:block" />
-        <div className="absolute inset-0 hidden bg-[linear-gradient(90deg,rgba(8,6,5,0.78)_0%,rgba(8,6,5,0.28)_42%,rgba(8,6,5,0.14)_62%,rgba(8,6,5,0.82)_100%)] sm:block" />
-
-        <div className="relative aspect-square w-full bg-black sm:hidden">
-          <img
-            src={HERO_IMAGE_PATH}
-            alt="Noise & Fury amplifier artwork"
-            className="h-full w-full object-contain object-top"
-          />
-          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(6,6,7,0.06)_0%,rgba(6,6,7,0.02)_68%,rgba(6,6,7,0.92)_100%)]" />
-        </div>
-
-        <div className="container relative mx-auto flex flex-col px-4 pb-10 pt-6 sm:min-h-[92vh] sm:px-6 sm:pb-14 sm:pt-10">
-          <div className="flex justify-center">
+    <div className="min-h-screen overflow-hidden bg-[#e9dfce] text-[#241a13] [background-image:radial-gradient(circle_at_10%_18%,rgba(91,55,25,0.08)_0_1px,transparent_1.5px),radial-gradient(circle_at_82%_68%,rgba(91,55,25,0.06)_0_1px,transparent_1.5px)] [background-size:29px_31px,37px_41px]">
+      <section className="relative overflow-hidden border-b border-[#9b682f] bg-[#080807] text-[#f2e9dc]">
+        <img src={HERO_IMAGE_PATH} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full object-cover opacity-25 mix-blend-luminosity" />
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,_rgba(132,85,35,0.15),_rgba(4,4,4,0.96)_72%)]" />
+        <div className="absolute inset-0 opacity-35 [background-image:linear-gradient(115deg,transparent_0%,rgba(196,142,75,0.16)_48%,transparent_49%),radial-gradient(circle_at_15%_20%,rgba(255,255,255,0.08)_0_1px,transparent_1px)] [background-size:auto,9px_9px]" />
+        <div className="relative mx-auto max-w-7xl px-5 py-8 sm:px-8 sm:py-10">
+          <div className="grid items-center gap-8 text-center md:grid-cols-[0.8fr_1.35fr_0.8fr] md:text-left">
+            <div aria-hidden="true" className="mx-auto font-display text-[clamp(3.2rem,7vw,6.8rem)] font-black uppercase leading-[0.7] tracking-[-0.095em] text-[#ded0bc] [text-shadow:2px_3px_0_rgba(105,68,31,0.55)] md:mx-0">
+              <span className="block">Noise</span>
+              <span className="block">&amp; Fury</span>
+            </div>
+            <div className="mx-auto w-full max-w-xl text-center">
+              <div className="mx-auto h-px w-3/4 bg-[linear-gradient(90deg,transparent,#bd8545,transparent)]" />
+              <div className="py-5 font-display text-xl uppercase tracking-[0.42em] text-[#e3d8c9] sm:text-3xl">A Prestige Dramatic Series</div>
+              <div className="mx-auto h-px w-3/4 bg-[linear-gradient(90deg,transparent,#bd8545,transparent)]" />
+            </div>
             <img
               src={MARC_LOGO_PATH}
               alt="MARC Production Enterprises"
-              className="w-full max-w-[220px] rounded-[22px] border border-white/10 bg-[#0B0A0A]/70 p-3 shadow-[0_24px_60px_rgba(0,0,0,0.48)] backdrop-blur"
+              className="mx-auto w-full max-w-[190px] border border-white/10 bg-[#0B0A0A]/80 p-3 shadow-[0_20px_55px_rgba(0,0,0,0.5)] md:ml-auto md:mr-0"
             />
           </div>
+          <div className="mt-8 border-t border-[#a66e33]/50 pt-5 text-center text-[10px] font-semibold uppercase tracking-[0.32em] text-[#d7a264] sm:text-xs sm:tracking-[0.5em]">
+            Season One <span className="px-2 text-[#8d6541]">/</span> Alice in Chains
+          </div>
+        </div>
+      </section>
 
-          <div className="mt-8 flex flex-1 items-end">
-            <div className="mx-auto w-full max-w-6xl">
-              <div className="mx-auto max-w-4xl space-y-6 text-center">
-                <div className="space-y-5">
-                  <h1 className="sr-only">Noise &amp; Fury</h1>
-                  <div className="mx-auto max-w-[920px] text-center">
-                    <div className="font-display text-[11px] font-semibold uppercase tracking-[0.22em] text-[#E8DED2] [text-shadow:0_2px_12px_rgba(0,0,0,0.95)] sm:text-sm sm:tracking-[0.38em]">
-                      Season One <span className="text-[#C99A58]">—</span> Alice in Chains
-                    </div>
-                    <div aria-hidden="true" className="relative mx-auto mt-4 h-5 w-[82%] max-w-[720px]">
-                      <span className="absolute left-0 right-0 top-1/2 h-px -translate-y-1/2 bg-[linear-gradient(90deg,transparent,_rgba(226,210,190,0.72)_18%,_rgba(201,154,88,0.82)_50%,_rgba(226,210,190,0.72)_82%,transparent)]" />
-                      <span className="absolute left-1/2 top-1/2 flex h-4 w-4 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border border-[#D5B27B]/80 bg-[#0A0908] shadow-[0_0_14px_rgba(201,154,88,0.35)]">
-                        <span className="h-1 w-1 rounded-full bg-[#E0BF84]" />
-                      </span>
-                    </div>
-                  </div>
-                  <p className="mx-auto max-w-3xl font-display text-2xl font-semibold uppercase tracking-[0.08em] text-[#F0E1D2] sm:text-3xl">
-                    They were just making music.
-                  </p>
-                  <p className="mx-auto max-w-4xl text-base leading-8 text-[#E6D9CD] sm:text-lg">
-                    In late-1980s Seattle, four young musicians forge the bond that makes Alice in Chains a defining
-                    voice of their generation. As success brings addiction, loss and painful changes to the band, the
-                    people who made the music must find a way to carry it forward without forgetting who they were together.
-                  </p>
-                </div>
+      <section className="relative overflow-hidden border-b border-[#b4936b] bg-[#f2eadc] px-5 py-12 text-[#201711] sm:px-8 sm:py-16">
+        <div className="pointer-events-none absolute inset-0 opacity-55 [background-image:radial-gradient(circle_at_12%_20%,rgba(92,56,24,0.13)_0_1px,transparent_1.5px),radial-gradient(circle_at_78%_65%,rgba(92,56,24,0.09)_0_1px,transparent_1.5px)] [background-size:23px_29px,31px_37px]" />
+        <div className="relative mx-auto max-w-6xl">
+          <h1 className="font-display text-[clamp(2.8rem,7vw,6.4rem)] font-medium italic leading-[0.98] tracking-[-0.045em] text-black">
+            <span className="block">Out of the noise came the music.</span>
+            <span className="block">Through the fury came the freedom.</span>
+          </h1>
+          <div className="mt-8 h-0.5 w-24 bg-[#a9692c]" />
+          <div className="mt-8 grid gap-4 border-b border-[#b98a58]/45 pb-9 md:grid-cols-[8rem_1fr] md:gap-8">
+            <div className="text-xs font-bold uppercase tracking-[0.28em] text-[#8d5124]">Logline</div>
+            <p className="font-display text-xl leading-8 text-[#2b211a] sm:text-2xl sm:leading-10">
+              In late-1980s Seattle, four young musicians forge the bond that makes Alice in Chains a defining voice of
+              their generation. As success brings addiction, loss and painful changes to the band, the people who made
+              the music must find a way to carry it forward without forgetting who they were together.
+            </p>
+          </div>
 
-                <div className="grid gap-3 pt-2 sm:grid-cols-2">
-                  <div className="border-l border-[#D3A869]/45 bg-black/28 px-4 py-3 backdrop-blur sm:min-h-[112px]">
-                    <div className="text-[11px] uppercase tracking-[0.28em] text-[#B89258]">CREATED AND WRITTEN BY</div>
-                    <div className="mx-auto mt-2 max-w-[22rem] text-base font-semibold leading-7 text-white">Cory Armer and Cesar R. Ramirez</div>
-                  </div>
-                  <div className="border-l border-[#D3A869]/45 bg-black/28 px-4 py-3 backdrop-blur sm:min-h-[112px]">
-                    <div className="text-[11px] uppercase leading-5 tracking-[0.28em] text-[#B89258]">SEASON ONE COMPLETE — EIGHT TELEPLAYS</div>
-                    <div className="mx-auto mt-2 max-w-[22rem] text-base font-semibold leading-7 text-white">Eight completed hour-long teleplays</div>
-                  </div>
-                </div>
+          <div className="mt-8 grid gap-5 md:grid-cols-2">
+            <div className="border-l-2 border-[#a9692c] pl-5">
+              <div className="text-[10px] font-bold uppercase tracking-[0.28em] text-[#8d5124]">Created and written by</div>
+              <div className="mt-2 font-display text-xl font-semibold">Cory Armer and Cesar R. Ramirez</div>
+            </div>
+            <div className="border-l-2 border-[#a9692c] pl-5">
+              <div className="text-[10px] font-bold uppercase tracking-[0.28em] text-[#8d5124]">Season One Complete</div>
+              <div className="mt-2 font-display text-xl font-semibold">Eight completed hour-long teleplays</div>
+            </div>
+          </div>
 
-                <div className="mx-auto flex max-w-2xl flex-col items-center gap-3 border border-[#D3A869]/45 bg-[linear-gradient(90deg,rgba(30,22,15,0.92),rgba(9,9,10,0.72))] px-5 py-4 shadow-[0_18px_50px_rgba(0,0,0,0.3)] backdrop-blur sm:flex-row sm:justify-center">
-                  <div className="flex items-center justify-center gap-3 text-left">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center border border-[#D3A869]/55 bg-[#D3A869]/10 text-[#E0BF84]">
-                      <Shield className="h-5 w-5" />
-                    </span>
-                    <div>
-                      <div className="text-[10px] font-semibold uppercase tracking-[0.34em] text-[#B89258]">WGA Registered</div>
-                      <div className="mt-1 text-sm text-[#E9DED2]">Writers Guild of America registrations</div>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap justify-center gap-2 font-mono text-sm font-semibold tracking-[0.08em] text-white">
-                    <span className="border border-[#D3A869]/35 bg-black/35 px-3 py-2">WGA #2317225</span>
-                    <span className="border border-[#D3A869]/35 bg-black/35 px-3 py-2">WGA #2333978</span>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap justify-center gap-3 pt-2">
-                  <Button size="lg" className="bg-[#D3A869] text-[#141414] hover:bg-[#deb980]" onClick={() => scrollToSection("series-promise")}>
-                    <BookOpen className="mr-2 h-4 w-4" />
-                    Explore the series
-                  </Button>
-                  <Button size="lg" variant="outline" className="border-white/15 bg-black/35 text-white hover:bg-black/50" onClick={() => scrollToSection("project-contact")}>
-                    Start a conversation
-                  </Button>
-                </div>
-
-                <div className="flex flex-wrap justify-center gap-3 pt-1">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="border-white/10 bg-black/20 text-[#E9DED2] hover:border-[#B88A50]/45 hover:bg-black/35"
-                    onClick={() => scrollToSection("team-section")}
-                  >
-                    Meet the Creative Team
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="border-white/10 bg-black/20 text-[#E9DED2] hover:border-[#B88A50]/45 hover:bg-black/35"
-                    onClick={() => scrollToSection("season-overview")}
-                  >
-                    About the Season
-                  </Button>
-                  <div className="flex w-full items-center justify-center text-center text-xs uppercase tracking-[0.24em] text-[#A79278]">
-                    For creative, music-industry, producing, and strategic conversations
-                  </div>
-                </div>
-              </div>
+          <div className="mt-8 flex flex-col items-center justify-between gap-5 border-y border-[#b98a58]/45 py-5 sm:flex-row">
+            <div className="flex items-center gap-3">
+              <Shield className="h-5 w-5 text-[#9d642d]" />
+              <div className="text-sm font-semibold">WGA Registered</div>
+              <div className="font-mono text-xs text-[#6d5643]">#2317225 / #2333978</div>
+            </div>
+            <div className="flex flex-wrap justify-center gap-3">
+              <Button className="bg-[#17120f] text-[#f2eadc] hover:bg-[#33261d]" onClick={() => scrollToSection("series-excerpts")}>
+                <BookOpen className="mr-2 h-4 w-4" /> Read the excerpts
+              </Button>
+              <Button variant="outline" className="border-[#8d6239] bg-transparent text-[#2b2018] hover:bg-[#e2d2ba]" onClick={() => scrollToSection("project-contact")}>
+                Start a conversation
+              </Button>
             </div>
           </div>
         </div>
       </section>
 
-      <main className="mx-auto flex max-w-7xl flex-col px-4 pb-16 pt-8 sm:px-6 sm:pb-24">
-        <section className="order-1 grid gap-px overflow-hidden rounded-[26px] border border-[#8E6B3B]/16 bg-[#2A2118]/40 md:grid-cols-4">
+      <main className="relative mx-auto flex max-w-7xl flex-col px-4 pb-16 pt-8 sm:px-6 sm:pb-24">
+        <section className="order-1 grid gap-px overflow-hidden border border-[#8E6B3B]/30 bg-[#2A2118]/40 md:grid-cols-4">
           {highlightStats.map((stat) => (
             <div key={stat.label} className="bg-[linear-gradient(180deg,rgba(14,12,11,0.96)_0%,rgba(10,10,11,0.98)_100%)] px-5 py-6">
               <div className="text-3xl font-semibold tracking-[-0.04em] text-[#D3A869]">{stat.value}</div>
@@ -379,11 +335,11 @@ export default function NoiseAndFuryPage() {
 
         <section id="series-promise" className="order-2 mt-16 scroll-mt-24 border-y border-[#D3A869]/25 py-16 sm:py-20">
           <div className="mx-auto max-w-5xl text-center">
-            <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[#C59A5E]">The Series Promise</div>
-            <h2 className="mt-6 font-display text-4xl font-semibold leading-[1.08] tracking-[-0.05em] text-white sm:text-6xl">
-              They were just making music.
+            <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[#8d5124]">The Series Promise</div>
+            <h2 className="mt-6 font-display text-4xl font-medium italic leading-[1.08] tracking-[-0.05em] text-[#17110d] sm:text-6xl">
+              Out of the noise came the music. Through the fury came the freedom.
             </h2>
-            <div className="mx-auto mt-7 max-w-4xl space-y-6 text-left text-lg leading-9 text-[#E5D8CC] sm:text-xl sm:leading-10">
+            <div className="mx-auto mt-7 max-w-4xl space-y-6 text-left font-display text-lg leading-9 text-[#392b21] sm:text-xl sm:leading-10">
               <p>
                 <em>Noise &amp; Fury</em> is really about a generation of artists who came up at a time when they had room
                 to figure out who they were before the whole world was watching. They were influenced by the people
@@ -404,7 +360,7 @@ export default function NoiseAndFuryPage() {
                 These artists had no idea they were creating something that would become part of somebody else&apos;s life
                 thirty years later. They were trying to make something honest in the moment.
               </p>
-              <p className="text-center font-display text-3xl font-semibold text-[#D3A869] sm:text-4xl">
+              <p className="text-center font-display text-3xl font-semibold italic text-[#8d5124] sm:text-4xl">
                 And somehow, that honesty lasted.
               </p>
             </div>
@@ -412,14 +368,14 @@ export default function NoiseAndFuryPage() {
         </section>
 
         <section className="order-4 mt-10 grid gap-8 lg:grid-cols-[1.15fr_0.85fr]">
-          <div className="space-y-6 rounded-[30px] border border-[#8E6B3B]/18 bg-[linear-gradient(180deg,rgba(17,14,12,0.94)_0%,rgba(8,8,9,0.98)_100%)] p-7 shadow-[0_18px_60px_rgba(0,0,0,0.25)] sm:p-9">
+          <div className="space-y-6 border border-[#b9956e] bg-[#f5eddf] p-7 shadow-[0_18px_45px_rgba(77,47,24,0.12)] sm:p-9">
             <div className="space-y-3">
-              <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">Why This Story Matters</div>
-              <h2 className="font-display text-4xl font-semibold tracking-[-0.05em] text-white sm:text-5xl">
+              <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#8d5124]">Why This Story Matters</div>
+              <h2 className="font-display text-4xl font-semibold tracking-[-0.05em] text-[#17110d] sm:text-5xl">
                 Brotherhood before mythology.
               </h2>
             </div>
-            <div className="grid gap-5 text-[15px] leading-8 text-[#D7CCC2] md:grid-cols-2">
+            <div className="grid gap-5 font-display text-[16px] leading-8 text-[#46362a] md:grid-cols-2">
               <p>
                 This is not a nostalgia exercise or a conventional rise-and-fall biography. It begins with Layne,
                 Jerry, Sean and Mike Starr as working musicians—carrying amplifiers, arguing, making one another laugh
@@ -434,20 +390,20 @@ export default function NoiseAndFuryPage() {
           </div>
 
           <div className="grid gap-4">
-            <div className="rounded-[28px] border border-[#8E6B3B]/18 bg-black/45 p-6">
-              <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[#C59A5E]">Development Status</div>
-              <div className="mt-3 text-4xl font-semibold tracking-[-0.05em] text-white">The complete season is on the page.</div>
-              <div className="mt-2 text-sm leading-7 text-[#CFC2B5]">
+            <div className="border border-[#b9956e] bg-[#ede0cc] p-6">
+              <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[#8d5124]">Development Status</div>
+              <div className="mt-3 font-display text-4xl font-semibold tracking-[-0.05em] text-[#17110d]">The complete season is on the page.</div>
+              <div className="mt-2 text-sm leading-7 text-[#554133]">
                 Eight completed hour-long teleplays. A complete season bible. A complete one-pager. Final research,
                 rights clearances and consultation remain essential before production; the completed writing package
                 provides the basis for those focused conversations.
               </div>
             </div>
-            <div className="rounded-[28px] border border-[#8E6B3B]/18 bg-black/45 p-6">
-              <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[#C59A5E]">Current Priorities</div>
+            <div className="border border-[#b9956e] bg-[#ede0cc] p-6">
+              <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[#8d5124]">Current Priorities</div>
               <div className="mt-4 space-y-3">
                 {currentPriorities.map((item) => (
-                  <div key={item} className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-[#E4D7C9]">
+                  <div key={item} className="border-l-2 border-[#a9692c] bg-[#f7f0e5] px-4 py-3 text-sm text-[#46362a]">
                     {item}
                   </div>
                 ))}
@@ -508,11 +464,11 @@ export default function NoiseAndFuryPage() {
 
         <section id="season-overview" className="order-6 mt-16 scroll-mt-24">
           <div className="mx-auto max-w-3xl text-center">
-            <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">Season One Overview</div>
-            <h2 className="mt-3 font-display text-4xl font-semibold tracking-[-0.05em] text-white sm:text-5xl">
+            <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#8d5124]">Season One Overview</div>
+            <h2 className="mt-3 font-display text-4xl font-semibold tracking-[-0.05em] text-[#17110d] sm:text-5xl">
               Eight episodes. One complete arc.
             </h2>
-            <p className="mt-4 text-base leading-8 text-[#CEC1B5] sm:text-lg">
+            <p className="mt-4 font-display text-base leading-8 text-[#574435] sm:text-lg">
               Becoming. Fracture. Continuing. The season follows the original partnership, the years of change and the
               musicians who carry the work forward.
             </p>
@@ -527,27 +483,27 @@ export default function NoiseAndFuryPage() {
                   type="button"
                   aria-expanded={isOpen}
                   onClick={() => setOpenEpisodeTitle(isOpen ? null : episode.title)}
-                  className="group rounded-[28px] border border-[#8E6B3B]/18 bg-[linear-gradient(180deg,rgba(15,12,10,0.96)_0%,rgba(9,9,10,0.98)_100%)] p-6 text-left transition hover:border-[#B88A50]/55 hover:bg-[linear-gradient(180deg,rgba(22,17,13,0.98)_0%,rgba(10,10,11,1)_100%)]"
+                  className="group border border-[#b9956e] bg-[#f5eddf] p-6 text-left shadow-[0_10px_28px_rgba(77,47,24,0.08)] transition hover:-translate-y-0.5 hover:border-[#8d5124] hover:bg-[#fbf6ed]"
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <div className="text-[11px] uppercase tracking-[0.28em] text-[#B89258]">EP {index + 1} · {episode.years}</div>
-                      <div className="mt-2 font-display text-3xl font-semibold tracking-[-0.05em] text-white">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#8d5124]">EP {index + 1} · {episode.years}</div>
+                      <div className="mt-2 font-display text-3xl font-semibold tracking-[-0.05em] text-[#17110d]">
                         {episode.title}
                       </div>
-                      <div className="mt-2 text-sm uppercase tracking-[0.18em] text-[#B8AA9C]">{episode.theme}</div>
+                      <div className="mt-2 text-sm uppercase tracking-[0.18em] text-[#705a48]">{episode.theme}</div>
                     </div>
                     <ChevronDown className={`mt-1 h-5 w-5 shrink-0 text-[#D3A869] transition-transform ${isOpen ? "rotate-180" : "rotate-0"}`} />
                   </div>
 
-                  <div className="mt-5 text-[15px] leading-7 text-[#D8CCC0]">
+                  <div className="mt-5 font-display text-[16px] leading-7 text-[#46362a]">
                     {isOpen ? episode.summary : excerpt(episode.summary)}
                   </div>
 
                   {isOpen ? (
-                    <div className="mt-5 rounded-[22px] border border-[#8E6B3B]/20 bg-[#16110D]/85 px-4 py-4">
-                      <div className="text-[11px] uppercase tracking-[0.28em] text-[#C59A5E]">The Turn</div>
-                      <div className="mt-2 text-sm leading-7 text-[#F0E4D6]">{episode.turningPoint}</div>
+                    <div className="mt-5 border-l-2 border-[#a9692c] bg-[#eadbc4] px-4 py-4">
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#8d5124]">The Turn</div>
+                      <div className="mt-2 text-sm leading-7 text-[#35271e]">{episode.turningPoint}</div>
                     </div>
                   ) : null}
                 </button>
@@ -611,11 +567,11 @@ export default function NoiseAndFuryPage() {
 
         <section id="team-section" className="order-7 mt-16 scroll-mt-24">
           <div className="mx-auto max-w-3xl text-center">
-            <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">Writer and Producer Bios</div>
-            <h2 className="mt-3 font-display text-4xl font-semibold tracking-[-0.05em] text-white sm:text-5xl">
+            <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#8d5124]">Writer and Producer Bios</div>
+            <h2 className="mt-3 font-display text-4xl font-semibold tracking-[-0.05em] text-[#17110d] sm:text-5xl">
               The team shaping the package.
             </h2>
-            <p className="mt-4 text-base leading-8 text-[#CEC1B5] sm:text-lg">
+            <p className="mt-4 font-display text-base leading-8 text-[#574435] sm:text-lg">
               The full team bios are presented here so the creative and producing package reads clearly at a glance.
             </p>
           </div>
@@ -625,9 +581,9 @@ export default function NoiseAndFuryPage() {
               return (
                 <div
                   key={profile.name}
-                  className="group h-full rounded-[26px] border border-[#8E6B3B]/18 bg-[linear-gradient(180deg,rgba(15,12,10,0.96)_0%,rgba(9,9,10,0.98)_100%)] p-5 text-left transition hover:border-[#B88A50]/55 hover:bg-[linear-gradient(180deg,rgba(22,17,13,0.98)_0%,rgba(10,10,11,1)_100%)] sm:rounded-[30px] sm:p-6"
+                  className="group h-full border border-[#b9956e] bg-[#f5eddf] p-5 text-left shadow-[0_12px_34px_rgba(77,47,24,0.1)] transition hover:-translate-y-0.5 hover:border-[#8d5124] sm:p-6"
                 >
-                  <div className="overflow-hidden rounded-[22px] border border-white/10 bg-black/20 shadow-[0_22px_40px_rgba(0,0,0,0.24)]">
+                  <div className="overflow-hidden border border-[#9a7755] bg-[#1b1511] shadow-[0_18px_32px_rgba(57,36,20,0.2)]">
                     <img
                       src={profile.imagePath}
                       alt={`${profile.name} profile`}
@@ -637,14 +593,14 @@ export default function NoiseAndFuryPage() {
 
                   <div className="flex items-start justify-between gap-4">
                     <div className="pt-5">
-                      <div className="text-[11px] uppercase tracking-[0.28em] text-[#B89258]">{profile.role}</div>
-                      <div className="mt-3 font-display text-[2rem] font-semibold tracking-[-0.05em] text-white sm:text-3xl">{profile.name}</div>
+                      <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#8d5124]">{profile.role}</div>
+                      <div className="mt-3 font-display text-[2rem] font-semibold tracking-[-0.05em] text-[#17110d] sm:text-3xl">{profile.name}</div>
                     </div>
                   </div>
 
-                  <div className="mt-4 text-sm leading-6 text-[#D3C6BA] sm:leading-7">{profile.teaser}</div>
+                  <div className="mt-4 text-sm leading-6 text-[#554133] sm:leading-7">{profile.teaser}</div>
 
-                  <div className="mt-5 space-y-4 border-t border-white/10 pt-5 text-sm leading-6 text-[#EFE3D7] sm:leading-7">
+                  <div className="mt-5 space-y-4 border-t border-[#b9956e] pt-5 font-display text-sm leading-6 text-[#392b21] sm:leading-7">
                     {profile.paragraphs.map((paragraph) => (
                       <p key={paragraph}>{paragraph}</p>
                     ))}
@@ -797,6 +753,14 @@ export default function NoiseAndFuryPage() {
           </div>
         </section>
       </main>
+      <footer className="relative h-[420px] overflow-hidden border-t border-[#9b682f] bg-[#090807] sm:h-[520px] lg:h-[620px]">
+        <img
+          src={ONE_PAGER_ART_PATH}
+          alt="Seattle skyline and Space Needle from the Noise & Fury one-pager"
+          className="absolute inset-0 h-full w-full object-cover object-bottom"
+        />
+        <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(9,8,7,0.88)_0%,rgba(9,8,7,0.18)_26%,rgba(9,8,7,0.02)_66%,rgba(9,8,7,0.28)_100%)]" />
+      </footer>
       <NoiseAndFuryExcerptDialog
         open={excerptOpen}
         excerptId={selectedExcerptId}

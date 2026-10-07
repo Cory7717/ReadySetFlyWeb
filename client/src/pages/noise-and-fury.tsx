@@ -253,9 +253,10 @@ export default function NoiseAndFuryPage() {
           <img
             src={ONE_PAGER_ART_PATH}
             alt=""
-            className="absolute bottom-0 left-1/2 w-[1300px] max-w-none -translate-x-1/2 opacity-[0.28] mix-blend-luminosity sm:w-full sm:min-w-[900px]"
+            className="absolute bottom-[-45px] left-[55%] w-[620px] max-w-none -translate-x-1/2 opacity-[0.62] saturate-[0.75] sm:bottom-0 sm:left-1/2 sm:w-full sm:min-w-[900px]"
           />
-          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(5,5,5,0.94)_0%,rgba(5,5,5,0.66)_48%,rgba(5,5,5,0.88)_100%)]" />
+          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(5,5,5,0.72)_0%,rgba(5,5,5,0.34)_48%,rgba(5,5,5,0.66)_100%)]" />
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(5,5,5,0.2)_0%,rgba(5,5,5,0.02)_52%,rgba(5,5,5,0.48)_100%)]" />
           <div className="absolute inset-0 opacity-35 [background-image:linear-gradient(115deg,transparent_0%,rgba(196,142,75,0.16)_48%,transparent_49%),radial-gradient(circle_at_15%_20%,rgba(255,255,255,0.08)_0_1px,transparent_1px)] [background-size:auto,9px_9px]" />
         </div>
         <div className="relative mx-auto max-w-7xl px-5 py-5 sm:px-8 sm:py-8">

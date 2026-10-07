@@ -16,8 +16,7 @@ import {
   type NoiseAndFuryExcerptId,
 } from "@/components/noise-and-fury/NoiseAndFuryExcerptDialog";
 
-const HERO_IMAGE_PATH = "/downloads/noise-and-fury-hero-textless.png";
-const NOISE_AND_FURY_LOGO_PATH = "/downloads/noise-and-fury-grunge-logo.png";
+const HERO_IMAGE_PATH = "/downloads/noise-and-fury-hero.jpg";
 const MARC_LOGO_PATH = "/downloads/marc-production-logo.jpg";
 const CORY_BIO_IMAGE_PATH = "/downloads/noise-and-fury-cory.jpg";
 const CESAR_BIO_IMAGE_PATH = "/downloads/noise-and-fury-cesar.jpg";
@@ -272,14 +271,6 @@ export default function NoiseAndFuryPage() {
               <div className="mx-auto max-w-4xl space-y-6 text-center">
                 <div className="space-y-5">
                   <h1 className="sr-only">Noise &amp; Fury</h1>
-                  <div className="mx-auto max-w-[920px] bg-[radial-gradient(ellipse_at_center,_rgba(213,171,105,0.24)_0%,_rgba(26,18,12,0.5)_48%,_rgba(6,6,7,0)_74%)] px-2 py-3 sm:px-3 sm:py-4">
-                    <img
-                      src={NOISE_AND_FURY_LOGO_PATH}
-                      alt=""
-                      aria-hidden="true"
-                      className="h-auto w-full object-contain [filter:drop-shadow(0_0_12px_rgba(211,168,105,0.26))_drop-shadow(0_16px_26px_rgba(0,0,0,0.9))]"
-                    />
-                  </div>
                   <div className="mx-auto max-w-[920px] text-center">
                     <div className="font-display text-[11px] font-semibold uppercase tracking-[0.22em] text-[#E8DED2] [text-shadow:0_2px_12px_rgba(0,0,0,0.95)] sm:text-sm sm:tracking-[0.38em]">
                       Season One <span className="text-[#C99A58]">—</span> Alice in Chains

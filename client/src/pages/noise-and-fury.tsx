@@ -10,7 +10,7 @@ import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 import { trackEvent } from "@/lib/analytics";
 import { useToast } from "@/hooks/use-toast";
-import { BookOpen, ChevronDown, Shield } from "lucide-react";
+import { BookOpen, ChevronDown, ExternalLink, Shield } from "lucide-react";
 import {
   NoiseAndFuryExcerptDialog,
   type NoiseAndFuryExcerptId,
@@ -130,6 +130,7 @@ const teamProfiles = [
     role: "Producer",
     name: "Scott Rosenfelt",
     imagePath: SCOTT_BIO_IMAGE_PATH,
+    imdbUrl: "https://www.imdb.com/name/nm0742586/",
     teaser:
       "Veteran producer and writer bringing major feature credibility, market trust, and experienced packaging guidance.",
     paragraphs: [
@@ -614,6 +615,18 @@ export default function NoiseAndFuryPage() {
                     <div className="pt-5">
                       <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#8d5124]">{profile.role}</div>
                       <div className="mt-3 font-display text-[2rem] font-semibold tracking-[-0.05em] text-[#17110d] sm:text-3xl">{profile.name}</div>
+                      {"imdbUrl" in profile && profile.imdbUrl ? (
+                        <a
+                          href={profile.imdbUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-[#8d5124] underline-offset-4 transition hover:text-[#5f3519] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8d5124] focus-visible:ring-offset-2 focus-visible:ring-offset-[#f5eddf]"
+                          aria-label={`View ${profile.name} on IMDb`}
+                        >
+                          View on IMDb
+                          <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+                        </a>
+                      ) : null}
                     </div>
                   </div>
 

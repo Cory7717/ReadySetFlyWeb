@@ -248,16 +248,26 @@ export default function NoiseAndFuryPage() {
 
   return (
     <div className="min-h-screen overflow-hidden bg-[radial-gradient(circle_at_top,_rgba(145,98,42,0.16)_0%,_rgba(24,18,13,0.82)_24%,_rgba(6,6,7,1)_72%)] text-[#F4EEE9]">
-      <section className="relative min-h-[92vh] overflow-hidden border-b border-[#8E6B3B]/18">
+      <section className="relative overflow-hidden border-b border-[#8E6B3B]/18 sm:min-h-[92vh]">
         <img
           src={HERO_IMAGE_PATH}
-          alt="Noise and Fury amplifiers"
-          className="absolute inset-0 h-full w-full object-cover object-[center_12%]"
+          alt=""
+          aria-hidden="true"
+          className="absolute inset-0 hidden h-full w-full object-cover object-[center_12%] sm:block"
         />
-        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(6,6,7,0.18)_0%,rgba(6,6,7,0.48)_34%,rgba(6,6,7,0.78)_70%,rgba(6,6,7,0.96)_100%)]" />
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(8,6,5,0.78)_0%,rgba(8,6,5,0.28)_42%,rgba(8,6,5,0.14)_62%,rgba(8,6,5,0.82)_100%)]" />
+        <div className="absolute inset-0 hidden bg-[linear-gradient(180deg,rgba(6,6,7,0.18)_0%,rgba(6,6,7,0.48)_34%,rgba(6,6,7,0.78)_70%,rgba(6,6,7,0.96)_100%)] sm:block" />
+        <div className="absolute inset-0 hidden bg-[linear-gradient(90deg,rgba(8,6,5,0.78)_0%,rgba(8,6,5,0.28)_42%,rgba(8,6,5,0.14)_62%,rgba(8,6,5,0.82)_100%)] sm:block" />
 
-        <div className="container relative mx-auto flex min-h-[92vh] flex-col px-4 pb-10 pt-8 sm:px-6 sm:pb-14 sm:pt-10">
+        <div className="relative aspect-square w-full bg-black sm:hidden">
+          <img
+            src={HERO_IMAGE_PATH}
+            alt="Noise & Fury amplifier artwork"
+            className="h-full w-full object-contain object-top"
+          />
+          <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(180deg,rgba(6,6,7,0.06)_0%,rgba(6,6,7,0.02)_68%,rgba(6,6,7,0.92)_100%)]" />
+        </div>
+
+        <div className="container relative mx-auto flex flex-col px-4 pb-10 pt-6 sm:min-h-[92vh] sm:px-6 sm:pb-14 sm:pt-10">
           <div className="flex justify-center">
             <img
               src={MARC_LOGO_PATH}

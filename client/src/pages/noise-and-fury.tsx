@@ -16,8 +16,7 @@ import {
   type NoiseAndFuryExcerptId,
 } from "@/components/noise-and-fury/NoiseAndFuryExcerptDialog";
 
-const ONE_PAGER_ART_PATH = "/downloads/noise-and-fury-one-pager-design.png";
-const MARC_LOGO_PATH = "/downloads/marc-production-logo.jpg";
+const CONCERT_POSTER_PATH = "/downloads/noise-and-fury-concert-poster.png";
 const CORY_BIO_IMAGE_PATH = "/downloads/noise-and-fury-cory.jpg";
 const CESAR_BIO_IMAGE_PATH = "/downloads/noise-and-fury-cesar.jpg";
 const SCOTT_BIO_IMAGE_PATH = "/downloads/noise-and-fury-scott.jpg";
@@ -249,49 +248,34 @@ export default function NoiseAndFuryPage() {
 
   return (
     <div className="min-h-screen overflow-hidden bg-[#e9dfce] text-[#241a13] [background-image:radial-gradient(circle_at_10%_18%,rgba(91,55,25,0.08)_0_1px,transparent_1.5px),radial-gradient(circle_at_82%_68%,rgba(91,55,25,0.06)_0_1px,transparent_1.5px)] [background-size:29px_31px,37px_41px]">
-      <section className="relative overflow-hidden border-b border-[#9b682f] bg-[#080807] text-[#f2e9dc]">
+      <section className="relative isolate overflow-hidden border-b border-[#9b682f] bg-[#050505] text-[#f2e9dc]">
         <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
           <img
-            src={ONE_PAGER_ART_PATH}
+            src={CONCERT_POSTER_PATH}
             alt=""
-            className="absolute bottom-[-45px] left-[55%] w-[620px] max-w-none -translate-x-1/2 opacity-[0.62] saturate-[0.75] sm:bottom-0 sm:left-1/2 sm:w-full sm:min-w-[900px]"
+            className="absolute inset-[-7%] h-[114%] w-[114%] object-cover object-center opacity-55 blur-[18px] saturate-[0.9]"
           />
-          <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(5,5,5,0.72)_0%,rgba(5,5,5,0.34)_48%,rgba(5,5,5,0.66)_100%)]" />
-          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(5,5,5,0.2)_0%,rgba(5,5,5,0.02)_52%,rgba(5,5,5,0.48)_100%)]" />
-          <div className="absolute inset-0 opacity-35 [background-image:linear-gradient(115deg,transparent_0%,rgba(196,142,75,0.16)_48%,transparent_49%),radial-gradient(circle_at_15%_20%,rgba(255,255,255,0.08)_0_1px,transparent_1px)] [background-size:auto,9px_9px]" />
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(4,4,4,0.08)_0%,rgba(3,3,3,0.74)_72%,rgba(2,2,2,0.96)_100%)]" />
+          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(3,3,3,0.38)_0%,transparent_28%,transparent_70%,rgba(3,3,3,0.74)_100%)]" />
         </div>
-        <div className="relative mx-auto max-w-7xl px-5 py-5 sm:px-8 sm:py-8">
-          <div className="grid grid-cols-[1fr_1.3fr_0.85fr] items-center gap-2 text-center sm:grid-cols-[0.85fr_1.3fr_0.85fr] sm:gap-7">
-            <div className="relative mx-auto h-[84px] w-[136px] overflow-hidden sm:mx-0 sm:h-[180px] sm:w-[290px]">
-              <img
-                src={ONE_PAGER_ART_PATH}
-                alt="Noise & Fury"
-                className="absolute left-[-31px] top-[-14px] w-[520px] max-w-none sm:left-[-65px] sm:top-[-30px] sm:w-[1103px]"
-              />
-            </div>
-            <div className="mx-auto w-full max-w-xl text-center">
-              <div className="mx-auto h-px w-3/4 bg-[linear-gradient(90deg,transparent,#bd8545,transparent)]" />
-              <div className="py-2 font-serif text-[9px] uppercase leading-5 tracking-[0.22em] text-[#e3d8c9] sm:py-5 sm:text-[clamp(1rem,2vw,1.7rem)] sm:leading-normal sm:tracking-[0.38em]">
-                A Prestige Dramatic Series
-              </div>
-              <div className="mx-auto h-px w-3/4 bg-[linear-gradient(90deg,transparent,#bd8545,transparent)]" />
-            </div>
+
+        <div className="relative mx-auto flex max-w-7xl justify-center px-3 py-5 sm:px-8 sm:py-10 lg:py-12">
+          <div className="relative w-full max-w-[760px] overflow-hidden border border-[#b87b38]/35 bg-black shadow-[0_36px_110px_rgba(0,0,0,0.78)]">
+            <img
+              src={CONCERT_POSTER_PATH}
+              alt="Noise & Fury — Season One: Alice in Chains. Out of the noise came the music. Through the fury came the freedom."
+              className="block h-auto w-full"
+            />
             <a
               href="https://marcmovies.com/"
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Visit MARC Production Enterprises"
-              className="mx-auto block w-full max-w-[76px] transition duration-200 hover:scale-[1.03] hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#d7a264] focus-visible:ring-offset-2 focus-visible:ring-offset-[#080807] sm:ml-auto sm:mr-0 sm:max-w-[165px]"
+              title="Visit MARC Production Enterprises"
+              className="absolute left-[42%] top-[0.5%] h-[8.5%] w-[16%] rounded-sm transition hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e7bc7c] focus-visible:ring-inset"
             >
-              <img
-                src={MARC_LOGO_PATH}
-                alt="MARC Production Enterprises"
-                className="w-full border border-white/10 bg-[#0B0A0A]/80 p-1.5 shadow-[0_20px_55px_rgba(0,0,0,0.5)] sm:p-3"
-              />
+              <span className="sr-only">Visit MARC Production Enterprises</span>
             </a>
-          </div>
-          <div className="mt-4 border-t border-[#a66e33]/50 pt-4 text-center text-[10px] font-semibold uppercase tracking-[0.3em] text-[#d7a264] sm:mt-5 sm:text-xs sm:tracking-[0.5em]">
-            Season One <span className="px-2 text-[#8d6541]">/</span> Alice in Chains
           </div>
         </div>
       </section>
@@ -299,12 +283,7 @@ export default function NoiseAndFuryPage() {
       <section className="relative overflow-hidden border-b border-[#b4936b] bg-[#f2eadc] px-5 py-12 text-[#201711] sm:px-8 sm:py-16">
         <div className="pointer-events-none absolute inset-0 opacity-55 [background-image:radial-gradient(circle_at_12%_20%,rgba(92,56,24,0.13)_0_1px,transparent_1.5px),radial-gradient(circle_at_78%_65%,rgba(92,56,24,0.09)_0_1px,transparent_1.5px)] [background-size:23px_29px,31px_37px]" />
         <div className="relative mx-auto max-w-6xl">
-          <h1 className="font-serif text-[1.45rem] font-medium italic leading-[1.02] tracking-[-0.045em] text-black sm:text-[clamp(2.3rem,5.15vw,4.65rem)]">
-            <span className="block whitespace-nowrap">Out of the noise came the music.</span>
-            <span className="block whitespace-nowrap">Through the fury came the freedom.</span>
-          </h1>
-          <div className="mt-8 h-0.5 w-24 bg-[#a9692c]" />
-          <div className="mt-8 grid gap-4 border-b border-[#b98a58]/45 pb-9 md:grid-cols-[8rem_1fr] md:gap-8">
+          <div className="grid gap-4 border-b border-[#b98a58]/45 pb-9 md:grid-cols-[8rem_1fr] md:gap-8">
             <div className="text-xs font-bold uppercase tracking-[0.28em] text-[#8d5124]">Logline</div>
             <p className="font-serif text-xl leading-8 text-[#2b211a] sm:text-2xl sm:leading-10">
               In late-1980s Seattle, four young musicians forge the bond that makes Alice in Chains a defining voice of

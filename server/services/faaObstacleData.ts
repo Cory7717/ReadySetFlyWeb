@@ -532,7 +532,7 @@ export function createFaaObstacleDataService(
       downloadUrl,
       {
         headers: {
-          Accept: "application/zip, application/octet-stream",
+          Accept: "application/octet-stream",
           "Accept-Encoding": "identity",
           "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)",
         },
@@ -604,28 +604,26 @@ export function createFaaObstacleDataService(
     if (httpPublishedAt !== null) freshnessBasis.push("http-last-modified");
     if (zipPublishedAt !== null) freshnessBasis.push("zip-entry-time");
     if (directoryMetadata) freshnessBasis.push("faa-directory-size");
-    if (!sourceWasOverridden) {
-      const publicationSignals = [httpPublishedAt, zipPublishedAt].filter(
-        (value): value is number => value !== null,
+    const publicationSignals = [httpPublishedAt, zipPublishedAt].filter(
+      (value): value is number => value !== null,
+    );
+    if (
+      publicationSignals.some(
+        (value) => value > startedAt + 24 * 60 * 60 * 1000,
+      )
+    ) {
+      throw new FaaObstacleDataError(
+        "FAA DDOF publication timestamp is unexpectedly in the future",
       );
-      if (
-        publicationSignals.some(
-          (value) => value > startedAt + 24 * 60 * 60 * 1000,
-        )
-      ) {
-        throw new FaaObstacleDataError(
-          "FAA DDOF publication timestamp is unexpectedly in the future",
-        );
-      }
-      if (
-        publicationSignals.some(
-          (value) => startedAt - value > maxPublicationAgeMs,
-        )
-      ) {
-        throw new FaaObstacleDataError(
-          "FAA DDOF publication is older than the accepted freshness window",
-        );
-      }
+    }
+    if (
+      publicationSignals.some(
+        (value) => startedAt - value > maxPublicationAgeMs,
+      )
+    ) {
+      throw new FaaObstacleDataError(
+        "FAA DDOF publication is older than the accepted freshness window",
+      );
     }
 
     const nextSnapshot: VerifiedSnapshot = {

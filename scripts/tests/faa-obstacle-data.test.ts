@@ -172,6 +172,7 @@ test("verified refresh accepts matching directory metadata and exposes additive 
   assert.ok(result.referenceData.freshnessBasis.includes("faa-directory-size"));
   const archiveRequest = requests.find(({ url }) => url.includes("rsf_refresh="));
   assert.ok(archiveRequest);
+  assert.equal(archiveRequest.headers.get("accept"), "application/octet-stream");
   assert.equal(archiveRequest.headers.get("accept-encoding"), "identity");
   assert.equal(archiveRequest.headers.get("cache-control"), null);
 });
@@ -215,6 +216,27 @@ test("official publication timestamp must be current enough", async () => {
         headers: { "last-modified": "Thu, 01 Oct 2026 03:31:49 GMT" },
       });
     },
+  });
+  await assert.rejects(service.getData(), /older than the accepted freshness window/);
+});
+
+test("an environment override cannot bypass reliable stale publication timestamps", async () => {
+  const archive = zipWith(
+    "DOF.CSV",
+    csv(),
+    new Date("2026-10-01T03:31:49Z"),
+  );
+  const service = createFaaObstacleDataService({
+    sourceUrl: "https://mirror.example/dof.zip",
+    sourceWasOverridden: true,
+    minRecords: 2,
+    maxRecords: 10,
+    now: () => Date.parse("2026-10-12T12:00:00Z"),
+    fetchImpl: async () =>
+      new Response(new Uint8Array(archive), {
+        status: 200,
+        headers: { "last-modified": "Thu, 01 Oct 2026 03:31:49 GMT" },
+      }),
   });
   await assert.rejects(service.getData(), /older than the accepted freshness window/);
 });

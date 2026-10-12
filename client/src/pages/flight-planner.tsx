@@ -1427,6 +1427,14 @@ type RunwayBriefingResponse = {
     crosswind?: number | null;
   } | null;
   runways: RunwayBriefingRunway[];
+  referenceData?: {
+    provider?: string;
+    sourceHost?: string;
+    fetchedAt?: string | null;
+    ageSeconds?: number | null;
+    stale?: boolean;
+    cacheStatus?: "fresh" | "stale" | "expired" | "empty";
+  };
 };
 
 const FALLBACK_TYPE: AircraftType = {
@@ -9098,6 +9106,11 @@ export default function FlightPlanner() {
               )}
               {departureRunwayBriefingQuery.data && (
                 <div className="space-y-1 text-xs text-muted-foreground">
+                  {departureRunwayBriefingQuery.data.referenceData?.stale && (
+                    <div className="rounded-md border border-amber-700/40 bg-amber-950/30 px-3 py-2 text-amber-100">
+                      Runway dimensions and surfaces are using cached OurAirports reference data. Verify current conditions, closures, and restrictions through official airport information and NOTAMs.
+                    </div>
+                  )}
                   {departureRunwayBriefingQuery.data.advisory?.runway && (
                     <div>
                       Suggested from current wind:{" "}

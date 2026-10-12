@@ -18,6 +18,14 @@ type RunwayBriefing = {
     lengthFt: number | null;
     surface: string | null;
   }>;
+  referenceData?: {
+    provider?: string;
+    sourceHost?: string;
+    fetchedAt?: string | null;
+    ageSeconds?: number | null;
+    stale?: boolean;
+    cacheStatus?: 'fresh' | 'stale' | 'expired' | 'empty';
+  };
 };
 
 type NotamResponse = {
@@ -129,6 +137,13 @@ export default function AirportBriefingScreen() {
         title="Runway advisory"
         subtitle="Advisory only. Always verify runway use with ATIS, CTAF, or tower instructions."
       >
+        {briefing?.referenceData?.stale ? (
+          <View style={styles.staleDataBox}>
+            <Text style={styles.staleDataText}>
+              Runway dimensions and surfaces are using cached OurAirports reference data. Verify current conditions, closures, and restrictions through official airport information and NOTAMs.
+            </Text>
+          </View>
+        ) : null}
         {briefingLoading ? (
           <ActivityIndicator color={colors.primary} />
         ) : briefing?.advisory ? (
@@ -310,6 +325,15 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primarySoft,
     marginBottom: spacing.sm,
   },
+  staleDataBox: {
+    borderWidth: 1,
+    borderColor: '#92400e',
+    backgroundColor: '#451a03',
+    borderRadius: radius.md,
+    padding: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  staleDataText: { fontSize: 12, lineHeight: 17, color: '#fde68a' },
   advisoryTitle: { fontSize: 14, fontWeight: '800', color: colors.text },
   advisoryText: { fontSize: 12, color: colors.textMuted, marginTop: 4 },
   helperText: { fontSize: 12, color: colors.textMuted, marginTop: spacing.xs },

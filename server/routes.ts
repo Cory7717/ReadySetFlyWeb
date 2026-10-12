@@ -16,6 +16,11 @@ import { z } from "zod";
 import jwt from "jsonwebtoken";
 import { getNasrActivityAreas } from "./services/nasrActivityAreas";
 import {
+  createRunwayReferenceCache,
+  RunwayReferenceFetchError,
+  type RunwayMeta,
+} from "./services/runway-reference-cache";
+import {
   Client,
   Environment,
   LogLevel,
@@ -3023,16 +3028,6 @@ type AirportReference = AirportSearchResult & {
   iataCode?: string | null;
 };
 
-type RunwayMeta = {
-  leIdent: string | null;
-  heIdent: string | null;
-  leHeading: number | null;
-  heHeading: number | null;
-  lengthFt: number | null;
-  widthFt: number | null;
-  surface: string | null;
-};
-
 const SUPPLEMENTAL_RUNWAYS: Record<string, RunwayMeta[]> = {
   KARB: [
     {
@@ -3345,7 +3340,9 @@ const STATION_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 let stationCache: { data: AirportSearchResult[]; expiresAt: number } | null =
   null;
 let stationCachePromise: Promise<AirportSearchResult[]> | null = null;
-const AIRPORTS_CACHE_URL = "https://ourairports.com/data/airports.csv";
+const OURAIRPORTS_DATA_BASE_URL =
+  "https://davidmegginson.github.io/ourairports-data";
+const AIRPORTS_CACHE_URL = `${OURAIRPORTS_DATA_BASE_URL}/airports.csv`;
 const AIRPORTS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 let airportTimezoneCache: {
   data: Map<string, string>;
@@ -3359,13 +3356,15 @@ let airportReferenceCache: {
 let airportReferenceCachePromise: Promise<
   Map<string, AirportReference>
 > | null = null;
-const RUNWAY_CACHE_URL = "https://ourairports.com/data/runways.csv";
 const RUNWAY_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
-let runwayCache: { data: Map<string, RunwayMeta[]>; expiresAt: number } | null =
-  null;
-let runwayCachePromise: Promise<Map<string, RunwayMeta[]>> | null = null;
-const AIRPORT_FREQUENCIES_CACHE_URL =
-  "https://ourairports.com/data/airport-frequencies.csv";
+const runwayReferenceCache = createRunwayReferenceCache({
+  sourceUrl: `${OURAIRPORTS_DATA_BASE_URL}/runways.csv`,
+  ttlMs: RUNWAY_CACHE_TTL_MS,
+  maxStaleMs: 7 * 24 * 60 * 60 * 1000,
+  retryDelayMs: 5 * 60 * 1000,
+  timeoutMs: 15 * 1000,
+});
+const AIRPORT_FREQUENCIES_CACHE_URL = `${OURAIRPORTS_DATA_BASE_URL}/airport-frequencies.csv`;
 const AIRPORT_FREQUENCIES_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 let airportFrequencyCache: {
   data: Map<string, AirportFrequencyMeta[]>;
@@ -3374,7 +3373,7 @@ let airportFrequencyCache: {
 let airportFrequencyCachePromise: Promise<
   Map<string, AirportFrequencyMeta[]>
 > | null = null;
-const NAVAIDS_CACHE_URL = "https://ourairports.com/data/navaids.csv";
+const NAVAIDS_CACHE_URL = `${OURAIRPORTS_DATA_BASE_URL}/navaids.csv`;
 const NAVAIDS_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
 let navaidCache: { data: Map<string, NavaidMeta[]>; expiresAt: number } | null =
   null;
@@ -5941,81 +5940,7 @@ out body;
 }
 
 async function loadRunwayCache(): Promise<Map<string, RunwayMeta[]>> {
-  const now = Date.now();
-  if (runwayCache && runwayCache.expiresAt > now) return runwayCache.data;
-  if (runwayCachePromise) return runwayCachePromise;
-
-  runwayCachePromise = (async () => {
-    const response = await fetch(RUNWAY_CACHE_URL, {
-      headers: { "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)" },
-    });
-    if (!response.ok) {
-      throw new Error(`Failed to load runways data: ${response.status}`);
-    }
-
-    const csvText = await response.text();
-    const lines = csvText
-      .split(/\r?\n/)
-      .filter((line) => line.trim().length > 0);
-    if (lines.length === 0) {
-      const empty = new Map<string, RunwayMeta[]>();
-      runwayCache = {
-        data: empty,
-        expiresAt: Date.now() + RUNWAY_CACHE_TTL_MS,
-      };
-      return empty;
-    }
-
-    const header = parseCsvLine(lines[0]);
-    const idx = (name: string) => header.indexOf(name);
-
-    const airportIdentIdx = idx("airport_ident");
-    const lengthIdx = idx("length_ft");
-    const widthIdx = idx("width_ft");
-    const surfaceIdx = idx("surface");
-    const closedIdx = idx("closed");
-    const leIdentIdx = idx("le_ident");
-    const heIdentIdx = idx("he_ident");
-    const leHeadingIdx = idx("le_heading_degT");
-    const heHeadingIdx = idx("he_heading_degT");
-
-    const dataMap = new Map<string, RunwayMeta[]>();
-
-    for (let i = 1; i < lines.length; i += 1) {
-      const row = parseCsvLine(lines[i]);
-      const airportIdent = row[airportIdentIdx]?.toUpperCase();
-      if (!airportIdent) continue;
-      const isClosed = row[closedIdx] === "1";
-      if (isClosed) continue;
-
-      const runway: RunwayMeta = {
-        leIdent: row[leIdentIdx] || null,
-        heIdent: row[heIdentIdx] || null,
-        leHeading: row[leHeadingIdx] ? Number(row[leHeadingIdx]) : null,
-        heHeading: row[heHeadingIdx] ? Number(row[heHeadingIdx]) : null,
-        lengthFt: row[lengthIdx] ? Number(row[lengthIdx]) : null,
-        widthFt: row[widthIdx] ? Number(row[widthIdx]) : null,
-        surface: row[surfaceIdx] || null,
-      };
-
-      if (!dataMap.has(airportIdent)) {
-        dataMap.set(airportIdent, []);
-      }
-      dataMap.get(airportIdent)!.push(runway);
-    }
-
-    runwayCache = {
-      data: dataMap,
-      expiresAt: Date.now() + RUNWAY_CACHE_TTL_MS,
-    };
-    return dataMap;
-  })();
-
-  try {
-    return await runwayCachePromise;
-  } finally {
-    runwayCachePromise = null;
-  }
+  return runwayReferenceCache.load();
 }
 
 async function loadAirportFrequencyCache(): Promise<
@@ -22740,6 +22665,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
       const buildPromise = (async () => {
         const runwayMap = await loadRunwayCache();
+        const runwayReferenceStatus = runwayReferenceCache.getStatus();
         const runways = getRunwaysForAirport(runwayMap, requestedIcao);
 
         const candidates = buildIcaoCandidates(requestedIcao);
@@ -22808,6 +22734,14 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
               }
             : null,
           runways,
+          referenceData: {
+            provider: "OurAirports",
+            sourceHost: runwayReferenceStatus.sourceHost,
+            fetchedAt: runwayReferenceStatus.fetchedAt,
+            ageSeconds: runwayReferenceStatus.ageSeconds,
+            stale: runwayReferenceStatus.stale,
+            cacheStatus: runwayReferenceStatus.cacheStatus,
+          },
         };
         await setCachedMapPayload(
           runwayBriefingCache,
@@ -22826,9 +22760,22 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       } finally {
         runwayBriefingInFlight.delete(briefingCacheKey);
       }
-    } catch (error) {
-      console.error("Runway briefing failed:", error);
-      res.status(500).json({ error: "Failed to fetch runway briefing" });
+    } catch (error: any) {
+      if (!(error instanceof RunwayReferenceFetchError)) {
+        console.error(
+          JSON.stringify({
+            event: "runway_briefing_failed",
+            operation: "build_runway_briefing",
+            requestId: res.locals.requestId || undefined,
+            icao: normalizeIcao(req.params.icao || ""),
+            errorClassification: "application",
+            errorCode: String(error?.code || error?.name || "UNKNOWN"),
+          }),
+        );
+      }
+      res
+        .status(500)
+        .json({ error: "Failed to fetch runway briefing", stale: false });
     }
   });
 

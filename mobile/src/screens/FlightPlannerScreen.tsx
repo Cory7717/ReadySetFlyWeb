@@ -454,6 +454,14 @@ type RunwayBriefingResponse = {
     lengthFt?: number | null;
     surface?: string | null;
   }> | null;
+  referenceData?: {
+    provider?: string;
+    sourceHost?: string;
+    fetchedAt?: string | null;
+    ageSeconds?: number | null;
+    stale?: boolean;
+    cacheStatus?: 'fresh' | 'stale' | 'expired' | 'empty';
+  };
 };
 
 type AirportFrequencyResponse = {

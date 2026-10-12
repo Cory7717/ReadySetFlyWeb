@@ -60,10 +60,50 @@ export type FaaDtppCycleManagerOptions = {
 };
 
 export class FaaDtppCycleError extends Error {
-  constructor(message: string, options?: { cause?: unknown }) {
+  readonly diagnostic?: {
+    stage: string;
+    hostname: string;
+    pathname: string;
+    status: number | null;
+    redirected?: boolean;
+  };
+
+  constructor(
+    message: string,
+    options?: {
+      cause?: unknown;
+      diagnostic?: FaaDtppCycleError["diagnostic"];
+    },
+  ) {
     super(message, options);
     this.name = "FaaDtppCycleError";
+    this.diagnostic = options?.diagnostic;
   }
+}
+
+function safeRequestTarget(value: string) {
+  try {
+    const url = new URL(value);
+    return { hostname: url.hostname, pathname: url.pathname };
+  } catch {
+    return { hostname: "invalid-url", pathname: "/" };
+  }
+}
+
+function errorDiagnostics(error: unknown) {
+  return error instanceof FaaDtppCycleError && error.diagnostic
+    ? error.diagnostic
+    : {};
+}
+
+function withRequestDiagnostic(error: unknown, stage: string, url: string) {
+  if (error instanceof FaaDtppCycleError && error.diagnostic) return error;
+  const target = safeRequestTarget(url);
+  const message = error instanceof Error ? error.message : "unknown validation error";
+  return new FaaDtppCycleError(`${message} [${target.hostname}${target.pathname}]`, {
+    cause: error,
+    diagnostic: { stage, ...target, status: null },
+  });
 }
 
 function decodeHtml(value: string) {
@@ -152,6 +192,17 @@ export function parseFaaDtppCycleListings(html: string) {
   return listings;
 }
 
+export function parseFaaDtppMetadataUrls(html: string) {
+  const urls = new Map<string, string>();
+  const pattern =
+    /href=["'](https:\/\/aeronav\.faa\.gov\/d-tpp\/(\d{4})\/xml_data\/d-tpp_Metafile\.xml)["']/gi;
+  let match: RegExpExecArray | null;
+  while ((match = pattern.exec(html))) {
+    urls.set(match[2], match[1]);
+  }
+  return urls;
+}
+
 export function selectEffectiveFaaDtppCycle(
   listings: FaaDtppCycleListing[],
   nowMs: number,
@@ -174,7 +225,7 @@ export function selectEffectiveFaaDtppCycle(
 
 function officialUrls(cycle: string) {
   return {
-    metaUrl: `${FAA_DTPP_BASE_URL}/${cycle}/xml_data/d-TPP_Metafile.xml`,
+    metaUrl: `${FAA_DTPP_BASE_URL}/${cycle}/xml_data/d-tpp_Metafile.xml`,
     pdfBaseUrl: `${FAA_DTPP_BASE_URL}/${cycle}`,
   };
 }
@@ -287,7 +338,9 @@ async function fetchBoundedText(
   timeoutMs: number,
   maxBytes: number,
   headers: Record<string, string> = {},
+  stage = "resource",
 ) {
+  const requestedTarget = safeRequestTarget(url);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -300,7 +353,18 @@ async function fetchBoundedText(
       },
     });
     if (!response.ok) {
-      throw new FaaDtppCycleError(`FAA d-TPP request failed (${response.status})`);
+      const finalTarget = safeRequestTarget(response.url || url);
+      throw new FaaDtppCycleError(
+        `FAA d-TPP ${stage} request failed (${response.status}) [${finalTarget.hostname}${finalTarget.pathname}]`,
+        {
+          diagnostic: {
+            stage,
+            ...finalTarget,
+            status: response.status,
+            redirected: response.redirected,
+          },
+        },
+      );
     }
     const declaredLength = Number(response.headers.get("content-length"));
     if (Number.isFinite(declaredLength) && declaredLength > maxBytes && !headers.Range) {
@@ -308,10 +372,17 @@ async function fetchBoundedText(
     }
     return await readBoundedText(response, controller, maxBytes);
   } catch (error) {
-    if (error instanceof FaaDtppCycleError) throw error;
+    if (error instanceof FaaDtppCycleError && error.diagnostic) throw error;
     throw new FaaDtppCycleError(
-      `FAA d-TPP request failed: ${error instanceof Error ? error.message : "unknown error"}`,
-      { cause: error },
+      `FAA d-TPP ${stage} request failed: ${error instanceof Error ? error.message : "unknown error"} [${requestedTarget.hostname}${requestedTarget.pathname}]`,
+      {
+        cause: error,
+        diagnostic: {
+          stage,
+          ...requestedTarget,
+          status: null,
+        },
+      },
     );
   } finally {
     clearTimeout(timeout);
@@ -323,6 +394,7 @@ async function validatePdf(
   url: string,
   timeoutMs: number,
 ) {
+  const requestedTarget = safeRequestTarget(url);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
@@ -332,8 +404,17 @@ async function validatePdf(
       headers: { "User-Agent": FAA_HTTP_USER_AGENT },
     });
     if (!response.ok) {
+      const finalTarget = safeRequestTarget(response.url || url);
       throw new FaaDtppCycleError(
-        `FAA d-TPP representative PDF was unavailable (${response.status})`,
+        `FAA d-TPP representative PDF request failed (${response.status}) [${finalTarget.hostname}${finalTarget.pathname}]`,
+        {
+          diagnostic: {
+            stage: "representative-pdf",
+            ...finalTarget,
+            status: response.status,
+            redirected: response.redirected,
+          },
+        },
       );
     }
     const contentType = String(response.headers.get("content-type") || "").toLowerCase();
@@ -347,6 +428,19 @@ async function validatePdf(
     ) {
       throw new FaaDtppCycleError("FAA d-TPP representative PDF size was invalid");
     }
+  } catch (error) {
+    if (error instanceof FaaDtppCycleError) throw error;
+    throw new FaaDtppCycleError(
+      `FAA d-TPP representative PDF request failed: ${error instanceof Error ? error.message : "unknown error"} [${requestedTarget.hostname}${requestedTarget.pathname}]`,
+      {
+        cause: error,
+        diagnostic: {
+          stage: "representative-pdf",
+          ...requestedTarget,
+          status: null,
+        },
+      },
+    );
   } finally {
     clearTimeout(timeout);
   }
@@ -360,6 +454,7 @@ async function validateCycleCandidate(
   },
   fetchImpl: FetchLike,
   timeoutMs: number,
+  stage: "active-metadata-xml" | "next-metadata-xml" | "override-metadata-xml",
 ) {
   const xml = await fetchBoundedText(
     fetchImpl,
@@ -367,38 +462,43 @@ async function validateCycleCandidate(
     timeoutMs,
     MAX_XML_PROBE_BYTES,
     { Range: `bytes=0-${MAX_XML_PROBE_BYTES - 1}` },
+    stage,
   );
-  const root = xml.match(/<digital_tpp\b([^>]*)>/i);
-  if (!root) throw new FaaDtppCycleError("FAA d-TPP XML root was invalid");
-  const xmlCycle = xmlAttribute(root[1], "cycle");
-  const xmlFrom = parseXmlEffectiveDate(xmlAttribute(root[1], "from_edate") || "");
-  const xmlTo = parseXmlEffectiveDate(xmlAttribute(root[1], "to_edate") || "");
-  if (xmlCycle !== candidate.cycle) {
-    throw new FaaDtppCycleError(
-      `FAA d-TPP XML cycle ${xmlCycle || "missing"} did not match ${candidate.cycle}`,
-    );
+  try {
+    const root = xml.match(/<digital_tpp\b([^>]*)>/i);
+    if (!root) throw new FaaDtppCycleError("FAA d-TPP XML root was invalid");
+    const xmlCycle = xmlAttribute(root[1], "cycle");
+    const xmlFrom = parseXmlEffectiveDate(xmlAttribute(root[1], "from_edate") || "");
+    const xmlTo = parseXmlEffectiveDate(xmlAttribute(root[1], "to_edate") || "");
+    if (xmlCycle !== candidate.cycle) {
+      throw new FaaDtppCycleError(
+        `FAA d-TPP XML cycle ${xmlCycle || "missing"} did not match ${candidate.cycle}`,
+      );
+    }
+    if (
+      xmlFrom === null ||
+      xmlTo === null ||
+      xmlFrom !== Date.parse(candidate.effectiveFrom) ||
+      xmlTo !== Date.parse(candidate.effectiveTo)
+    ) {
+      throw new FaaDtppCycleError("FAA d-TPP XML effective dates did not match publication metadata");
+    }
+    const airport = xml.match(/<airport_name\b[^>]*>[\s\S]*?<\/airport_name>/i);
+    const record = airport?.[0].match(/<record>[\s\S]*?<\/record>/i)?.[0] || null;
+    const pdfName = record?.match(/<pdf_name>([^<]+)<\/pdf_name>/i)?.[1]?.trim() || "";
+    if (
+      !airport ||
+      !record ||
+      !/<chart_code>[^<]+<\/chart_code>/i.test(record) ||
+      !/<chart_name>[^<]+<\/chart_name>/i.test(record) ||
+      !/^[A-Z0-9_.-]+\.PDF$/i.test(pdfName)
+    ) {
+      throw new FaaDtppCycleError("FAA d-TPP XML chart mapping was invalid");
+    }
+    await validatePdf(fetchImpl, `${candidate.pdfBaseUrl}/${pdfName}`, timeoutMs);
+  } catch (error) {
+    throw withRequestDiagnostic(error, stage, candidate.metaUrl);
   }
-  if (
-    xmlFrom === null ||
-    xmlTo === null ||
-    xmlFrom !== Date.parse(candidate.effectiveFrom) ||
-    xmlTo !== Date.parse(candidate.effectiveTo)
-  ) {
-    throw new FaaDtppCycleError("FAA d-TPP XML effective dates did not match publication metadata");
-  }
-  const airport = xml.match(/<airport_name\b[^>]*>[\s\S]*?<\/airport_name>/i);
-  const record = airport?.[0].match(/<record>[\s\S]*?<\/record>/i)?.[0] || null;
-  const pdfName = record?.match(/<pdf_name>([^<]+)<\/pdf_name>/i)?.[1]?.trim() || "";
-  if (
-    !airport ||
-    !record ||
-    !/<chart_code>[^<]+<\/chart_code>/i.test(record) ||
-    !/<chart_name>[^<]+<\/chart_name>/i.test(record) ||
-    !/^[A-Z0-9_.-]+\.PDF$/i.test(pdfName)
-  ) {
-    throw new FaaDtppCycleError("FAA d-TPP XML chart mapping was invalid");
-  }
-  await validatePdf(fetchImpl, `${candidate.pdfBaseUrl}/${pdfName}`, timeoutMs);
   return candidate;
 }
 
@@ -456,6 +556,7 @@ export function createFaaDtppCycleManager(
       zipUrl: string | null;
     };
     let nextListing: FaaDtppCycleListing | null = null;
+    let publishedMetadataUrls = new Map<string, string>();
     let provenance: FaaDtppCycleConfig["provenance"];
 
     if (override) {
@@ -465,6 +566,7 @@ export function createFaaDtppCycleManager(
         timeoutMs,
         MAX_XML_PROBE_BYTES,
         { Range: `bytes=0-${MAX_XML_PROBE_BYTES - 1}` },
+        "override-metadata-xml",
       );
       const root = xmlProbe.match(/<digital_tpp\b([^>]*)>/i);
       const from = root ? parseXmlEffectiveDate(xmlAttribute(root[1], "from_edate") || "") : null;
@@ -485,18 +587,38 @@ export function createFaaDtppCycleManager(
         FAA_DTPP_SEARCH_URL,
         timeoutMs,
         MAX_DISCOVERY_BYTES,
+        {},
+        "discovery-html",
       );
-      const selected = selectEffectiveFaaDtppCycle(
-        parseFaaDtppCycleListings(html),
-        requestedAt,
-      );
-      const urls = officialUrls(selected.active.cycle);
+      let selected: ReturnType<typeof selectEffectiveFaaDtppCycle>;
+      try {
+        selected = selectEffectiveFaaDtppCycle(
+          parseFaaDtppCycleListings(html),
+          requestedAt,
+        );
+      } catch (error) {
+        throw withRequestDiagnostic(error, "discovery-html", FAA_DTPP_SEARCH_URL);
+      }
+      publishedMetadataUrls = parseFaaDtppMetadataUrls(html);
+      const urls = {
+        ...officialUrls(selected.active.cycle),
+        metaUrl:
+          publishedMetadataUrls.get(selected.active.cycle) ||
+          officialUrls(selected.active.cycle).metaUrl,
+      };
       candidate = { ...selected.active, ...urls, zipUrl: null };
       nextListing = selected.next;
       provenance = "faa-auto";
     }
 
-    await validateCycleCandidate(candidate, fetchImpl, timeoutMs);
+    await validateCycleCandidate(
+      candidate,
+      fetchImpl,
+      timeoutMs,
+      provenance === "environment-override"
+        ? "override-metadata-xml"
+        : "active-metadata-xml",
+    );
     if (candidate.zipUrl) {
       const zipDate = new URL(candidate.zipUrl).pathname.match(/_(\d{6})\.zip$/i)?.[1];
       if (zipDate && zipDate !== expectedZipDate(candidate.effectiveFrom)) {
@@ -508,10 +630,19 @@ export function createFaaDtppCycleManager(
     let nextCycle: FaaDtppCycleConfig["nextCycle"] = null;
     if (nextListing) {
       try {
+        const nextUrls = officialUrls(nextListing.cycle);
         await validateCycleCandidate(
-          { ...nextListing, ...officialUrls(nextListing.cycle), zipUrl: null },
+          {
+            ...nextListing,
+            ...nextUrls,
+            metaUrl:
+              publishedMetadataUrls.get(nextListing.cycle) ||
+              nextUrls.metaUrl,
+            zipUrl: null,
+          },
           fetchImpl,
           timeoutMs,
+          "next-metadata-xml",
         );
         nextCycle = { ...nextListing, ready: true, validationError: null };
       } catch (error) {
@@ -593,6 +724,7 @@ export function createFaaDtppCycleManager(
           cycle: fallback.cycle,
           fallback: "last-known-good",
           error: error instanceof Error ? error.message : "unknown error",
+          ...errorDiagnostics(error),
         });
         return staleCopy(
           fallback,
@@ -612,6 +744,7 @@ export function createFaaDtppCycleManager(
         logger({
           event: "faa_dtpp_cycle_initialization_failed",
           error: error instanceof Error ? error.message : "unknown error",
+          ...errorDiagnostics(error),
         });
       });
       interval = setInterval(() => {

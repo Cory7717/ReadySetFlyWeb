@@ -26,6 +26,10 @@ import {
   resolveFaaObstacleSource,
 } from "./services/faaObstacleData";
 import {
+  createFaaDtppCycleManager,
+  type FaaDtppCycleConfig,
+} from "./services/faaDtppCycle";
+import {
   Client,
   Environment,
   LogLevel,
@@ -2846,6 +2850,22 @@ type PlateMeta = {
   url: string;
 };
 
+type PlateReferenceData = {
+  cycle: string;
+  effectiveFrom: string;
+  effectiveTo: string;
+  provenance: FaaDtppCycleConfig["provenance"];
+  validatedAt: string;
+  stale: boolean;
+  status: FaaDtppCycleConfig["status"];
+  warning: string | null;
+};
+
+type PlateMetadataResult = {
+  plates: PlateMeta[];
+  referenceData: PlateReferenceData;
+};
+
 type AirportMeta = {
   icao: string;
   name: string | null;
@@ -3257,7 +3277,8 @@ const routeSuggestionInFlight = new Map<string, Promise<any>>();
 const RUNWAY_BRIEFING_CACHE_TTL_MS = 2 * 60 * 1000;
 const runwayBriefingCache = new Map<string, { data: any; expiresAt: number }>();
 const runwayBriefingInFlight = new Map<string, Promise<any>>();
-const plateMetadataInFlight = new Map<string, Promise<PlateMeta[]>>();
+const plateMetadataInFlight = new Map<string, Promise<PlateMetadataResult>>();
+const plateMetadataLastKnownGood = new Map<string, PlateMetadataResult>();
 let operationalCachePrewarmPromise: Promise<{
   ok: string[];
   failed: string[];
@@ -6093,46 +6114,25 @@ function parseNotamDateValue(value: any): Date | null {
   return Number.isFinite(fallback.getTime()) ? fallback : null;
 }
 
-function getDtppMetaUrl() {
-  if (process.env.FAA_DTPP_META_URL) return process.env.FAA_DTPP_META_URL;
+const FAA_DTPP_PERSISTED_TTL_SECONDS = 90 * 24 * 60 * 60;
+const faaDtppCycleManager = createFaaDtppCycleManager({
+  env: process.env,
+  loadPersisted: () =>
+    getSharedCacheJson(buildRedisCacheKey("dtpp-cycle", "last-known-good")),
+  savePersisted: (state) =>
+    setSharedCacheJson(
+      buildRedisCacheKey("dtpp-cycle", "last-known-good"),
+      state,
+      FAA_DTPP_PERSISTED_TTL_SECONDS,
+    ),
+});
 
-  const cycleCode = getDtppCycleCode();
-  if (!cycleCode) {
-    throw new Error("FAA_DTPP_CYCLE or FAA_DTPP_ZIP_URL must be configured");
-  }
-
-  return `https://aeronav.faa.gov/d-tpp/${cycleCode}/xml_data/d-TPP_Metafile.xml`;
+function plateCacheKey(cycle: string, icao: string) {
+  return `${cycle}:${normalizeIcao(icao)}`;
 }
 
-function getPdfBaseUrl() {
-  if (process.env.FAA_DTPP_PDF_BASE_URL)
-    return process.env.FAA_DTPP_PDF_BASE_URL;
-
-  const cycleCode = getDtppCycleCode();
-  if (!cycleCode) {
-    throw new Error("FAA_DTPP_CYCLE or FAA_DTPP_ZIP_URL must be configured");
-  }
-
-  return `https://aeronav.faa.gov/d-tpp/${cycleCode}`;
-}
-
-function getDtppCycleCode(): string | null {
-  const cycle = process.env.FAA_DTPP_CYCLE;
-  if (cycle && cycle.length >= 4) {
-    return cycle.slice(0, 4);
-  }
-
-  const zipUrl = process.env.FAA_DTPP_ZIP_URL;
-  if (!zipUrl) return null;
-  const match = zipUrl.match(/_(\d{6})/);
-  if (match && match[1]) {
-    return match[1].slice(0, 4);
-  }
-  return null;
-}
-
-function getCachedPlates(icao: string) {
-  const key = normalizeIcao(icao);
+function getCachedPlates(cycle: string, icao: string) {
+  const key = plateCacheKey(cycle, icao);
   const cached = plateMetaCache.get(key);
   if (!cached) return null;
   if (Date.now() > cached.expiresAt) {
@@ -6142,8 +6142,8 @@ function getCachedPlates(icao: string) {
   return cached.data;
 }
 
-function setCachedPlates(icao: string, data: PlateMeta[]) {
-  const key = normalizeIcao(icao);
+function setCachedPlates(cycle: string, icao: string, data: PlateMeta[]) {
+  const key = plateCacheKey(cycle, icao);
   plateMetaCache.set(key, {
     data,
     createdAt: Date.now(),
@@ -6240,6 +6240,7 @@ async function extractAirportXmlForIcao(
     if (foundStart) {
       const endIdx = upperBuffer.indexOf(endTag.toUpperCase(), startIdx);
       if (endIdx !== -1) {
+        await reader.cancel().catch(() => undefined);
         return buffer.slice(startIdx, endIdx + endTag.length);
       }
       if (buffer.length > maxBuffer) {
@@ -6254,79 +6255,133 @@ async function extractAirportXmlForIcao(
   return null;
 }
 
-async function fetchPlateMetadataForIcao(icao: string): Promise<PlateMeta[]> {
-  const cached = getCachedPlates(icao);
-  if (cached) return cached;
+function plateReferenceData(config: FaaDtppCycleConfig): PlateReferenceData {
+  return {
+    cycle: config.cycle,
+    effectiveFrom: config.effectiveFrom,
+    effectiveTo: config.effectiveTo,
+    provenance: config.provenance,
+    validatedAt: config.validatedAt,
+    stale: config.stale,
+    status: config.status,
+    warning: config.warning,
+  };
+}
+
+async function fetchPlateMetadataForIcao(
+  icao: string,
+): Promise<PlateMetadataResult> {
   const normalizedIcao = normalizeIcao(icao);
+  const cycleConfig = await faaDtppCycleManager.getActiveCycle();
+  const cycleKey = plateCacheKey(cycleConfig.cycle, normalizedIcao);
+  const cached = getCachedPlates(cycleConfig.cycle, normalizedIcao);
+  if (cached) {
+    return { plates: cached, referenceData: plateReferenceData(cycleConfig) };
+  }
   const shared = await getSharedCacheJson<PlateMeta[]>(
-    buildRedisCacheKey("plates-meta", normalizedIcao),
+    buildRedisCacheKey("plates-meta", cycleKey),
   );
   if (shared) {
-    setCachedPlates(icao, shared);
-    return shared;
+    setCachedPlates(cycleConfig.cycle, normalizedIcao, shared);
+    const result = {
+      plates: shared,
+      referenceData: plateReferenceData(cycleConfig),
+    };
+    plateMetadataLastKnownGood.set(normalizedIcao, result);
+    return result;
   }
-  const inFlight = plateMetadataInFlight.get(normalizedIcao);
+  const inFlight = plateMetadataInFlight.get(cycleKey);
   if (inFlight) return inFlight;
 
   const promise = (async () => {
-    const metaUrl = getDtppMetaUrl();
-    const pdfBase = getPdfBaseUrl().replace(/\/+$/, "");
+    const metaUrl = cycleConfig.metaUrl;
+    const pdfBase = cycleConfig.pdfBaseUrl.replace(/\/+$/, "");
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 20000);
-    const response = await fetch(metaUrl, {
-      signal: controller.signal,
-      headers: {
-        "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)",
-        Accept: "application/xml,text/xml;q=0.9,*/*;q=0.8",
-      },
-    });
-    clearTimeout(timeout);
-
-    if (!response.ok || !response.body) {
-      const body = await response.text().catch(() => "");
-      throw new Error(`Failed to fetch metadata: ${response.status} ${body}`);
-    }
-
-    const airportXml = await extractAirportXmlForIcao(response, normalizedIcao);
-    if (!airportXml) {
-      setCachedPlates(icao, []);
-      return [];
-    }
-
-    const recordMatches =
-      airportXml.match(/<record>[\s\S]*?<\/record>/gi) || [];
-    const plates: PlateMeta[] = [];
-
-    for (const record of recordMatches) {
-      const pdfName = extractTagValue(record, "pdf_name");
-      if (!pdfName) continue;
-      const name = extractTagValue(record, "chart_name") || pdfName;
-      const type =
-        extractTagValue(record, "chart_code") || inferPlateType(name);
-      const effectiveDate = extractTagValue(record, "amdtdate");
-      plates.push({
-        name,
-        type,
-        effectiveDate,
-        url: `${pdfBase}/${pdfName}`,
+    try {
+      const response = await fetch(metaUrl, {
+        signal: controller.signal,
+        headers: {
+          "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)",
+          Accept: "application/xml,text/xml;q=0.9,*/*;q=0.8",
+        },
       });
-    }
 
-    setCachedPlates(icao, plates);
-    await setSharedCacheJson(
-      buildRedisCacheKey("plates-meta", normalizedIcao),
-      plates,
-      PLATE_CACHE_TTL_MS / 1000,
-    );
-    return plates;
+      if (!response.ok || !response.body) {
+        await response.body?.cancel().catch(() => undefined);
+        throw new Error(`Failed to fetch metadata (${response.status})`);
+      }
+
+      const airportXml = await extractAirportXmlForIcao(
+        response,
+        normalizedIcao,
+      );
+      const plates: PlateMeta[] = [];
+      if (airportXml) {
+        const recordMatches =
+          airportXml.match(/<record>[\s\S]*?<\/record>/gi) || [];
+        for (const record of recordMatches) {
+          const pdfName = extractTagValue(record, "pdf_name");
+          if (!pdfName || !/^[A-Z0-9_.-]+\.PDF$/i.test(pdfName)) continue;
+          const name = extractTagValue(record, "chart_name") || pdfName;
+          const type =
+            extractTagValue(record, "chart_code") || inferPlateType(name);
+          const effectiveDate = extractTagValue(record, "amdtdate");
+          plates.push({
+            name,
+            type,
+            effectiveDate,
+            url: `${pdfBase}/${pdfName}`,
+          });
+        }
+      }
+
+      setCachedPlates(cycleConfig.cycle, normalizedIcao, plates);
+      await setSharedCacheJson(
+        buildRedisCacheKey("plates-meta", cycleKey),
+        plates,
+        PLATE_CACHE_TTL_MS / 1000,
+      );
+      const result = {
+        plates,
+        referenceData: plateReferenceData(cycleConfig),
+      };
+      plateMetadataLastKnownGood.set(normalizedIcao, result);
+      await setSharedCacheJson(
+        buildRedisCacheKey("plates-meta-lkg", normalizedIcao),
+        result,
+        FAA_DTPP_PERSISTED_TTL_SECONDS,
+      );
+      return result;
+    } finally {
+      clearTimeout(timeout);
+    }
   })();
 
-  plateMetadataInFlight.set(normalizedIcao, promise);
+  plateMetadataInFlight.set(cycleKey, promise);
   try {
     return await promise;
+  } catch (error) {
+    const fallback =
+      plateMetadataLastKnownGood.get(normalizedIcao) ||
+      (await getSharedCacheJson<PlateMetadataResult>(
+        buildRedisCacheKey("plates-meta-lkg", normalizedIcao),
+      ));
+    if (!fallback) throw error;
+    return {
+      ...fallback,
+      referenceData: {
+        ...fallback.referenceData,
+        provenance: "last-known-good",
+        stale: true,
+        status: "stale",
+        warning:
+          "The active FAA chart metadata could not be refreshed; validated last-known-good plates are shown.",
+      },
+    };
   } finally {
-    plateMetadataInFlight.delete(normalizedIcao);
+    plateMetadataInFlight.delete(cycleKey);
   }
 }
 
@@ -6682,6 +6737,7 @@ const isVerified = async (req: any, res: any, next: any) => {
 };
 
 export async function registerRoutes(app: Express): Promise<Server> {
+  faaDtppCycleManager.start();
   startPlateCacheCron();
 
   // Auth middleware
@@ -11186,10 +11242,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ error: "Unauthorized" });
       }
 
+      const cycle = await faaDtppCycleManager.forceRefresh();
       clearPlateCache();
-      approachPlateSyncState.lastResult = { cleared: true };
+      approachPlateSyncState.lastResult = {
+        cleared: true,
+        cycle: cycle.cycle,
+        status: cycle.status,
+        provenance: cycle.provenance,
+      };
       approachPlateSyncState.lastFinishedAt = new Date();
-      res.json({ cleared: true });
+      res.json(approachPlateSyncState.lastResult);
     } catch (error: any) {
       console.error("Approach plate sync error:", error);
       approachPlateSyncState.lastError = error.message || String(error);
@@ -11221,8 +11283,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
         setTimeout(async () => {
           try {
+            const cycle = await faaDtppCycleManager.forceRefresh();
             clearPlateCache();
-            approachPlateSyncState.lastResult = { cleared: true };
+            approachPlateSyncState.lastResult = {
+              cleared: true,
+              cycle: cycle.cycle,
+              status: cycle.status,
+              provenance: cycle.provenance,
+            };
             approachPlateSyncState.lastFinishedAt = new Date();
           } catch (error: any) {
             console.error("Admin approach plate sync error:", error);
@@ -11260,6 +11328,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         lastFinishedAt: approachPlateSyncState.lastFinishedAt,
         lastError: approachPlateSyncState.lastError,
         lastResult: approachPlateSyncState.lastResult,
+        cycleManager: faaDtppCycleManager.getDiagnostics(),
       });
     },
   );
@@ -23840,6 +23909,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   // Streaming proxy for plate PDFs (no buffering)
   app.get("/api/plates/proxy", platesRateLimiter, async (req, res) => {
+    let timeout: ReturnType<typeof setTimeout> | null = null;
     try {
       const urlParam = String(req.query.url || "");
       if (!urlParam) {
@@ -23861,11 +23931,10 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       }
 
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 15000);
+      timeout = setTimeout(() => controller.abort(), 15000);
       const upstream = await fetch(target.toString(), {
         signal: controller.signal,
       });
-      clearTimeout(timeout);
 
       if (!upstream.ok || !upstream.body) {
         const body = await upstream.text().catch(() => "");
@@ -23900,6 +23969,8 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           error: "Failed to proxy plate",
           details: error.message || String(error),
         });
+    } finally {
+      if (timeout) clearTimeout(timeout);
     }
   });
 
@@ -23914,24 +23985,20 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         "public, max-age=3600, stale-while-revalidate=86400",
       );
 
-      const plates = await fetchPlateMetadataForIcao(icao);
+      const result = await fetchPlateMetadataForIcao(icao);
       res.json({
         icao,
         fetchedAt: new Date().toISOString(),
-        plates,
+        plates: result.plates,
+        cycle: result.referenceData.cycle,
+        referenceData: result.referenceData,
       });
     } catch (error: any) {
       console.error("Approach plate metadata error:", error);
       res.status(500).json({
         error: "Failed to load approach plates",
         details: error.message || String(error),
-        metaUrl: (() => {
-          try {
-            return getDtppMetaUrl();
-          } catch {
-            return null;
-          }
-        })(),
+        referenceData: { status: "unavailable", stale: true },
       });
     }
   });
@@ -23941,12 +24008,25 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
     try {
       const query = String(req.query.q || "").trim();
       const limit = Number(req.query.limit || 50);
-      const cycle = process.env.FAA_DTPP_CYCLE;
-      let plates = await storage.searchApproachPlates(query, limit, cycle);
-      if (cycle && plates.length === 0) {
+      const cycleConfig = await faaDtppCycleManager.getActiveCycle();
+      let plates = await storage.searchApproachPlates(query, limit, cycleConfig.cycle);
+      let usedFallbackCycle = false;
+      if (plates.length === 0) {
         plates = await storage.searchApproachPlates(query, limit);
+        usedFallbackCycle = plates.length > 0;
       }
-      res.json({ plates, cycle });
+      res.json({
+        plates,
+        cycle: cycleConfig.cycle,
+        referenceData: {
+          ...plateReferenceData(cycleConfig),
+          stale: cycleConfig.stale || usedFallbackCycle,
+          status: cycleConfig.stale || usedFallbackCycle ? "stale" : "current",
+          warning: usedFallbackCycle
+            ? "Stored plates for the active FAA cycle are unavailable; older cached records are shown."
+            : cycleConfig.warning,
+        },
+      });
     } catch (error) {
       console.error("Approach plate search error:", error);
       res.status(500).json({ error: "Failed to search approach plates" });

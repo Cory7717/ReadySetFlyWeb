@@ -10,11 +10,20 @@ type Plate = {
   url: string;
 };
 
+type PlateReferenceData = {
+  cycle: string;
+  stale: boolean;
+  status: 'current' | 'stale';
+  warning?: string | null;
+};
+
 export default function ApproachPlatesScreen() {
   const [icao, setIcao] = useState('KJFK');
   const [plates, setPlates] = useState<Plate[]>([]);
   const [loading, setLoading] = useState(false);
   const [fetchedAt, setFetchedAt] = useState<string | null>(null);
+  const [referenceData, setReferenceData] = useState<PlateReferenceData | null>(null);
+  const [unavailable, setUnavailable] = useState(false);
 
   const handleSearch = async () => {
     const code = icao.trim().toUpperCase();
@@ -23,12 +32,16 @@ export default function ApproachPlatesScreen() {
       return;
     }
     setLoading(true);
+    setUnavailable(false);
     try {
       const res = await api.get(`/api/plates/${code}`);
       setPlates(res.data?.plates || []);
       setFetchedAt(res.data?.fetchedAt || null);
+      setReferenceData(res.data?.referenceData || null);
     } catch (error: any) {
       setPlates([]);
+      setReferenceData(null);
+      setUnavailable(true);
       Alert.alert('Unable to fetch plates', error?.response?.data?.error || 'Try again in a moment.');
     } finally {
       setLoading(false);
@@ -76,7 +89,26 @@ export default function ApproachPlatesScreen() {
               <View style={styles.metaRow}>
                 <Text style={styles.metaText}>Plates for {icao.toUpperCase()}</Text>
                 {fetchedAt && <Text style={styles.metaText}>Updated {new Date(fetchedAt).toLocaleString()}</Text>}
+                {referenceData && (
+                  <Text style={referenceData.stale ? styles.staleText : styles.metaText}>
+                    FAA cycle {referenceData.cycle} · {referenceData.stale ? 'STALE' : 'current'}
+                  </Text>
+                )}
               </View>
+              {!!referenceData?.warning && (
+                <View style={styles.warningBox}>
+                  <Text style={styles.warningText}>
+                    {referenceData.warning} Verify chart currency before operational use.
+                  </Text>
+                </View>
+              )}
+              {unavailable && (
+                <View style={styles.warningBox}>
+                  <Text style={styles.warningText}>
+                    FAA plate data is unavailable. This is not a confirmed zero-plate result.
+                  </Text>
+                </View>
+              )}
             </View>
           </>
         }
@@ -183,6 +215,23 @@ const styles = StyleSheet.create({
   },
   metaText: {
     ...typography.muted,
+  },
+  staleText: {
+    ...typography.muted,
+    color: '#b45309',
+    fontWeight: '700',
+  },
+  warningBox: {
+    marginTop: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: '#f59e0b',
+    backgroundColor: '#fffbeb',
+    padding: spacing.sm,
+  },
+  warningText: {
+    ...typography.muted,
+    color: '#92400e',
   },
   emptyState: {
     marginTop: spacing.lg,

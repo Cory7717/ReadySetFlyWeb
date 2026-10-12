@@ -16,6 +16,15 @@ interface PlateRecord {
   url: string;
 }
 
+interface PlateReferenceData {
+  cycle: string;
+  effectiveFrom: string;
+  effectiveTo: string;
+  stale: boolean;
+  status: "current" | "stale";
+  warning?: string | null;
+}
+
 const ICAO_REGEX = /^[A-Z0-9]{3,4}$/;
 
 interface AirportSearchResult {
@@ -43,7 +52,12 @@ export default function ApproachPlates() {
     setSearchTerm(seededIcao);
   }, []);
 
-  const { data, isLoading } = useQuery<{ plates: PlateRecord[]; icao?: string }>(
+  const { data, isLoading, isError } = useQuery<{
+    plates: PlateRecord[];
+    icao?: string;
+    cycle?: string;
+    referenceData?: PlateReferenceData;
+  }>(
     {
       queryKey: ["/api/plates", searchTerm],
       queryFn: async () => {
@@ -222,6 +236,16 @@ export default function ApproachPlates() {
         {data?.icao && (
           <Badge variant="outline">ICAO: {data.icao}</Badge>
         )}
+        {data?.referenceData && (
+          <Badge variant={data.referenceData.stale ? "destructive" : "outline"}>
+            FAA cycle {data.referenceData.cycle} · {data.referenceData.stale ? "stale" : "current"}
+          </Badge>
+        )}
+        {data?.referenceData?.warning && (
+          <div className="rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+            {data.referenceData.warning} Verify chart currency before operational use.
+          </div>
+        )}
       </div>
 
       <Card>
@@ -276,6 +300,10 @@ export default function ApproachPlates() {
         <CardContent className="space-y-4">
           {isLoading ? (
             <div className="text-sm text-muted-foreground">Loading plates...</div>
+          ) : isError ? (
+            <div className="rounded-md border border-red-300 bg-red-50 p-3 text-sm text-red-900">
+              FAA plate data is currently unavailable. No zero-result determination was made.
+            </div>
           ) : plates.length === 0 ? (
             <div className="text-sm text-muted-foreground">
               No plates found. Try another airport code.

@@ -4170,13 +4170,14 @@ export default function FlightPlannerScreen() {
   }, [immediateTrafficCount, selectedTrafficTrend?.clockLabel, selectedTrafficTrend?.closureText, topTrafficTarget, trafficEnabled, trafficFilter, visibleTrafficTargets.length]);
   const selectedDiversionRunwaySummary = useMemo(() => {
     if (selectedDiversionBriefingLoading) return 'Loading runway briefing';
+    const stalePrefix = selectedDiversionBriefing?.referenceData?.stale ? 'STALE REFERENCE - VERIFY - ' : '';
     if (selectedDiversionBriefing?.advisory) {
-      return `Runway ${selectedDiversionBriefing.advisory.runway || '--'} Â· HW ${selectedDiversionBriefing.advisory.headwind ?? '--'} kt Â· XW ${selectedDiversionBriefing.advisory.crosswind ?? '--'} kt`;
+      return `${stalePrefix}Runway ${selectedDiversionBriefing.advisory.runway || '--'} Â· HW ${selectedDiversionBriefing.advisory.headwind ?? '--'} kt Â· XW ${selectedDiversionBriefing.advisory.crosswind ?? '--'} kt`;
     }
     if (selectedDiversionBriefing?.runwayInUse) {
-      return `Runway in use ${selectedDiversionBriefing.runwayInUse}`;
+      return `${stalePrefix}Runway in use ${selectedDiversionBriefing.runwayInUse}`;
     }
-    return 'Runway advisory pending';
+    return `${stalePrefix}Runway advisory pending`;
   }, [selectedDiversionBriefing, selectedDiversionBriefingLoading]);
   useEffect(() => {
     if (!simulationEnabled && !receiverOwnship && !gpsData && !simulatedGpsData) return;
@@ -7642,7 +7643,7 @@ export default function FlightPlannerScreen() {
       airportIcao: airport.icao,
       runwayId: runway.runwayId,
       runwayHeadingDeg: runway.headingDeg,
-      runwayMeta: `${runway.lengthFt ? `${runway.lengthFt.toLocaleString()} ft` : 'Length N/A'} - ${runway.surface || 'Surface N/A'}`,
+      runwayMeta: `${briefing?.referenceData?.stale ? 'STALE REFERENCE - VERIFY - ' : ''}${runway.lengthFt ? `${runway.lengthFt.toLocaleString()} ft` : 'Length N/A'} - ${runway.surface || 'Surface N/A'}`,
       phaseCall: departureSurface
         ? flightDeckPhaseSummary.stage === 'taxi-out'
           ? `Taxi-out and hold-short guidance staged for runway ${runway.runwayId}.`
@@ -7659,7 +7660,11 @@ export default function FlightPlannerScreen() {
       groundFreq: formatFrequency(groundFrequency?.frequencyMhz),
       towerFreq: formatFrequency(towerFrequency?.frequencyMhz),
       atisFreq: formatFrequency(atisFrequency?.frequencyMhz),
-      sourceLabel: briefing?.advisory || briefing?.runwayInUse ? 'briefing live' : 'runway staged',
+      sourceLabel: briefing?.referenceData?.stale
+        ? 'reference stale'
+        : briefing?.advisory || briefing?.runwayInUse
+          ? 'briefing live'
+          : 'runway staged',
     };
   }, [activeRoutePoints, departureBriefing, departureFrequencies, departureRunway, destinationBriefing, destinationFrequencies, destinationRunway, flightDeckPhaseSummary.stage, flightPhase]);
   const flightDeckPhaseAssistantSummary = useMemo<FlightDeckPhaseAssistantSummary>(() => {
@@ -8390,6 +8395,11 @@ export default function FlightPlannerScreen() {
             ))}
           </View>
         )}
+        {departureBriefing?.referenceData?.stale || destinationBriefing?.referenceData?.stale ? (
+          <Text style={styles.warningText}>
+            Cached runway reference data is in use for {departureBriefing?.referenceData?.stale && destinationBriefing?.referenceData?.stale ? 'departure and destination' : departureBriefing?.referenceData?.stale ? 'departure' : 'destination'}. Verify runway dimensions, surfaces, closures, and restrictions through official airport information and NOTAMs.
+          </Text>
+        ) : null}
 
         <Text style={styles.fieldLabel}>Waypoints (optional)</Text>
         <Text style={styles.fieldHelper}>Space or comma separated ICAO codes.</Text>
@@ -9122,6 +9132,11 @@ export default function FlightPlannerScreen() {
                     ) : selectedDiversionBriefing?.runwayInUse ? (
                       <Text style={styles.helperText}>Runway in use {selectedDiversionBriefing.runwayInUse}</Text>
                     ) : null
+                  ) : null}
+                  {selectedDiversionIcao === airport.icao && selectedDiversionBriefing?.referenceData?.stale ? (
+                    <Text style={styles.warningText}>
+                      Cached runway reference data. Verify dimensions, surfaces, closures, and restrictions through official airport information and NOTAMs.
+                    </Text>
                   ) : null}
                   {airport.scoreReasons?.length ? (
                     <Text style={styles.helperText}>{airport.scoreReasons.slice(0, 2).join(' Â· ')}</Text>

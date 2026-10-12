@@ -325,6 +325,8 @@ export default function Landing() {
     refetch: refetchNotams,
   } = useQuery<{
     icao: string;
+    availability?: "current" | "degraded" | "unavailable";
+    warning?: string;
     notams: Array<{ id: string; text: string; effective?: string; expires?: string }>;
   }>({
     queryKey: ["/api/notams", searchIcao],
@@ -1142,6 +1144,12 @@ export default function Landing() {
                 </div>
               )}
             </div>
+
+            {notams?.warning && (
+              <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-3 text-xs text-amber-100">
+                {notams.warning}
+              </div>
+            )}
 
             {notams?.notams?.length ? (
               <div className="space-y-2">

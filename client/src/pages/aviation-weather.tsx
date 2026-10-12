@@ -591,8 +591,13 @@ export default function AviationWeatherHub() {
               {notamsQuery.isError && (
                 <div className="text-sm text-[#A9BBCD]">NOTAM feed unavailable.</div>
               )}
+              {notamsQuery.data?.warning && (
+                <div className="rounded border border-amber-500/40 bg-amber-500/10 p-2 text-sm text-amber-100">{notamsQuery.data.warning}</div>
+              )}
               {!notamsQuery.isError && notamsCount === 0 && (
-                <div className="text-sm text-[#A9BBCD]">No active NOTAMs.</div>
+                <div className="text-sm text-[#A9BBCD]">
+                  {notamsQuery.data?.availability === "unavailable" ? "NOTAM availability is unverified; this is not confirmation that no active NOTAMs exist." : "No NOTAMs returned."}
+                </div>
               )}
               {notamsQuery.data?.notams?.map((notam: any) => (
                 <div key={notam.id} className="bg-[#0f1a28] border border-[#29415e] rounded-lg p-3">

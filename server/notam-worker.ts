@@ -6,6 +6,7 @@ import zlib from "zlib";
 import { XMLParser } from "fast-xml-parser";
 import { db } from "./db";
 import { notams as notamsTable, notamIngestEvents } from "@shared/schema";
+import { updateNotamSourceHealth } from "./services/notam-source-health";
 
 const require = createRequire(import.meta.url);
 let solclientjs: any = null;
@@ -82,6 +83,7 @@ type NotamIngestResult = NotamParseMeta &
       classification?: string;
     };
     reason?: string;
+    canonicalRecordCount: number;
   };
 
 type FallbackIngestWriter = (data: {
@@ -855,11 +857,9 @@ function normalizePayload(payload: any): NormalizedNotam[] {
 
 async function upsertNotams(items: NormalizedNotam[]) {
   if (items.length === 0) return { savedCount: 0, errorCount: 0, errors: [] as any[] };
-  let savedCount = 0;
-  const errors: any[] = [];
-  for (const item of items) {
-    try {
-      await db
+  await db.transaction(async (tx) => {
+    for (const item of items) {
+      await tx
         .insert(notamsTable)
         .values({
           icao: item.icao,
@@ -872,7 +872,7 @@ async function upsertNotams(items: NormalizedNotam[]) {
           updatedAt: new Date(),
         })
         .onConflictDoUpdate({
-          target: notamsTable.notamId,
+          target: [notamsTable.source, notamsTable.notamId],
           set: {
             icao: item.icao,
             text: item.text,
@@ -882,12 +882,9 @@ async function upsertNotams(items: NormalizedNotam[]) {
             updatedAt: new Date(),
           },
         });
-      savedCount += 1;
-    } catch (error) {
-      errors.push(error);
     }
-  }
-  return { savedCount, errorCount: errors.length, errors };
+  });
+  return { savedCount: items.length, errorCount: 0, errors: [] as any[] };
 }
 
 async function insertNotamIngestEvent(data: {
@@ -1162,6 +1159,7 @@ export async function ingestNotamMessage(
       missingFields,
       extracted,
       reason,
+      canonicalRecordCount: canonicalItems.length,
       notamKeys: Array.from(notamKeys),
       icaos: Array.from(icaos),
     };
@@ -1220,6 +1218,32 @@ export async function ingestNotamMessage(
     }
   }
 
+  if (canonicalItems.length === 0 && analysis.reasonEmpty && !fallbackWriteAttempted) {
+    reason = analysis.reasonEmpty;
+    if (fallbackWriter) {
+      fallbackWriteAttempted = true;
+      try {
+        await fallbackWriter({
+          messageId,
+          parsedNotamCount: analysis.parsedNotamCount,
+          reason,
+          eventTypes: analysis.eventTypes,
+          xmlByteLength: analysis.xmlByteLength,
+          notamKeys: Array.from(notamKeys),
+          icaos: Array.from(icaos),
+          excerpt,
+          details: extracted ? { extracted } : undefined,
+        });
+        fallbackWriteSucceeded = true;
+      } catch (error: any) {
+        dbErrorCount += 1;
+        dbErrorCode = error?.code ? String(error.code) : undefined;
+        dbErrorMessage = error?.message ? String(error.message) : "DB write failed";
+        reason = "DB_ERROR";
+      }
+    }
+  }
+
   return {
     ...analysis,
     dbWriteAttempted,
@@ -1235,9 +1259,48 @@ export async function ingestNotamMessage(
     missingFields,
     extracted,
     reason,
+    canonicalRecordCount: canonicalItems.length,
     notamKeys: Array.from(notamKeys),
     icaos: Array.from(icaos),
   };
+}
+
+export type NotamDeliveryDisposition = "ack_persisted" | "ack_poison_recorded" | "retry_unacked";
+
+export function resolveNotamDeliveryDisposition(
+  result: Pick<
+    NotamIngestResult & { savedCount: number; dbErrorCount: number },
+    | "canonicalWriteAttempted"
+    | "canonicalWriteSucceeded"
+    | "canonicalRecordCount"
+    | "savedCount"
+    | "dbErrorCount"
+    | "fallbackWriteAttempted"
+    | "fallbackWriteSucceeded"
+  >,
+): NotamDeliveryDisposition {
+  if (result.dbErrorCount > 0) return "retry_unacked";
+  if (result.canonicalWriteAttempted) {
+    return result.canonicalWriteSucceeded &&
+      result.canonicalRecordCount > 0 &&
+      result.savedCount === result.canonicalRecordCount
+      ? "ack_persisted"
+      : "retry_unacked";
+  }
+  return result.fallbackWriteAttempted && result.fallbackWriteSucceeded
+    ? "ack_poison_recorded"
+    : "retry_unacked";
+}
+
+export function acknowledgePersistedNotamDelivery(
+  message: { acknowledge?: () => void },
+  result: Parameters<typeof resolveNotamDeliveryDisposition>[0],
+) {
+  const disposition = resolveNotamDeliveryDisposition(result);
+  if (disposition === "ack_persisted" || disposition === "ack_poison_recorded") {
+    message.acknowledge?.();
+  }
+  return disposition;
 }
 
 function resolveSolaceLogLevel() {
@@ -1409,6 +1472,7 @@ export function startSwimNotamWorker() {
     ["DOWN_ERROR", "DOWN"],
     "CONSUMER_DOWN_ERROR"
   );
+  const consumerUpEvent = pickEvent(consumerEvents, ["UP", "RECONNECTED"], "CONSUMER_UP");
 
   try {
     initSolace();
@@ -1432,6 +1496,26 @@ export function startSwimNotamWorker() {
 
   const session = solclientjs.SolclientFactory.createSession(sessionProps);
   let consumer: any = null;
+  const writeHealth = (patch: Parameters<typeof updateNotamSourceHealth>[1]) => {
+    void updateNotamSourceHealth("swim", patch).catch((error: any) => {
+      console.warn(JSON.stringify({
+        event: "notam_source_health_write_failed",
+        source: "swim",
+        errorCode: String(error?.code || "DB_ERROR").replace(/[^A-Za-z0-9_.:-]/g, "_").slice(0, 80),
+      }));
+    });
+  };
+  writeHealth({
+    workerState: "running",
+    connectionState: "connecting",
+    consumerState: "starting",
+    lastHeartbeatAt: new Date(),
+    lastResult: "worker_started",
+  });
+  const heartbeat = setInterval(() => {
+    writeHealth({ workerState: "running", lastHeartbeatAt: new Date() });
+  }, 60_000);
+  heartbeat.unref?.();
 
   const safeOn = (
     emitter: any,
@@ -1451,7 +1535,12 @@ export function startSwimNotamWorker() {
   };
 
   safeOn(session, sessionUpEvent, () => {
-    console.log("SWIM Solace session up. Subscribing to queue:", queueName);
+    console.log(JSON.stringify({ event: "swim_session_up", tlsValidated: !allowInsecure }));
+    writeHealth({
+      connectionState: "connected",
+      lastHeartbeatAt: new Date(),
+      lastResult: "session_up",
+    });
     if (consumer) return;
     try {
       consumer = session.createMessageConsumer({
@@ -1466,6 +1555,7 @@ export function startSwimNotamWorker() {
     safeOn(consumer, consumerMessageEvent, async (message: any) => {
       try {
         receivedCount += 1;
+        writeHealth({ lastHeartbeatAt: new Date(), lastMessageReceivedAt: new Date(), lastResult: "message_received" });
         const body = messageToString(message);
         const messageId = extractMessageId(message);
         const analysis = await ingestNotamMessage(body, upsertNotams, {
@@ -1483,6 +1573,7 @@ export function startSwimNotamWorker() {
         if (analysis.dbErrorCount > 0) {
           dbErrorCount += analysis.dbErrorCount;
         }
+        const disposition = resolveNotamDeliveryDisposition(analysis);
 
         let samplePath: string | undefined;
         if (
@@ -1547,44 +1638,78 @@ export function startSwimNotamWorker() {
               xmlByteLength: analysis.xmlByteLength,
               rootNamespaces: analysis.rootNamespaces,
               samplePath,
+              disposition,
             })
           );
         }
-      } catch (ingestError: any) {
-        console.error("NOTAM ingest error:", ingestError?.message || ingestError);
-      } finally {
-        try {
-          message.acknowledge?.();
-        } catch {
-          // ignore
+        if (disposition === "ack_persisted" || disposition === "ack_poison_recorded") {
+          acknowledgePersistedNotamDelivery(message, analysis);
+          writeHealth({
+            lastHeartbeatAt: new Date(),
+            ...(disposition === "ack_persisted" ? { lastPersistedAt: new Date() } : {}),
+            lastSuccessAt: new Date(),
+            lastResult: disposition,
+          });
+          console.log(JSON.stringify({ event: "notam_message_acknowledged", messageId, disposition }));
+        } else {
+          writeHealth({
+            lastHeartbeatAt: new Date(),
+            lastFailureAt: new Date(),
+            lastFailureCode: analysis.dbErrorCode || "PERSISTENCE_INCOMPLETE",
+            lastResult: disposition,
+          });
+          console.warn(JSON.stringify({ event: "notam_message_unacknowledged", messageId, disposition }));
         }
+      } catch (ingestError: any) {
+        writeHealth({
+          lastHeartbeatAt: new Date(),
+          lastFailureAt: new Date(),
+          lastFailureCode: ingestError?.code || "UNEXPECTED_INGEST_ERROR",
+          lastResult: "retry_unacked",
+        });
+        console.error(JSON.stringify({
+          event: "notam_ingest_error",
+          errorCode: String(ingestError?.code || "UNEXPECTED_INGEST_ERROR").replace(/[^A-Za-z0-9_.:-]/g, "_").slice(0, 80),
+          disposition: "retry_unacked",
+        }));
       }
     }, "MESSAGE");
 
+    safeOn(consumer, consumerUpEvent, () => {
+      writeHealth({ consumerState: "up", connectionState: "connected", lastHeartbeatAt: new Date(), lastResult: "consumer_up" });
+      console.log(JSON.stringify({ event: "swim_consumer_up" }));
+    }, "CONSUMER_UP");
+
     safeOn(consumer, consumerConnectFailedEvent, (err: any) => {
-      console.error("SWIM consumer connect failed:", err?.message || err);
+      writeHealth({ consumerState: "down", lastFailureAt: new Date(), lastFailureCode: err?.subcode || "CONSUMER_CONNECT_FAILED", lastResult: "consumer_connect_failed" });
+      console.error(JSON.stringify({ event: "swim_consumer_connect_failed", errorCode: err?.subcode || "CONSUMER_CONNECT_FAILED" }));
     }, "CONSUMER_CONNECT_FAILED");
 
     safeOn(consumer, consumerDownEvent, (err: any) => {
-      console.error("SWIM consumer down:", err?.message || err);
+      writeHealth({ consumerState: "down", lastFailureAt: new Date(), lastFailureCode: err?.subcode || "CONSUMER_DOWN", lastResult: "consumer_down" });
+      console.error(JSON.stringify({ event: "swim_consumer_down", errorCode: err?.subcode || "CONSUMER_DOWN" }));
     }, "CONSUMER_DOWN_ERROR");
 
     consumer.connect();
   }, "UP_NOTICE");
 
   safeOn(session, sessionConnectFailedEvent, (err: any) => {
-    console.error("SWIM session connect failed:", err?.message || err);
+    writeHealth({ connectionState: "disconnected", consumerState: "down", lastFailureAt: new Date(), lastFailureCode: err?.subcode || "SESSION_CONNECT_FAILED", lastResult: "session_connect_failed" });
+    console.error(JSON.stringify({ event: "swim_session_connect_failed", errorCode: err?.subcode || "SESSION_CONNECT_FAILED" }));
   }, "CONNECT_FAILED_ERROR");
 
   safeOn(session, sessionDisconnectedEvent, () => {
+    writeHealth({ connectionState: "disconnected", consumerState: "down", lastHeartbeatAt: new Date(), lastResult: "session_disconnected" });
     console.warn("SWIM session disconnected.");
   }, "DISCONNECTED");
 
   safeOn(session, sessionReconnectingEvent, () => {
+    writeHealth({ connectionState: "reconnecting", consumerState: "down", lastHeartbeatAt: new Date(), lastResult: "session_reconnecting" });
     console.warn("SWIM session reconnecting...");
   }, "RECONNECTING_NOTICE");
 
   safeOn(session, sessionReconnectedEvent, () => {
+    writeHealth({ connectionState: "connected", lastHeartbeatAt: new Date(), lastResult: "session_reconnected" });
     console.warn("SWIM session reconnected.");
   }, "RECONNECTED_NOTICE");
 

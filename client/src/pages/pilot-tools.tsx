@@ -340,6 +340,8 @@ export default function PilotTools() {
     refetch: refetchNotams,
   } = useQuery<{
     icao: string;
+    availability?: "current" | "degraded" | "unavailable";
+    warning?: string;
     notams: Array<{ id: string; text: string; effective?: string; expires?: string }>;
     raw?: any;
   }>({
@@ -1362,7 +1364,10 @@ export default function PilotTools() {
                   </div>
                   {notamsError ? (
                     <p className="text-sm text-[#A9BBCD]">NOTAM feed unavailable.</p>
-                  ) : notams?.notams?.length ? (
+                  ) : (
+                    <>
+                    {notams?.warning && <p className="rounded border border-amber-500/40 bg-amber-500/10 p-2 text-sm text-amber-100">{notams.warning}</p>}
+                    {notams?.notams?.length ? (
                     <div className="space-y-2">
                       {notams.notams.slice(0, 6).map((item) => (
                         <div key={item.id} className="rounded-lg border border-[#29415e] bg-[#0f1a28] p-3 text-xs space-y-1">
@@ -1376,8 +1381,12 @@ export default function PilotTools() {
                         </div>
                       ))}
                     </div>
-                  ) : (
-                    <p className="text-sm text-[#A9BBCD]">No active NOTAMs.</p>
+                    ) : (
+                      <p className="text-sm text-[#A9BBCD]">
+                        {notams?.availability === "unavailable" ? "NOTAM availability is unverified; this is not confirmation that no active NOTAMs exist." : "No NOTAMs returned."}
+                      </p>
+                    )}
+                    </>
                   )}
                   <p className="text-xs text-[#A9BBCD]">
                     NOTAMs powered by FAA SWIM.

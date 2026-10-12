@@ -5675,11 +5675,13 @@ export default function FlightPlanner() {
   );
 
   const routeNotamGroups = useMemo(() => {
-    const groups: Array<{ icao: string; source?: string; isError: boolean; isLoading: boolean; notams: any[] }> = [];
+    const groups: Array<{ icao: string; source?: string; warning?: string; availability?: string; isError: boolean; isLoading: boolean; notams: any[] }> = [];
     if (primaryIcao) {
       groups.push({
         icao: primaryIcao,
         source: notamsSummaryQuery.data?.source,
+        warning: notamsSummaryQuery.data?.warning,
+        availability: notamsSummaryQuery.data?.availability,
         isError: notamsSummaryQuery.isError,
         isLoading: notamsSummaryQuery.isLoading || notamsSummaryQuery.isFetching,
         notams: Array.isArray(notamsSummaryQuery.data?.notams) ? notamsSummaryQuery.data.notams : [],
@@ -5690,6 +5692,8 @@ export default function FlightPlanner() {
       groups.push({
         icao,
         source: (query?.data as any)?.source,
+        warning: (query?.data as any)?.warning,
+        availability: (query?.data as any)?.availability,
         isError: Boolean(query?.isError),
         isLoading: Boolean(query?.isLoading || query?.isFetching),
         notams: Array.isArray((query?.data as any)?.notams) ? (query?.data as any).notams : [],
@@ -5701,6 +5705,8 @@ export default function FlightPlanner() {
     additionalRouteNotamQueries,
     notamsSummaryQuery.data?.notams,
     notamsSummaryQuery.data?.source,
+    notamsSummaryQuery.data?.warning,
+    notamsSummaryQuery.data?.availability,
     notamsSummaryQuery.isError,
     notamsSummaryQuery.isFetching,
     notamsSummaryQuery.isLoading,
@@ -13295,8 +13301,17 @@ export default function FlightPlanner() {
                         {group.isLoading ? "Loading" : group.isError ? "Unavailable" : `${group.notams.length} returned`}
                       </Badge>
                     </div>
+                    {group.warning && (
+                      <div className="rounded border border-amber-500/40 bg-amber-500/10 p-2 text-xs text-amber-100">
+                        {group.warning}
+                      </div>
+                    )}
                     {!group.isLoading && !group.isError && group.notams.length === 0 && (
-                      <div className="text-xs text-muted-foreground">No NOTAMs returned for this airport.</div>
+                      <div className="text-xs text-muted-foreground">
+                        {group.availability === "unavailable"
+                          ? "NOTAM availability is unverified; this is not confirmation that no active NOTAMs exist."
+                          : "No NOTAMs returned for this airport."}
+                      </div>
                     )}
                     {group.notams.map((notam: any, index) => {
                       const effective = notam.effective ?? notam.effectiveAt ?? notam.startTime ?? notam.validFrom ?? null;

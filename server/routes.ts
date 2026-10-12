@@ -111,6 +111,7 @@ import {
   marketplaceListings,
   promoCodeUsages,
   notams as notamsTable,
+  notamSourceHealth,
   users,
   userNotifications,
   cfiStudents,
@@ -134,6 +135,7 @@ import {
   type PromoCode,
   type MembershipPartnerOffer,
 } from "@shared/schema";
+import { deriveNotamSourceHealth } from "./services/notam-source-health";
 import {
   addDays,
   format,
@@ -22850,7 +22852,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             updatedAt: new Date(),
           })
           .onConflictDoUpdate({
-            target: notamsTable.notamId,
+            target: [notamsTable.source, notamsTable.notamId],
             set: {
               icao: requestedIcao,
               text,
@@ -22977,6 +22979,7 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           .where(
             and(
               icaoClause,
+              inArray(notamsTable.source, ["swim", "swim_backfill"]),
               or(
                 isNull(notamsTable.expiresAt),
                 gte(notamsTable.expiresAt, nowDate),
@@ -22985,6 +22988,15 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           )
           .orderBy(desc(notamsTable.effectiveAt), desc(notamsTable.createdAt))
           .limit(50);
+        const [swimHealthRow] = await db
+          .select()
+          .from(notamSourceHealth)
+          .where(eq(notamSourceHealth.source, "swim"))
+          .limit(1);
+        const sourceHealth = deriveNotamSourceHealth("swim", swimHealthRow);
+        const sourceWarning = sourceHealth.status === "healthy"
+          ? undefined
+          : "FAA SWIM source health is not verified as current. Verify NOTAMs through an official briefing source.";
 
         if (rows.length > 0) {
           console.log(
@@ -22999,8 +23011,12 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
           return res.json({
             icao: requestedIcao,
             source: NOTAM_SOURCE,
+            sourceHealth,
+            availability: sourceHealth.status === "healthy" ? "current" : "degraded",
+            warning: sourceWarning,
             notams: rows.map((row) => ({
               id: row.notamId,
+              source: row.source,
               text: row.text,
               effective: row.effectiveAt
                 ? row.effectiveAt.toISOString()
@@ -23058,6 +23074,9 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             return res.json({
               icao: requestedIcao,
               source: "swim_backfill",
+              sourceHealth,
+              availability: "degraded",
+              warning: sourceWarning || "NOTAMs were obtained from the configured SWIM snapshot fallback. Verify through an official briefing source.",
               notams: backfillNotams,
             });
           }
@@ -23082,18 +23101,24 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
             .json({
               icao: requestedIcao,
               source: NOTAM_SOURCE,
+              sourceHealth,
+              availability: "unavailable",
               notams: [],
-              notice: "Awaiting SWIM stream.",
+              notice: "FAA SWIM NOTAM availability is not verified. An empty list is not confirmation that no active NOTAMs exist.",
+              warning: sourceWarning,
             });
         }
 
         return res
-          .status(200)
+          .status(503)
           .json({
             icao: requestedIcao,
             source: NOTAM_SOURCE,
+            sourceHealth,
+            availability: "unavailable",
             notams: [],
-            notice: "Awaiting SWIM stream.",
+            notice: "FAA SWIM NOTAM availability is not verified. An empty list is not confirmation that no active NOTAMs exist.",
+            warning: sourceWarning,
           });
       }
 
@@ -23126,26 +23151,53 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
 
   app.get("/api/notams/health", async (_req, res) => {
     try {
-      const [latest] = await db
-        .select({ updatedAt: notamsTable.updatedAt })
-        .from(notamsTable)
-        .orderBy(desc(notamsTable.updatedAt))
-        .limit(1);
+      const latestRows = NOTAM_SOURCE === "swim_jms"
+        ? await db
+            .select({ updatedAt: notamsTable.updatedAt })
+            .from(notamsTable)
+            .where(inArray(notamsTable.source, ["swim", "swim_backfill"]))
+            .orderBy(desc(notamsTable.updatedAt))
+            .limit(1)
+        : await db
+            .select({ updatedAt: notamsTable.updatedAt })
+            .from(notamsTable)
+            .orderBy(desc(notamsTable.updatedAt))
+            .limit(1);
+      const [latest] = latestRows;
 
       const lastUpdatedAt = latest?.updatedAt
         ? new Date(latest.updatedAt)
         : null;
-      const maxAgeMinutes = Number(
-        process.env.NOTAM_HEALTH_MAX_AGE_MINUTES || 60,
-      );
+      const configuredMaxAgeMinutes = Number(process.env.NOTAM_HEALTH_MAX_AGE_MINUTES);
+      const maxAgeMinutes = Number.isFinite(configuredMaxAgeMinutes) && configuredMaxAgeMinutes > 0
+        ? configuredMaxAgeMinutes
+        : 60;
       const ageMs = lastUpdatedAt ? Date.now() - lastUpdatedAt.getTime() : null;
       const isStale = ageMs === null ? true : ageMs > maxAgeMinutes * 60 * 1000;
+      const healthRows = await db.select().from(notamSourceHealth);
+      const bySource = new Map(healthRows.map((row) => [row.source, row]));
+      const configuredHeartbeatAge = Number(process.env.NOTAM_HEALTH_HEARTBEAT_MAX_AGE_MS);
+      const configuredNmsSuccessAge = Number(process.env.NMS_HEALTH_SUCCESS_MAX_AGE_MS);
+      const heartbeatMaxAgeMs = Number.isFinite(configuredHeartbeatAge) && configuredHeartbeatAge > 0
+        ? Math.max(60_000, configuredHeartbeatAge)
+        : 5 * 60_000;
+      const nmsSuccessMaxAgeMs = Number.isFinite(configuredNmsSuccessAge) && configuredNmsSuccessAge > 0
+        ? Math.max(60_000, configuredNmsSuccessAge)
+        : 60 * 60_000;
+      const sources = {
+        swim: deriveNotamSourceHealth("swim", bySource.get("swim"), Date.now(), heartbeatMaxAgeMs, nmsSuccessMaxAgeMs),
+        nms: deriveNotamSourceHealth("nms_api", bySource.get("nms_api"), Date.now(), heartbeatMaxAgeMs, nmsSuccessMaxAgeMs),
+      };
+      const selectedSourceStale = NOTAM_SOURCE === "swim_jms"
+        ? sources.swim.status !== "healthy"
+        : isStale;
 
       res.json({
-        ok: !isStale,
+        ok: !selectedSourceStale,
         lastUpdatedAt: lastUpdatedAt ? lastUpdatedAt.toISOString() : null,
         maxAgeMinutes,
-        isStale,
+        isStale: selectedSourceStale,
+        sources,
       });
     } catch (error) {
       console.error("NOTAM health check failed:", error);

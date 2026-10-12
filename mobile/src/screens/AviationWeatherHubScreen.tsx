@@ -25,6 +25,9 @@ const tabs = [
 type AirportMeta = { lat?: number; lon?: number; name?: string | null; city?: string | null; state?: string | null };
 
 type NotamResponse = {
+  availability?: 'current' | 'degraded' | 'unavailable';
+  warning?: string;
+  notice?: string;
   notams?: Array<{ id: string; text: string }>;
 };
 
@@ -479,8 +482,16 @@ export default function AviationWeatherHubScreen() {
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>NOTAMs</Text>
           <Text style={styles.helperText}>US-only (FAA).</Text>
+          {notamsQuery.isError ? <Text style={styles.warningText}>NOTAM feed unavailable. This is not confirmation that no active NOTAMs exist; verify through an official briefing source.</Text> : null}
+          {notamsQuery.data?.warning ? <Text style={styles.warningText}>{notamsQuery.data.warning}</Text> : null}
           {notamsQuery.isLoading && <ActivityIndicator color={colors.primary} />}
-          {!notamsQuery.isLoading && notamsCount === 0 && <Text style={styles.helperText}>No NOTAMs available.</Text>}
+          {!notamsQuery.isLoading && !notamsQuery.isError && notamsCount === 0 && (
+            <Text style={styles.helperText}>
+              {notamsQuery.data?.availability === 'unavailable'
+                ? 'NOTAM availability is unverified; this is not confirmation that no active NOTAMs exist.'
+                : 'No NOTAMs returned.'}
+            </Text>
+          )}
           {notamsQuery.data?.notams?.map((notam) => (
             <View key={notam.id} style={styles.listItem}>
               <Text style={styles.listTitle}>{notam.id}</Text>
@@ -711,6 +722,7 @@ const styles = StyleSheet.create({
   primaryButtonText: { color: '#fff', fontWeight: '800' },
   buttonDisabled: { opacity: 0.5 },
   helperText: { fontSize: 12, color: colors.textMuted, marginTop: spacing.xs },
+  warningText: { fontSize: 12, color: colors.warning, marginBottom: spacing.sm },
   inlineHelperText: { fontSize: 12, color: colors.textMuted, marginTop: spacing.xs },
   secondaryButton: {
     paddingHorizontal: spacing.md,

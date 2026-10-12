@@ -1788,6 +1788,7 @@ export default function FlightPlannerScreen() {
   const [enrouteWeather, setEnrouteWeather] = useState<WeatherResponse[]>([]);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [summaryNotamWarning, setSummaryNotamWarning] = useState<string | null>(null);
   const [summaryCounts, setSummaryCounts] = useState({
     winds: 0,
     notams: 0,
@@ -8039,6 +8040,7 @@ export default function FlightPlannerScreen() {
     let cancelled = false;
     setSummaryLoading(true);
     setSummaryError(null);
+    setSummaryNotamWarning(null);
 
     const requests: Promise<any>[] = [];
 
@@ -8066,6 +8068,12 @@ export default function FlightPlannerScreen() {
         const windsPayload = responses[0]?.data;
         const pirepsPayload = responses[1]?.data;
         const notamsPayload = responses[2]?.data;
+        setSummaryNotamWarning(
+          notamsPayload?.warning ||
+          (notamsPayload?.availability === 'unavailable'
+            ? 'NOTAM availability is unverified; an empty list is not confirmation that no active NOTAMs exist.'
+            : null),
+        );
         const convPayload = responses[3]?.data;
         const icingPayload = responses[4]?.data;
         const turbPayload = responses[5]?.data;
@@ -9658,6 +9666,7 @@ export default function FlightPlannerScreen() {
         </View>
         {summaryLoading && <ActivityIndicator color={colors.primary} />}
         {summaryError && <Text style={styles.errorText}>{summaryError}</Text>}
+        {summaryNotamWarning && <Text style={styles.warningText}>{summaryNotamWarning}</Text>}
         <View style={styles.summaryGrid}>
           <View style={styles.summaryTile}>
             <Text style={styles.summaryLabel}>Flight category</Text>
@@ -9673,7 +9682,11 @@ export default function FlightPlannerScreen() {
           <View style={styles.summaryTile}>
             <Text style={styles.summaryLabel}>NOTAMs</Text>
             <Text style={styles.summaryValue}>
-              {summaryCounts.notams > 0 ? `${summaryCounts.notams} active` : 'None loaded'}
+              {summaryCounts.notams > 0
+                ? `${summaryCounts.notams} active`
+                : summaryNotamWarning
+                  ? 'Availability unverified'
+                  : 'None returned'}
             </Text>
           </View>
         </View>

@@ -3217,6 +3217,26 @@ export const nmsSyncState = pgTable("nms_sync_state", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Independent NOTAM worker health. One bounded row per upstream source keeps
+// worker liveness separate from the age of records in the shared NOTAM table.
+export const notamSourceHealth = pgTable("notam_source_health", {
+  source: text("source").primaryKey(),
+  workerState: text("worker_state"),
+  connectionState: text("connection_state"),
+  consumerState: text("consumer_state"),
+  lastHeartbeatAt: timestamp("last_heartbeat_at"),
+  lastAttemptAt: timestamp("last_attempt_at"),
+  lastSuccessAt: timestamp("last_success_at"),
+  lastSourceUpdateAt: timestamp("last_source_update_at"),
+  lastMessageReceivedAt: timestamp("last_message_received_at"),
+  lastPersistedAt: timestamp("last_persisted_at"),
+  lastFailureAt: timestamp("last_failure_at"),
+  lastFailureCode: text("last_failure_code"),
+  lastResult: text("last_result"),
+  coverage: jsonb("coverage"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // NOTAMs (FAA SWIM ingestion)
 export const notams = pgTable(
   "notams",
@@ -3229,13 +3249,13 @@ export const notams = pgTable(
     text: text("text").notNull(),
     effectiveAt: timestamp("effective_at"),
     expiresAt: timestamp("expires_at"),
-    source: text("source").default("swim"),
+    source: text("source").notNull().default("swim"),
     raw: jsonb("raw"),
     createdAt: timestamp("created_at").defaultNow(),
     updatedAt: timestamp("updated_at").defaultNow(),
   },
   (table) => [
-    uniqueIndex("idx_notams_unique").on(table.notamId),
+    uniqueIndex("idx_notams_source_unique").on(table.source, table.notamId),
     index("idx_notams_icao").on(table.icao),
   ],
 );
@@ -7510,6 +7530,7 @@ export type InsertPartnerRedirect = z.infer<typeof insertPartnerRedirectSchema>;
 
 export type Notam = typeof notams.$inferSelect;
 export type NotamIngestEvent = typeof notamIngestEvents.$inferSelect;
+export type NotamSourceHealth = typeof notamSourceHealth.$inferSelect;
 export type TfmsEvent = typeof tfmsEvents.$inferSelect;
 export type TfmsOverlay = typeof tfmsOverlays.$inferSelect;
 

@@ -30,6 +30,9 @@ type RunwayBriefing = {
 
 type NotamResponse = {
   icao: string;
+  availability?: 'current' | 'degraded' | 'unavailable';
+  warning?: string;
+  notice?: string;
   notams: Array<{ id: string; text: string; effective?: string; expires?: string }>;
 };
 
@@ -73,7 +76,7 @@ export default function AirportBriefingScreen() {
     enabled: !!searchIcao,
   });
 
-  const { data: notams, isLoading: notamLoading } = useQuery<NotamResponse>({
+  const { data: notams, isLoading: notamLoading, isError: notamError } = useQuery<NotamResponse>({
     queryKey: ['/api/notams', searchIcao],
     queryFn: async () => {
       const res = await api.get(`/api/notams/${searchIcao}`);
@@ -182,6 +185,20 @@ export default function AirportBriefingScreen() {
         title="NOTAMs"
         subtitle="FAA NOTAMs for the selected airport."
       >
+        {notamError ? (
+          <View style={styles.staleDataBox}>
+            <Text style={styles.staleDataText}>
+              NOTAM feed unavailable. This is not confirmation that no active NOTAMs exist; verify through an official briefing source.
+            </Text>
+          </View>
+        ) : null}
+        {notams?.warning || notams?.availability === 'unavailable' ? (
+          <View style={styles.staleDataBox}>
+            <Text style={styles.staleDataText}>
+              {notams.warning || notams.notice || 'NOTAM source availability is not verified. Verify through an official briefing source.'}
+            </Text>
+          </View>
+        ) : null}
         {notamLoading ? (
           <ActivityIndicator color={colors.primary} />
         ) : notams?.notams?.length ? (
@@ -196,8 +213,12 @@ export default function AirportBriefingScreen() {
               ) : null}
             </View>
           ))
-        ) : (
-          <Text style={styles.helperText}>No NOTAMs available yet.</Text>
+        ) : notamError ? null : (
+          <Text style={styles.helperText}>
+            {notams?.availability === 'unavailable'
+              ? 'NOTAM availability is unverified; this is not confirmation that no active NOTAMs exist.'
+              : 'No NOTAMs returned.'}
+          </Text>
         )}
         <Text style={styles.helperText}>NOTAMs powered by FAA SWIM.</Text>
       </SectionCard>

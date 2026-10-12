@@ -3,6 +3,7 @@ import zlib from "zlib";
 import { db } from "./db";
 import { notams as notamsTable, nmsSyncState } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
+import { updateNotamSourceHealth } from "./services/notam-source-health";
 
 type NmsNotam = {
   icao: string;
@@ -42,6 +43,17 @@ let accessTokenExpiresAt = 0;
 
 function logEvent(payload: Record<string, any>) {
   console.log(JSON.stringify({ event: "nms_sync", ...payload }));
+}
+
+async function recordHealth(patch: Parameters<typeof updateNotamSourceHealth>[1]) {
+  try {
+    await updateNotamSourceHealth("nms_api", patch);
+  } catch (error: any) {
+    logEvent({
+      phase: "health_write_error",
+      errorCode: String(error?.code || "DB_ERROR").replace(/[^A-Za-z0-9_.:-]/g, "_").slice(0, 80),
+    });
+  }
 }
 
 function buildUrl(path: string, params?: Record<string, string | undefined>) {
@@ -323,8 +335,8 @@ async function upsertNotams(notams: NmsNotam[]) {
   for (let i = 0; i < notams.length; i += UPSERT_BATCH_SIZE) {
     const batch = notams.slice(i, i + UPSERT_BATCH_SIZE);
     const now = new Date();
-    try {
-      await db
+    await db.transaction(async (tx) => {
+      await tx
         .insert(notamsTable)
         .values(
           batch.map((item) => ({
@@ -339,20 +351,17 @@ async function upsertNotams(notams: NmsNotam[]) {
           }))
         )
         .onConflictDoUpdate({
-          target: notamsTable.notamId,
+          target: [notamsTable.source, notamsTable.notamId],
           set: {
             icao: sql`excluded.icao`,
             text: sql`excluded.text`,
             effectiveAt: sql`excluded.effective_at`,
             expiresAt: sql`excluded.expires_at`,
-            source: NMS_SOURCE,
             raw: sql`excluded.raw`,
             updatedAt: now,
           },
         });
-    } catch (error) {
-      console.warn("NMS upsert failed:", error);
-    }
+    });
   }
 }
 
@@ -429,6 +438,13 @@ async function runDeltaSync() {
   activeSync = true;
   const started = Date.now();
   const syncStartedAt = new Date(started);
+  await recordHealth({
+    workerState: "running",
+    lastHeartbeatAt: syncStartedAt,
+    lastAttemptAt: syncStartedAt,
+    lastResult: "sync_started",
+    coverage: { classifications: NMS_CLASSIFICATIONS },
+  });
   try {
     const lastUpdatedRaw = await getStateValue("lastUpdatedDate");
     const fallback = new Date(Date.now() - 60 * 60 * 1000);
@@ -468,6 +484,14 @@ async function runDeltaSync() {
         ? latestUpdated
         : syncStartedAt;
     await setStateValue("lastUpdatedDate", nextCursor.toISOString());
+    await recordHealth({
+      workerState: "running",
+      lastHeartbeatAt: new Date(),
+      lastSuccessAt: new Date(),
+      ...(total > 0 && latestUpdated ? { lastSourceUpdateAt: latestUpdated } : {}),
+      lastResult: total === 0 ? "sync_success_empty_delta" : "sync_success",
+      coverage: { classifications, records: total },
+    });
     logEvent({
       phase: "delta_complete",
       total,
@@ -475,6 +499,13 @@ async function runDeltaSync() {
       durationMs: Date.now() - started,
     });
   } catch (error: any) {
+    await recordHealth({
+      workerState: "running",
+      lastHeartbeatAt: new Date(),
+      lastFailureAt: new Date(),
+      lastFailureCode: error?.code || "NMS_SYNC_ERROR",
+      lastResult: "sync_failed",
+    });
     logEvent({
       phase: "delta_error",
       error: error?.message || String(error),
@@ -517,6 +548,17 @@ export function startNmsNotamWorker() {
   }
   if (workerStarted) return true;
   workerStarted = true;
+
+  void recordHealth({
+    workerState: "running",
+    lastHeartbeatAt: new Date(),
+    lastResult: "worker_started",
+    coverage: { classifications: NMS_CLASSIFICATIONS },
+  });
+  const heartbeat = setInterval(() => {
+    void recordHealth({ workerState: "running", lastHeartbeatAt: new Date() });
+  }, 60_000);
+  heartbeat.unref?.();
 
   void runInitialLoadIfNeeded();
   const intervalMs = Math.max(1, NMS_POLL_INTERVAL_MINUTES) * 60 * 1000;

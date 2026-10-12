@@ -1,7 +1,12 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { analyzeNotamMessage, ingestNotamMessage } from "../../server/notam-worker";
+import {
+  analyzeNotamMessage,
+  acknowledgePersistedNotamDelivery,
+  ingestNotamMessage,
+  resolveNotamDeliveryDisposition,
+} from "../../server/notam-worker";
 
 const canonicalXml = readFileSync(
   new URL("../../test/fixtures/notam/canonical_save.xml", import.meta.url),
@@ -135,4 +140,59 @@ test("db failure is classified separately", async () => {
   assert.equal(result.reason, "DB_ERROR");
   assert.equal(result.reasonEmpty, undefined);
   assert.equal(result.fallbackWriteAttempted, false);
+  assert.equal(resolveNotamDeliveryDisposition(result), "retry_unacked");
+});
+
+test("successful canonical persistence is acknowledged only after all records save", async () => {
+  const result = await ingestNotamMessage(canonicalXml, async (items) => ({
+    savedCount: items.length,
+    errorCount: 0,
+    errors: [],
+  }));
+  assert.equal(resolveNotamDeliveryDisposition(result), "ack_persisted");
+  let acknowledgements = 0;
+  acknowledgePersistedNotamDelivery({ acknowledge: () => { acknowledgements += 1; } }, result);
+  assert.equal(acknowledgements, 1);
+});
+
+test("partial multi-record persistence is not acknowledged", async () => {
+  const multiXml = canonicalXml.replace("</aixm:AIXMBasicMessage>", `${canonicalXml}</aixm:AIXMBasicMessage>`);
+  const result = await ingestNotamMessage(multiXml, async (items) => ({
+    savedCount: Math.max(0, items.length - 1),
+    errorCount: 1,
+    errors: [new Error("partial write")],
+  }));
+  assert.equal(resolveNotamDeliveryDisposition(result), "retry_unacked");
+  let acknowledgements = 0;
+  acknowledgePersistedNotamDelivery({ acknowledge: () => { acknowledgements += 1; } }, result);
+  assert.equal(acknowledgements, 0);
+});
+
+test("persisted poison message is acknowledged but fallback failure is retried", async () => {
+  const persisted = await ingestNotamMessage(emptyXml, async () => ({ savedCount: 0, errorCount: 0, errors: [] }), {
+    messageId: "poison-persisted",
+    fallbackWriter: async () => ({ id: "event-1" }),
+  });
+  assert.equal(resolveNotamDeliveryDisposition(persisted), "ack_poison_recorded");
+
+  const failed = await ingestNotamMessage(emptyXml, async () => ({ savedCount: 0, errorCount: 0, errors: [] }), {
+    messageId: "poison-failed",
+    fallbackWriter: async () => { throw new Error("db unavailable"); },
+  });
+  assert.equal(resolveNotamDeliveryDisposition(failed), "retry_unacked");
+});
+
+test("redelivery remains idempotent for the same canonical identifier", async () => {
+  const records = new Map<string, unknown>();
+  const writer = async (items: any[]) => {
+    for (const item of items) records.set(`swim:${item.notamId}`, item);
+    return { savedCount: items.length, errorCount: 0, errors: [] };
+  };
+  const first = await ingestNotamMessage(canonicalXml, writer);
+  const firstSize = records.size;
+  const second = await ingestNotamMessage(canonicalXml, writer);
+  assert.equal(resolveNotamDeliveryDisposition(first), "ack_persisted");
+  assert.equal(resolveNotamDeliveryDisposition(second), "ack_persisted");
+  assert.ok(firstSize > 0);
+  assert.equal(records.size, firstSize);
 });

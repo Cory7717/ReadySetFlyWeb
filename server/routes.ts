@@ -21,6 +21,11 @@ import {
   type RunwayMeta,
 } from "./services/runway-reference-cache";
 import {
+  createFaaObstacleDataService,
+  resolveFaaObstacleCacheTtlMs,
+  resolveFaaObstacleSource,
+} from "./services/faaObstacleData";
+import {
   Client,
   Environment,
   LogLevel,
@@ -914,38 +919,18 @@ type NearbyObstacle = {
   distanceNm: number;
 };
 
-type CachedObstacleRecord = Omit<NearbyObstacle, "distanceNm">;
-
 const USGS_EPQS_URL = (
   process.env.USGS_EPQS_URL || "https://epqs.nationalmap.gov/v1/json"
 ).trim();
-const FAA_DDOF_ZIP_URL = (
-  process.env.FAA_DDOF_ZIP_URL ||
-  "https://aeronav.faa.gov/Obst_Data/DDOF_CSV.zip"
-).trim();
-const FAA_DDOF_CACHE_TTL_MS = Math.max(
-  60 * 60 * 1000,
-  Number(process.env.FAA_DDOF_CACHE_TTL_MS || 12 * 60 * 60 * 1000),
+const faaObstacleSource = resolveFaaObstacleSource(
+  process.env.FAA_DDOF_ZIP_URL,
 );
-
-let obstacleCache: {
-  loadedAt: number;
-  rows: CachedObstacleRecord[];
-} | null = null;
-let obstacleCachePromise: Promise<CachedObstacleRecord[]> | null = null;
-
-function findHeaderIndex(headers: string[], aliases: string[]) {
-  const normalizedAliases = aliases.map((alias) => alias.toUpperCase());
-  return headers.findIndex((header) => normalizedAliases.includes(header));
-}
-
-function parseCsvNumber(value: string | undefined) {
-  if (!value) return null;
-  const normalized = value.replace(/,/g, "").trim();
-  if (!normalized) return null;
-  const number = Number(normalized);
-  return Number.isFinite(number) ? number : null;
-}
+const faaObstacleDataService = createFaaObstacleDataService({
+  ...faaObstacleSource,
+  cacheTtlMs: resolveFaaObstacleCacheTtlMs(
+    process.env.FAA_DDOF_CACHE_TTL_MS,
+  ),
+});
 
 function haversineNm(lat1: number, lon1: number, lat2: number, lon2: number) {
   const toRad = (value: number) => (value * Math.PI) / 180;
@@ -1096,140 +1081,6 @@ async function fetchTerrainElevationFtCached(
     elevationFt,
   });
   return elevationFt;
-}
-
-async function loadCachedObstacles(): Promise<CachedObstacleRecord[]> {
-  if (
-    obstacleCache &&
-    obstacleCache.loadedAt + FAA_DDOF_CACHE_TTL_MS > Date.now()
-  ) {
-    return obstacleCache.rows;
-  }
-  if (obstacleCachePromise) {
-    return obstacleCachePromise;
-  }
-
-  obstacleCachePromise = (async () => {
-    const response = await fetchWithTimeout(
-      FAA_DDOF_ZIP_URL,
-      {
-        headers: {
-          Accept: "application/zip, application/octet-stream",
-          "User-Agent": "ReadySetFly Obstacles/1.0",
-        },
-      },
-      20000,
-    );
-
-    if (!response.ok) {
-      throw new Error(`FAA DDOF download failed (${response.status})`);
-    }
-
-    const buffer = Buffer.from(await response.arrayBuffer());
-    const zip = new AdmZip(buffer);
-    const csvEntry = zip
-      .getEntries()
-      .find(
-        (entry) =>
-          !entry.isDirectory && entry.entryName.toLowerCase().endsWith(".csv"),
-      );
-
-    if (!csvEntry) {
-      throw new Error("FAA DDOF archive did not contain a CSV file");
-    }
-
-    const csvText = zip.readAsText(csvEntry, "utf8");
-    const rows = parseBasicCsvRows(csvText);
-    if (rows.length < 2) {
-      throw new Error("FAA DDOF CSV did not contain obstacle rows");
-    }
-
-    const headers = rows[0].map((value) => value.trim().toUpperCase());
-    const latIndex = findHeaderIndex(headers, [
-      "LATDEC",
-      "LATITUDE",
-      "LATDD",
-      "LATITUDEDECIMAL",
-    ]);
-    const lonIndex = findHeaderIndex(headers, [
-      "LONDEC",
-      "LONGITUDE",
-      "LONDD",
-      "LONGITUDEDECIMAL",
-    ]);
-    const amslIndex = findHeaderIndex(headers, [
-      "AMSL",
-      "ALT_MSL",
-      "ELEVATION",
-      "MSL",
-    ]);
-    const aglIndex = findHeaderIndex(headers, [
-      "AGL",
-      "HEIGHTAGL",
-      "HEIGHT_AGL",
-    ]);
-    const cityIndex = findHeaderIndex(headers, ["CITY", "CITYNAME"]);
-    const stateIndex = findHeaderIndex(headers, ["STATE", "STATEABBR"]);
-    const kindIndex = findHeaderIndex(headers, [
-      "TYPE",
-      "OBSTACLETYPE",
-      "KIND",
-    ]);
-    const lightingIndex = findHeaderIndex(headers, [
-      "LIGHTING",
-      "LIGHTEDIND",
-      "MARKER",
-    ]);
-    const idIndex = findHeaderIndex(headers, [
-      "OID",
-      "OBSTACLEID",
-      "ID",
-      "NUMBER",
-    ]);
-
-    if (latIndex < 0 || lonIndex < 0) {
-      throw new Error(
-        "FAA DDOF CSV headers did not include decimal latitude/longitude",
-      );
-    }
-
-    const parsedRows: CachedObstacleRecord[] = [];
-    for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
-      const row = rows[rowIndex];
-      const lat = parseCsvNumber(row[latIndex]);
-      const lon = parseCsvNumber(row[lonIndex]);
-      if (lat === null || lon === null) continue;
-      parsedRows.push({
-        id: String(row[idIndex] || `obstacle-${rowIndex}`).trim(),
-        lat,
-        lon,
-        amslFt: amslIndex >= 0 ? parseCsvNumber(row[amslIndex]) : null,
-        aglFt: aglIndex >= 0 ? parseCsvNumber(row[aglIndex]) : null,
-        city:
-          cityIndex >= 0 ? String(row[cityIndex] || "").trim() || null : null,
-        state:
-          stateIndex >= 0 ? String(row[stateIndex] || "").trim() || null : null,
-        kind:
-          kindIndex >= 0 ? String(row[kindIndex] || "").trim() || null : null,
-        lighting:
-          lightingIndex >= 0
-            ? String(row[lightingIndex] || "").trim() || null
-            : null,
-      });
-    }
-
-    obstacleCache = {
-      loadedAt: Date.now(),
-      rows: parsedRows,
-    };
-    obstacleCachePromise = null;
-    return parsedRows;
-  })().catch((error) => {
-    obstacleCachePromise = null;
-    throw error;
-  });
-
-  return obstacleCachePromise;
 }
 
 function mapFlyingClubFleetCsv(csvText: string) {
@@ -22038,7 +21889,8 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         return res.status(400).json({ error: "lat and lon are required." });
       }
 
-      const obstacles = await loadCachedObstacles();
+      const obstacleData = await faaObstacleDataService.getData();
+      const obstacles = obstacleData.records;
       const nearby = obstacles
         .map((obstacle) => ({
           ...obstacle,
@@ -22071,12 +21923,20 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         count: nearby.length,
         highestObstacle,
         obstacles: nearby,
+        stale: obstacleData.referenceData.stale,
+        dataStatus: obstacleData.referenceData.status,
+        referenceData: obstacleData.referenceData,
       });
     } catch (error: any) {
       console.error("Nearby obstacle fetch failed:", error);
       res
         .status(502)
-        .json({ error: error?.message || "Failed to fetch nearby obstacles" });
+        .json({
+          error: error?.message || "Failed to fetch nearby obstacles",
+          source: "FAA Daily DOF",
+          stale: false,
+          dataStatus: "unavailable",
+        });
     }
   });
 

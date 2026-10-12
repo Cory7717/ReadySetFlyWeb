@@ -224,6 +224,18 @@ type NearbyObstacleResponse = {
   source: string;
   radiusNm: number;
   count: number;
+  stale?: boolean;
+  dataStatus?: "fresh" | "stale" | "unavailable";
+  referenceData?: {
+    fetchedAt: string;
+    publishedAt: string | null;
+    recordCount: number;
+    cacheAgeMs: number;
+    dataAgeMs: number | null;
+    stale: boolean;
+    status: "fresh" | "stale";
+    warning: string | null;
+  };
   highestObstacle: {
     id: string;
     lat: number;
@@ -3570,7 +3582,22 @@ export default function AdsbLive() {
                 </div>
                 <div className="rsf-metal-subpanel rounded-lg p-3">
                   <div className="font-medium text-foreground">FAA obstacles</div>
-                  <div>{showObstacleOverlay ? `${obstacleCount} nearby obstacles loaded from the FAA Daily DOF.` : "Overlay turned off."}</div>
+                  <div>
+                    {!showObstacleOverlay
+                      ? "Overlay turned off."
+                      : obstacleQuery.error
+                        ? "FAA obstacle data is unavailable; no zero-obstacle conclusion has been made."
+                        : !obstacleQuery.data
+                          ? "Loading FAA obstacle data..."
+                          : obstacleQuery.data.stale
+                            ? `${obstacleCount} nearby obstacles shown from verified last-known-good FAA data.`
+                            : `${obstacleCount} nearby obstacles loaded from the FAA Daily DOF.`}
+                  </div>
+                  {obstacleQuery.data?.stale ? (
+                    <div className="mt-1 text-amber-400">
+                      {obstacleQuery.data.referenceData?.warning || "FAA obstacle data is stale."}
+                    </div>
+                  ) : null}
                   {highestObstacle ? (
                     <div>
                       Highest nearby obstacle: {formatAltitude(highestObstacle.amslFt)}

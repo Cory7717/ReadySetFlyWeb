@@ -595,6 +595,18 @@ type NearbyObstacleResponse = {
   source: string;
   radiusNm: number;
   count: number;
+  stale?: boolean;
+  dataStatus?: 'fresh' | 'stale' | 'unavailable';
+  referenceData?: {
+    fetchedAt: string;
+    publishedAt: string | null;
+    recordCount: number;
+    cacheAgeMs: number;
+    dataAgeMs: number | null;
+    stale: boolean;
+    status: 'fresh' | 'stale';
+    warning: string | null;
+  };
   highestObstacle: NearbyObstacle | null;
   obstacles: NearbyObstacle[];
 };

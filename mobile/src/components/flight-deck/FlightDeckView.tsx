@@ -1863,7 +1863,11 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                 : null,
           ]}
         >
-          {obstacleClearanceFt != null ? `${Math.round(obstacleClearanceFt)} ft clr` : obstacleScanLoading ? 'loading' : '--'}
+          {obstacleClearanceFt != null
+            ? `${obstacleScan?.stale ? 'STALE · ' : ''}${Math.round(obstacleClearanceFt)} ft clr`
+            : obstacleScanLoading
+              ? 'loading'
+              : '--'}
         </Text>
       </View>
       {selectedTrafficTarget && !isSplitView && !focusModeActive ? (
@@ -2415,6 +2419,14 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                 : null,
             ]}
           >
+            {obstacleScan?.stale ? (
+              <View style={[styles.flightDeckAlertStrip, styles.flightDeckAlertStripCaution]}>
+                <Text style={styles.flightDeckAlertTitle}>Stale obstacle reference</Text>
+                <Text style={styles.flightDeckAlertText}>
+                  Verified last-known-good FAA obstacle data is in use. Treat obstacle clearance and escape guidance as advisory and verify against current official sources.
+                </Text>
+              </View>
+            ) : null}
             {shouldShowAlertStrip ? (
               <View
                 style={[
@@ -3579,6 +3591,11 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
               <Text style={styles.flightDeckPanelText}>
                 Obstacle {obstacleClearanceFt != null ? `${Math.round(obstacleClearanceFt)} ft clearance` : obstacleScanLoading ? 'scanning nearby obstacles' : 'not available'}.
               </Text>
+              {obstacleScan?.stale ? (
+                <Text style={[styles.flightDeckPanelText, { color: '#F6C453' }]}>
+                  {obstacleScan.referenceData?.warning || 'FAA obstacle data is stale and is shown from verified last-known-good obstacle data.'}
+                </Text>
+              ) : null}
               {terrainProfile?.maxElevationFt != null ? (
                 <Text style={styles.flightDeckPanelText}>
                   Highest terrain on route {Math.round(terrainProfile.maxElevationFt).toLocaleString()} ft.

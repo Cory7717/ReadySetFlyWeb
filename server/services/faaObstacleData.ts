@@ -1,4 +1,9 @@
 import AdmZip from "adm-zip";
+import { createHash } from "node:crypto";
+import type {
+  FaaObstacleDurableSnapshot,
+  FaaObstacleSnapshotStore,
+} from "./faaObstacleSnapshotStore";
 
 export const OFFICIAL_FAA_DDOF_URL =
   "https://aeronav.faa.gov/Obst_Data/DAILY_DOF_CSV.ZIP";
@@ -14,7 +19,7 @@ const DEFAULT_DOWNLOAD_TIMEOUT_MS = 60 * 1000;
 const DEFAULT_DIRECTORY_TIMEOUT_MS = 10 * 1000;
 const DEFAULT_MIN_RECORDS = 500_000;
 const DEFAULT_MAX_RECORDS = 1_500_000;
-const DEFAULT_MAX_ARCHIVE_BYTES = 40 * 1024 * 1024;
+export const DEFAULT_MAX_ARCHIVE_BYTES = 40 * 1024 * 1024;
 const DEFAULT_MAX_CSV_BYTES = 150 * 1024 * 1024;
 const DEFAULT_MAX_PUBLICATION_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -53,6 +58,93 @@ export type FaaObstacleDataResult = {
   referenceData: FaaObstacleReferenceData;
 };
 
+export type NearbyFaaObstacle = FaaObstacleRecord & { distanceNm: number };
+
+export type NearbyFaaObstacleResult = {
+  nearby: NearbyFaaObstacle[];
+  highestObstacle: NearbyFaaObstacle | null;
+  mslElevationAvailableCount: number;
+  missingMslElevationCount: number;
+  clearanceStatus: "verifiable" | "unverifiable" | "no-nearby-obstacles";
+};
+
+function obstacleDistanceNm(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+) {
+  const toRad = (value: number) => (value * Math.PI) / 180;
+  const earthRadiusKm = 6371;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(toRad(lat1)) *
+      Math.cos(toRad(lat2)) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  return 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)) * earthRadiusKm * 0.539957;
+}
+
+export function queryNearbyFaaObstacles(options: {
+  records: FaaObstacleRecord[];
+  lat: number;
+  lon: number;
+  radiusNm: number;
+  limit: number;
+}): NearbyFaaObstacleResult {
+  const withinRadius: NearbyFaaObstacle[] = [];
+  for (const obstacle of options.records) {
+    const distanceNm = obstacleDistanceNm(
+      options.lat,
+      options.lon,
+      obstacle.lat,
+      obstacle.lon,
+    );
+    if (distanceNm <= options.radiusNm) {
+      withinRadius.push({ ...obstacle, distanceNm });
+    }
+  }
+  const mslElevationAvailableCount = withinRadius.reduce(
+    (count, obstacle) => count + (obstacle.amslFt === null ? 0 : 1),
+    0,
+  );
+  const missingMslElevationCount =
+    withinRadius.length - mslElevationAvailableCount;
+  const highestObstacle = withinRadius.reduce<NearbyFaaObstacle | null>(
+    (highest, obstacle) => {
+      if (obstacle.amslFt === null) return highest;
+      return obstacle.amslFt > (highest?.amslFt ?? -Infinity)
+        ? obstacle
+        : highest;
+    },
+    null,
+  );
+  const nearby = withinRadius
+    .sort((a, b) => {
+      if (Math.abs(a.distanceNm - b.distanceNm) < 0.25) {
+        if (a.amslFt === null && b.amslFt !== null) return 1;
+        if (a.amslFt !== null && b.amslFt === null) return -1;
+        return (b.amslFt ?? 0) - (a.amslFt ?? 0);
+      }
+      return a.distanceNm - b.distanceNm;
+    })
+    .slice(0, options.limit);
+  return {
+    nearby,
+    highestObstacle,
+    mslElevationAvailableCount,
+    missingMslElevationCount,
+    clearanceStatus:
+      withinRadius.length === 0
+        ? "no-nearby-obstacles"
+        : highestObstacle
+          ? "verifiable"
+          : "unverifiable",
+  };
+}
+
 type VerifiedSnapshot = {
   records: FaaObstacleRecord[];
   fetchedAtMs: number;
@@ -63,11 +155,13 @@ type VerifiedSnapshot = {
   freshnessBasis: string[];
   archiveBytes: number;
   csvBytes: number;
+  restoredFromDurableCache: boolean;
 };
 
 type DirectoryMetadata = {
   sizeBytes: number;
   listedAt: string | null;
+  listedAtMs: number | null;
 };
 
 type FetchLike = (
@@ -90,6 +184,7 @@ export type FaaObstacleDataServiceOptions = {
   maxPublicationAgeMs?: number;
   fetchImpl?: FetchLike;
   now?: () => number;
+  snapshotStore?: FaaObstacleSnapshotStore;
 };
 
 export class FaaObstacleDataError extends Error {
@@ -141,18 +236,10 @@ export function buildFaaObstacleDownloadUrl({
   nowMs: number;
   cacheTtlMs: number;
 }) {
-  if (sourceWasOverridden) return sourceUrl;
-  const parsed = new URL(sourceUrl);
-  if (
-    parsed.origin === "https://aeronav.faa.gov" &&
-    parsed.pathname.toUpperCase() === "/OBST_DATA/DAILY_DOF_CSV.ZIP"
-  ) {
-    parsed.searchParams.set(
-      "rsf_refresh",
-      String(Math.floor(nowMs / Math.max(cacheTtlMs, 1))),
-    );
-  }
-  return parsed.toString();
+  void sourceWasOverridden;
+  void nowMs;
+  void cacheTtlMs;
+  return sourceUrl;
 }
 
 function findHeaderIndex(headers: string[], aliases: string[]) {
@@ -204,6 +291,7 @@ export function parseFaaObstacleCsvBuffer(
   let inQuotes = false;
   let dataRows = 0;
   let invalidCoordinateRows = 0;
+  const seenIdentifiers = new Set<string>();
 
   const processRow = () => {
     if (!row.some((value) => value.length > 0)) return;
@@ -263,12 +351,26 @@ export function parseFaaObstacleCsvBuffer(
         `FAA DDOF record ${dataRows} is missing its stable obstacle identifier`,
       );
     }
+    if (seenIdentifiers.has(id)) {
+      throw new FaaObstacleDataError(
+        `FAA DDOF contains duplicate stable obstacle identifier ${id}`,
+      );
+    }
+    seenIdentifiers.add(id);
+    const amslFt = parseCsvNumber(row[indexes.amsl]);
+    const aglFt = parseCsvNumber(row[indexes.agl]);
+    if (amslFt !== null && (amslFt < -2_000 || amslFt > 100_000)) {
+      throw new FaaObstacleDataError(`FAA DDOF record ${id} has an invalid AMSL elevation`);
+    }
+    if (aglFt !== null && (aglFt < 0 || aglFt > 100_000)) {
+      throw new FaaObstacleDataError(`FAA DDOF record ${id} has an invalid AGL height`);
+    }
     records.push({
       id,
       lat,
       lon,
-      amslFt: parseCsvNumber(row[indexes.amsl]),
-      aglFt: parseCsvNumber(row[indexes.agl]),
+      amslFt,
+      aglFt,
       city:
         indexes.city >= 0
           ? internNullable(String(row[indexes.city] || ""), stringPool)
@@ -405,6 +507,38 @@ async function fetchResponseBodyWithTimeout(
   }
 }
 
+async function fetchHeadWithTimeout(
+  fetchImpl: FetchLike,
+  url: string,
+  options: RequestInit,
+  timeoutMs: number,
+) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetchImpl(url, {
+      ...options,
+      method: "HEAD",
+      signal: controller.signal,
+    });
+    if (!response.ok) {
+      throw new FaaObstacleDataError(
+        `FAA DDOF metadata request failed (${response.status})`,
+      );
+    }
+    return response;
+  } catch (error) {
+    if (error instanceof FaaObstacleDataError) throw error;
+    const message =
+      error instanceof Error ? error.message : "Unknown FAA DDOF metadata error";
+    throw new FaaObstacleDataError(`FAA DDOF metadata fetch failed: ${message}`, {
+      cause: error,
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function parseHttpDate(value: string | null) {
   if (!value) return null;
   const parsed = Date.parse(value);
@@ -416,8 +550,11 @@ function parseDirectoryMetadata(html: string): DirectoryMetadata | null {
     /(\d{1,2}\/\d{1,2}\/\d{4})\s+(\d{1,2}:\d{2}\s+[AP]M)\s+(\d+)\s+<A[^>]+HREF=["'][^"']*DAILY_DOF_CSV\.ZIP["']/i,
   );
   if (!match) return null;
+  const listedAt = `${match[1]} ${match[2]}`;
+  const listedAtMs = Date.parse(`${listedAt} UTC`);
   return {
-    listedAt: `${match[1]} ${match[2]}`,
+    listedAt,
+    listedAtMs: Number.isFinite(listedAtMs) ? listedAtMs : null,
     sizeBytes: Number(match[3]),
   };
 }
@@ -484,23 +621,104 @@ export function createFaaObstacleDataService(
     options.maxPublicationAgeMs ?? DEFAULT_MAX_PUBLICATION_AGE_MS;
   const fetchImpl = options.fetchImpl || fetch;
   const now = options.now || Date.now;
+  const snapshotStore = options.snapshotStore;
   const sourceParts = safeSourceParts(sourceUrl);
   let snapshot: VerifiedSnapshot | null = null;
   let refreshPromise: Promise<VerifiedSnapshot> | null = null;
+  let restorePromise: Promise<void> | null = null;
+  let restoreAttempted = false;
   let retryAfterMs = 0;
   let lastRefreshError: string | null = null;
 
-  const fetchDirectory = async (nowMs: number) => {
+  const validateArchive = (
+    archive: Buffer,
+    context: {
+      fetchedAtMs: number;
+      publishedAtMs: number | null;
+      provenance: FaaObstacleReferenceData["provenance"];
+      freshnessBasis: string[];
+      restoredFromDurableCache: boolean;
+      expectedCsvBytes?: number;
+      expectedRecordCount?: number;
+      sourceHost?: string;
+      sourcePath?: string;
+    },
+  ): VerifiedSnapshot => {
+    if (archive.length <= 0 || archive.length > maxArchiveBytes) {
+      throw new FaaObstacleDataError(
+        `FAA DDOF archive size ${archive.length} is outside the safe range`,
+      );
+    }
+    let zip: AdmZip;
+    try {
+      zip = new AdmZip(archive);
+    } catch (error) {
+      throw new FaaObstacleDataError("FAA DDOF archive was not a valid ZIP", {
+        cause: error,
+      });
+    }
+    const csvEntry = findDofCsvEntry(zip);
+    if (!csvEntry) {
+      throw new FaaObstacleDataError("FAA DDOF archive did not contain DOF.CSV");
+    }
+    if (csvEntry.header.size <= 0 || csvEntry.header.size > maxCsvBytes) {
+      throw new FaaObstacleDataError(
+        `FAA DDOF CSV size ${csvEntry.header.size} is outside the safe range`,
+      );
+    }
+    let csvBuffer: Buffer;
+    try {
+      csvBuffer = csvEntry.getData();
+    } catch (error) {
+      throw new FaaObstacleDataError("FAA DDOF CSV could not be decompressed", {
+        cause: error,
+      });
+    }
+    if (csvBuffer.length !== csvEntry.header.size) {
+      throw new FaaObstacleDataError(
+        "FAA DDOF CSV decompressed size did not match its ZIP metadata",
+      );
+    }
+    if (
+      context.expectedCsvBytes !== undefined &&
+      csvBuffer.length !== context.expectedCsvBytes
+    ) {
+      throw new FaaObstacleDataError(
+        "FAA DDOF durable snapshot CSV size did not match its manifest",
+      );
+    }
+    const parsed = parseFaaObstacleCsvBuffer(csvBuffer, {
+      minRecords: options.minRecords,
+      maxRecords: options.maxRecords,
+    });
+    if (
+      context.expectedRecordCount !== undefined &&
+      parsed.records.length !== context.expectedRecordCount
+    ) {
+      throw new FaaObstacleDataError(
+        "FAA DDOF durable snapshot record count did not match its manifest",
+      );
+    }
+    return {
+      records: parsed.records,
+      fetchedAtMs: context.fetchedAtMs,
+      publishedAtMs: context.publishedAtMs,
+      provenance: context.provenance,
+      sourceHost: context.sourceHost ?? sourceParts.sourceHost,
+      sourcePath: context.sourcePath ?? sourceParts.sourcePath,
+      freshnessBasis: context.freshnessBasis,
+      archiveBytes: archive.length,
+      csvBytes: csvBuffer.length,
+      restoredFromDurableCache: context.restoredFromDurableCache,
+    };
+  };
+
+  const fetchDirectory = async () => {
     if (sourceWasOverridden) return null;
     try {
-      const directoryUrl = new URL(OFFICIAL_FAA_DDOF_DIRECTORY_URL);
-      directoryUrl.searchParams.set(
-        "rsf_manifest",
-        String(Math.floor(nowMs / Math.max(cacheTtlMs, 1))),
-      );
       const result = await fetchResponseBodyWithTimeout(
         fetchImpl,
-        directoryUrl.toString(),
+        OFFICIAL_FAA_DDOF_DIRECTORY_URL,
         {
           headers: {
             Accept: "text/html",
@@ -526,7 +744,34 @@ export function createFaaObstacleDataService(
       nowMs: startedAt,
       cacheTtlMs,
     });
-    const directoryMetadataPromise = fetchDirectory(startedAt);
+    const directoryMetadata = await fetchDirectory();
+    if (!sourceWasOverridden) {
+      const headResponse = await fetchHeadWithTimeout(
+        fetchImpl,
+        downloadUrl,
+        {
+          headers: {
+            Accept: "application/octet-stream",
+            "Accept-Encoding": "identity",
+            "Cache-Control": "no-cache",
+            Pragma: "no-cache",
+            "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)",
+          },
+        },
+        directoryTimeoutMs,
+      );
+      const headLength = Number(headResponse.headers.get("content-length"));
+      if (
+        directoryMetadata &&
+        Number.isFinite(headLength) &&
+        headLength > 0 &&
+        headLength !== directoryMetadata.sizeBytes
+      ) {
+        throw new FaaObstacleDataError(
+          "FAA DDOF CDN metadata did not match the current official directory publication",
+        );
+      }
+    }
     const result = await fetchResponseBodyWithTimeout(
       fetchImpl,
       downloadUrl,
@@ -534,6 +779,9 @@ export function createFaaObstacleDataService(
         headers: {
           Accept: "application/octet-stream",
           "Accept-Encoding": "identity",
+          ...(sourceWasOverridden
+            ? {}
+            : { "Cache-Control": "no-cache", Pragma: "no-cache" }),
           "User-Agent": "ReadySetFly/1.0 (+https://readysetfly.us)",
         },
       },
@@ -542,12 +790,6 @@ export function createFaaObstacleDataService(
       maxArchiveBytes,
     );
     const archive = result.body as Buffer;
-    if (archive.length <= 0 || archive.length > maxArchiveBytes) {
-      throw new FaaObstacleDataError(
-        `FAA DDOF archive size ${archive.length} is outside the safe range`,
-      );
-    }
-    const directoryMetadata = await directoryMetadataPromise;
     if (
       directoryMetadata &&
       Number.isFinite(directoryMetadata.sizeBytes) &&
@@ -558,6 +800,9 @@ export function createFaaObstacleDataService(
       );
     }
 
+    const httpPublishedAt = parseHttpDate(
+      result.response.headers.get("last-modified"),
+    );
     let zip: AdmZip;
     try {
       zip = new AdmZip(archive);
@@ -568,43 +813,18 @@ export function createFaaObstacleDataService(
     }
     const csvEntry = findDofCsvEntry(zip);
     if (!csvEntry) {
-      throw new FaaObstacleDataError(
-        "FAA DDOF archive did not contain DOF.CSV",
-      );
+      throw new FaaObstacleDataError("FAA DDOF archive did not contain DOF.CSV");
     }
-    if (csvEntry.header.size <= 0 || csvEntry.header.size > maxCsvBytes) {
-      throw new FaaObstacleDataError(
-        `FAA DDOF CSV size ${csvEntry.header.size} is outside the safe range`,
-      );
-    }
-    let csvBuffer: Buffer;
-    try {
-      csvBuffer = csvEntry.getData();
-    } catch (error) {
-      throw new FaaObstacleDataError("FAA DDOF CSV could not be decompressed", {
-        cause: error,
-      });
-    }
-    if (csvBuffer.length !== csvEntry.header.size) {
-      throw new FaaObstacleDataError(
-        "FAA DDOF CSV decompressed size did not match its ZIP metadata",
-      );
-    }
-    const parsed = parseFaaObstacleCsvBuffer(csvBuffer, {
-      minRecords: options.minRecords,
-      maxRecords: options.maxRecords,
-    });
-
-    const httpPublishedAt = parseHttpDate(
-      result.response.headers.get("last-modified"),
-    );
     const zipPublishedAt = csvEntry.header.time?.getTime?.() || null;
-    const publishedAtMs = httpPublishedAt || zipPublishedAt || null;
+    const publishedAtMs = directoryMetadata?.listedAtMs ?? zipPublishedAt ?? httpPublishedAt;
     const freshnessBasis: string[] = [];
     if (httpPublishedAt !== null) freshnessBasis.push("http-last-modified");
     if (zipPublishedAt !== null) freshnessBasis.push("zip-entry-time");
     if (directoryMetadata) freshnessBasis.push("faa-directory-size");
-    const publicationSignals = [httpPublishedAt, zipPublishedAt].filter(
+    if (directoryMetadata?.listedAtMs !== null && directoryMetadata?.listedAtMs !== undefined) {
+      freshnessBasis.push("faa-directory-listing-time");
+    }
+    const publicationSignals = [zipPublishedAt, directoryMetadata?.listedAtMs ?? null].filter(
       (value): value is number => value !== null,
     );
     if (
@@ -626,27 +846,111 @@ export function createFaaObstacleDataService(
       );
     }
 
-    const nextSnapshot: VerifiedSnapshot = {
-      records: parsed.records,
+    const nextSnapshot = validateArchive(archive, {
       fetchedAtMs: now(),
       publishedAtMs,
-      provenance: sourceWasOverridden
-        ? "environment-override"
-        : "official-default",
-      ...sourceParts,
+      provenance: sourceWasOverridden ? "environment-override" : "official-default",
       freshnessBasis,
-      archiveBytes: archive.length,
-      csvBytes: csvBuffer.length,
-    };
+      restoredFromDurableCache: false,
+    });
     snapshot = nextSnapshot;
     retryAfterMs = 0;
     lastRefreshError = null;
+    if (snapshotStore) {
+      const checksumSha256 = createHash("sha256").update(archive).digest("hex");
+      const durable: FaaObstacleDurableSnapshot = {
+        archive,
+        manifest: {
+          version: 1,
+          archiveKey: "reference-data/faa-obstacles/archives/pending.zip",
+          checksumSha256,
+          archiveBytes: archive.length,
+          csvBytes: nextSnapshot.csvBytes,
+          recordCount: nextSnapshot.records.length,
+          fetchedAt: new Date(nextSnapshot.fetchedAtMs).toISOString(),
+          publishedAt:
+            nextSnapshot.publishedAtMs === null
+              ? null
+              : new Date(nextSnapshot.publishedAtMs).toISOString(),
+          provenance: nextSnapshot.provenance,
+          sourceHost: nextSnapshot.sourceHost,
+          sourcePath: nextSnapshot.sourcePath,
+          freshnessBasis: nextSnapshot.freshnessBasis,
+        },
+      };
+      try {
+        await snapshotStore.save(durable);
+      } catch (error) {
+        console.warn("faa_obstacle_snapshot_persist_failed", {
+          error: error instanceof Error ? error.message : "snapshot persistence failed",
+        });
+      }
+    }
     return nextSnapshot;
   };
 
+  const restoreDurableSnapshot = async () => {
+    if (!snapshotStore || restoreAttempted) return;
+    restoreAttempted = true;
+    try {
+      const durable = await snapshotStore.load();
+      if (!durable) return;
+      const checksumSha256 = createHash("sha256")
+        .update(durable.archive)
+        .digest("hex");
+      if (
+        durable.archive.length !== durable.manifest.archiveBytes ||
+        checksumSha256 !== durable.manifest.checksumSha256
+      ) {
+        throw new FaaObstacleDataError(
+          "FAA DDOF durable snapshot archive did not match its manifest",
+        );
+      }
+      const fetchedAtMs = Date.parse(durable.manifest.fetchedAt);
+      const publishedAtMs = durable.manifest.publishedAt
+        ? Date.parse(durable.manifest.publishedAt)
+        : null;
+      if (
+        !Number.isFinite(fetchedAtMs) ||
+        (publishedAtMs !== null && !Number.isFinite(publishedAtMs)) ||
+        fetchedAtMs > now() + 5 * 60 * 1000 ||
+        (publishedAtMs !== null && publishedAtMs > now() + 24 * 60 * 60 * 1000) ||
+        now() - fetchedAtMs > maxStaleMs
+      ) {
+        throw new FaaObstacleDataError("FAA DDOF durable snapshot is expired or invalid");
+      }
+      const restored = validateArchive(durable.archive, {
+        fetchedAtMs,
+        publishedAtMs,
+        provenance: durable.manifest.provenance,
+        freshnessBasis: [...durable.manifest.freshnessBasis, "durable-s3-snapshot"],
+        restoredFromDurableCache: true,
+        expectedCsvBytes: durable.manifest.csvBytes,
+        expectedRecordCount: durable.manifest.recordCount,
+        sourceHost: durable.manifest.sourceHost,
+        sourcePath: durable.manifest.sourcePath,
+      });
+      snapshot = restored;
+    } catch (error) {
+      console.warn("faa_obstacle_snapshot_restore_failed", {
+        error: error instanceof Error ? error.message : "snapshot restore failed",
+      });
+    }
+  };
+
   const getData = async (): Promise<FaaObstacleDataResult> => {
+    if (!restoreAttempted) {
+      restorePromise ||= restoreDurableSnapshot().finally(() => {
+        restorePromise = null;
+      });
+      await restorePromise;
+    }
     const requestedAt = now();
-    if (snapshot && requestedAt - snapshot.fetchedAtMs <= cacheTtlMs) {
+    if (
+      snapshot &&
+      !snapshot.restoredFromDurableCache &&
+      requestedAt - snapshot.fetchedAtMs <= cacheTtlMs
+    ) {
       return {
         records: snapshot.records,
         referenceData: publicReferenceData(

@@ -12,17 +12,26 @@ official directory listing before replacing verified in-memory data.
 ## Environment variables
 
 - `FAA_DDOF_ZIP_URL` — optional complete URL override. Leave unset in production
-  to use the supported official FAA daily CSV endpoint and its rotating cache
-  key. Override URLs are requested exactly as configured; RSF does not append
-  query parameters to them. Do not put credentials in this value.
+  to use the supported official FAA daily CSV endpoint. RSF requests both the
+  built-in and overridden archive URLs exactly as configured; it does not append
+  arbitrary cache-busting parameters. Do not put credentials in this value.
 - `FAA_DDOF_CACHE_TTL_MS` — optional cache lifetime in milliseconds. Default:
   `43200000` (12 hours). Invalid, empty, zero, or negative values use the
   default. Valid values are clamped to 1 hour through 7 days.
 
-No cyclical `.Dat` archive support is provided. The cache is process-local: a
-verified last-known-good copy can cover a transient refresh failure while the
-process remains running, but a new process must verify an FAA archive before it
-can serve obstacle data.
+No cyclical `.Dat` archive support is provided. When the API's existing
+`AWS_S3_BUCKET`, `AWS_REGION`, `AWS_ACCESS_KEY_ID`, and
+`AWS_SECRET_ACCESS_KEY` configuration is present, RSF stores one compressed,
+verified, content-addressed archive plus a small manifest under
+`reference-data/faa-obstacles/`. The manifest is written only after the archive,
+so a partial write cannot replace the last-known-good pointer. On restart, RSF
+checks the archive checksum, sizes, schema, record count, coordinates, and stale
+window before using it. If S3 is not configured, the cache remains process-local.
+
+The official directory listing, ZIP entry timestamp, archive size, schema, and
+completeness checks are used as independent publication evidence. An HTTP
+`Last-Modified` header alone is not sufficient to establish currency. A restored
+durable snapshot is always presented as stale until a live FAA refresh succeeds.
 
 Obstacle data is advisory reference material. Stale results are labeled in API
 metadata and clients; unavailable data must not be interpreted as a confirmed

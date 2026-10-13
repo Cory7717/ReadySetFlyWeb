@@ -2419,7 +2419,14 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                 : null,
             ]}
           >
-            {obstacleScan?.stale ? (
+            {obstacleScan?.dataStatus === 'unavailable' ? (
+              <View style={[styles.flightDeckAlertStrip, styles.flightDeckAlertStripWarning]}>
+                <Text style={styles.flightDeckAlertTitle}>Obstacle reference unavailable</Text>
+                <Text style={styles.flightDeckAlertText}>
+                  FAA obstacle data could not be verified. No zero-obstacle or clearance conclusion has been made; verify against current official sources.
+                </Text>
+              </View>
+            ) : obstacleScan?.stale ? (
               <View style={[styles.flightDeckAlertStrip, styles.flightDeckAlertStripCaution]}>
                 <Text style={styles.flightDeckAlertTitle}>Stale obstacle reference</Text>
                 <Text style={styles.flightDeckAlertText}>
@@ -3596,15 +3603,24 @@ export default function FlightDeckView({ state, actions, styles = {} }: FlightDe
                   {obstacleScan.referenceData?.warning || 'FAA obstacle data is stale and is shown from verified last-known-good obstacle data.'}
                 </Text>
               ) : null}
+              {obstacleScan?.dataStatus === 'unavailable' ? (
+                <Text style={[styles.flightDeckPanelText, { color: '#F06A6A' }]}>
+                  FAA obstacle reference is unavailable. Clearance is not verifiable.
+                </Text>
+              ) : null}
               {terrainProfile?.maxElevationFt != null ? (
                 <Text style={styles.flightDeckPanelText}>
                   Highest terrain on route {Math.round(terrainProfile.maxElevationFt).toLocaleString()} ft.
                 </Text>
               ) : null}
-              {obstacleScan?.highestObstacle ? (
+              {obstacleScan?.highestObstacle?.amslFt != null ? (
                 <Text style={styles.flightDeckPanelText}>
-                  Highest nearby obstacle {(obstacleScan.highestObstacle.amslFt ?? obstacleScan.highestObstacle.aglFt ?? 0).toLocaleString()} ft
+                  Highest nearby obstacle {obstacleScan.highestObstacle.amslFt.toLocaleString()} ft MSL
                   {obstacleScan.highestObstacle.kind ? ` - ${obstacleScan.highestObstacle.kind}` : ''}.
+                </Text>
+              ) : obstacleScan?.clearanceStatus === 'unverifiable' ? (
+                <Text style={styles.flightDeckPanelText}>
+                  Nearby obstacle MSL elevation is unavailable; AGL height is not used for aircraft clearance.
                 </Text>
               ) : null}
             </View>

@@ -22,9 +22,12 @@ import {
 } from "./services/runway-reference-cache";
 import {
   createFaaObstacleDataService,
+  DEFAULT_MAX_ARCHIVE_BYTES,
+  queryNearbyFaaObstacles,
   resolveFaaObstacleCacheTtlMs,
   resolveFaaObstacleSource,
 } from "./services/faaObstacleData";
+import { createS3FaaObstacleSnapshotStore } from "./services/faaObstacleSnapshotStore";
 import {
   createFaaDtppCycleManager,
   type FaaDtppCycleConfig,
@@ -912,19 +915,6 @@ type TerrainProfilePoint = {
   elevationFt: number | null;
 };
 
-type NearbyObstacle = {
-  id: string;
-  lat: number;
-  lon: number;
-  amslFt: number | null;
-  aglFt: number | null;
-  city: string | null;
-  state: string | null;
-  kind: string | null;
-  lighting: string | null;
-  distanceNm: number;
-};
-
 const USGS_EPQS_URL = (
   process.env.USGS_EPQS_URL || "https://epqs.nationalmap.gov/v1/json"
 ).trim();
@@ -936,6 +926,11 @@ const faaObstacleDataService = createFaaObstacleDataService({
   cacheTtlMs: resolveFaaObstacleCacheTtlMs(
     process.env.FAA_DDOF_CACHE_TTL_MS,
   ),
+  snapshotStore: process.env.AWS_S3_BUCKET
+    ? createS3FaaObstacleSnapshotStore({
+        maxArchiveBytes: DEFAULT_MAX_ARCHIVE_BYTES,
+      })
+    : undefined,
 });
 
 function haversineNm(lat1: number, lon1: number, lat2: number, lon2: number) {
@@ -21961,32 +21956,19 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
       }
 
       const obstacleData = await faaObstacleDataService.getData();
-      const obstacles = obstacleData.records;
-      const nearby = obstacles
-        .map((obstacle) => ({
-          ...obstacle,
-          distanceNm: haversineNm(lat, lon, obstacle.lat, obstacle.lon),
-        }))
-        .filter((obstacle) => obstacle.distanceNm <= radiusNm)
-        .sort((a, b) => {
-          const aHeight = a.amslFt ?? a.aglFt ?? 0;
-          const bHeight = b.amslFt ?? b.aglFt ?? 0;
-          if (Math.abs(a.distanceNm - b.distanceNm) < 0.25)
-            return bHeight - aHeight;
-          return a.distanceNm - b.distanceNm;
-        })
-        .slice(0, limit);
-
-      const highestObstacle = nearby.reduce<NearbyObstacle | null>(
-        (highest, obstacle) => {
-          const currentHeight = obstacle.amslFt ?? obstacle.aglFt ?? 0;
-          const highestHeight = highest
-            ? (highest.amslFt ?? highest.aglFt ?? 0)
-            : -Infinity;
-          return currentHeight > highestHeight ? obstacle : highest;
-        },
-        null,
-      );
+      const {
+        nearby,
+        highestObstacle,
+        mslElevationAvailableCount,
+        missingMslElevationCount,
+        clearanceStatus,
+      } = queryNearbyFaaObstacles({
+        records: obstacleData.records,
+        lat,
+        lon,
+        radiusNm,
+        limit,
+      });
 
       res.json({
         source: "FAA Daily DOF",
@@ -21994,6 +21976,9 @@ If you cannot find certain fields, omit them from the response. Be accurate and 
         count: nearby.length,
         highestObstacle,
         obstacles: nearby,
+        mslElevationAvailableCount,
+        missingMslElevationCount,
+        clearanceStatus,
         stale: obstacleData.referenceData.stale,
         dataStatus: obstacleData.referenceData.status,
         referenceData: obstacleData.referenceData,

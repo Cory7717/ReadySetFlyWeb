@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import AdmZip from "adm-zip";
+import { Readable } from "node:stream";
 import {
   DEFAULT_FAA_DDOF_CACHE_TTL_MS,
   MAX_FAA_DDOF_CACHE_TTL_MS,
@@ -9,9 +10,16 @@ import {
   buildFaaObstacleDownloadUrl,
   createFaaObstacleDataService,
   parseFaaObstacleCsvBuffer,
+  queryNearbyFaaObstacles,
   resolveFaaObstacleCacheTtlMs,
   resolveFaaObstacleSource,
 } from "../../server/services/faaObstacleData";
+import type { FaaObstacleRecord } from "../../server/services/faaObstacleData";
+import type {
+  FaaObstacleDurableSnapshot,
+  FaaObstacleSnapshotStore,
+} from "../../server/services/faaObstacleSnapshotStore";
+import { createS3FaaObstacleSnapshotStore } from "../../server/services/faaObstacleSnapshotStore";
 
 const HEADER =
   "OAS,VERIFIED STATUS,COUNTRY,STATE,CITY,LATDEC,LONDEC,DMSLAT,DMSLON,TYPE,QUANTITY,AGL,AMSL,LIGHTING,ACCURACY,MARKING,FAA STUDY,ACTION,JDATE";
@@ -56,17 +64,56 @@ function csv(rows = 2) {
 function zipWith(
   entryName = "DOF.CSV",
   csvBuffer = csv(),
-  entryTime?: Date,
+  entryTime = new Date("2026-10-12T03:31:49Z"),
 ) {
   const zip = new AdmZip();
   zip.addFile(entryName, csvBuffer);
   const entry = zip.getEntry(entryName);
-  if (entry && entryTime) entry.header.time = entryTime;
+  if (entry) entry.header.time = entryTime;
   return zip.toBuffer();
 }
 
 function directoryHtml(size: number) {
   return `10/12/2026  3:31 AM ${size} <A HREF="/Obst_Data/DAILY_DOF_CSV.ZIP">DAILY_DOF_CSV.ZIP</A>`;
+}
+
+class MemorySnapshotStore implements FaaObstacleSnapshotStore {
+  snapshot: FaaObstacleDurableSnapshot | null = null;
+
+  async load() {
+    return this.snapshot
+      ? {
+          archive: Buffer.from(this.snapshot.archive),
+          manifest: { ...this.snapshot.manifest },
+        }
+      : null;
+  }
+
+  async save(snapshot: FaaObstacleDurableSnapshot) {
+    this.snapshot = {
+      archive: Buffer.from(snapshot.archive),
+      manifest: { ...snapshot.manifest },
+    };
+  }
+}
+
+function obstacle(
+  id: string,
+  lat: number,
+  amslFt: number | null,
+  aglFt: number | null,
+): FaaObstacleRecord {
+  return {
+    id,
+    lat,
+    lon: -97.7,
+    amslFt,
+    aglFt,
+    city: "AUSTIN",
+    state: "TX",
+    kind: "TOWER",
+    lighting: "R",
+  };
 }
 
 test("FAA obstacle configuration preserves overrides and safely defaults TTL", () => {
@@ -93,14 +140,14 @@ test("FAA obstacle configuration preserves overrides and safely defaults TTL", (
   );
 });
 
-test("cache busting applies only to the built-in official FAA endpoint", () => {
+test("official and overridden download URLs preserve exact endpoint semantics", () => {
   const defaultUrl = buildFaaObstacleDownloadUrl({
     sourceUrl: OFFICIAL_FAA_DDOF_URL,
     sourceWasOverridden: false,
     nowMs: 1_800_000,
     cacheTtlMs: 900_000,
   });
-  assert.equal(new URL(defaultUrl).searchParams.get("rsf_refresh"), "2");
+  assert.equal(defaultUrl, OFFICIAL_FAA_DDOF_URL);
   const override = "https://aeronav.faa.gov/Obst_Data/DAILY_DOF_CSV.ZIP?signed=value";
   assert.equal(
     buildFaaObstacleDownloadUrl({
@@ -145,6 +192,85 @@ test("parser rejects incomplete schemas and unreasonable coordinate quality", ()
   );
 });
 
+test("parser rejects duplicate stable OAS identifiers", () => {
+  const duplicate = Buffer.from(
+    `${HEADER}\n48-000001,O,US,TX,AUSTIN,30.2,-97.7,,,TOWER,1,200,1000,R,5D,M,X,C,2026285\n48-000001,O,US,TX,AUSTIN,30.3,-97.8,,,TOWER,1,300,1100,R,5D,M,X,C,2026285\n`,
+  );
+  assert.throws(
+    () => parseFaaObstacleCsvBuffer(duplicate, { minRecords: 1 }),
+    /duplicate stable obstacle identifier/,
+  );
+});
+
+test("parser preserves missing MSL separately from valid AGL height", () => {
+  const missingMsl = Buffer.from(
+    `${HEADER}\n48-000001,O,US,TX,AUSTIN,30.2,-97.7,,,TOWER,1,200,,R,5D,M,X,C,2026285\n`,
+  );
+  const parsed = parseFaaObstacleCsvBuffer(missingMsl, { minRecords: 1 });
+  assert.equal(parsed.records[0].amslFt, null);
+  assert.equal(parsed.records[0].aglFt, 200);
+});
+
+test("nearby query treats missing MSL as unverifiable and never substitutes AGL", () => {
+  const result = queryNearbyFaaObstacles({
+    records: [obstacle("missing-msl", 30.2, null, 2_000)],
+    lat: 30.2,
+    lon: -97.7,
+    radiusNm: 10,
+    limit: 5,
+  });
+  assert.equal(result.highestObstacle, null);
+  assert.equal(result.mslElevationAvailableCount, 0);
+  assert.equal(result.missingMslElevationCount, 1);
+  assert.equal(result.clearanceStatus, "unverifiable");
+});
+
+test("nearby query returns a known MSL obstacle as verifiable", () => {
+  const result = queryNearbyFaaObstacles({
+    records: [obstacle("known-msl", 30.2, 1_250, 300)],
+    lat: 30.2,
+    lon: -97.7,
+    radiusNm: 10,
+    limit: 5,
+  });
+  assert.equal(result.highestObstacle?.id, "known-msl");
+  assert.equal(result.highestObstacle?.amslFt, 1_250);
+  assert.equal(result.clearanceStatus, "verifiable");
+});
+
+test("mixed nearby obstacles exclude missing MSL from the highest calculation", () => {
+  const result = queryNearbyFaaObstacles({
+    records: [
+      obstacle("tall-agl-no-msl", 30.2, null, 5_000),
+      obstacle("known-msl", 30.21, 1_500, 200),
+    ],
+    lat: 30.2,
+    lon: -97.7,
+    radiusNm: 10,
+    limit: 5,
+  });
+  assert.equal(result.highestObstacle?.id, "known-msl");
+  assert.equal(result.mslElevationAvailableCount, 1);
+  assert.equal(result.missingMslElevationCount, 1);
+});
+
+test("highest MSL obstacle is selected across the complete radius before display limiting", () => {
+  const result = queryNearbyFaaObstacles({
+    records: [
+      obstacle("near-low", 30.2, 800, 100),
+      obstacle("far-high", 30.25, 3_500, 500),
+    ],
+    lat: 30.2,
+    lon: -97.7,
+    radiusNm: 10,
+    limit: 1,
+  });
+  assert.equal(result.nearby.length, 1);
+  assert.equal(result.nearby[0].id, "near-low");
+  assert.equal(result.highestObstacle?.id, "far-high");
+  assert.equal(result.highestObstacle?.amslFt, 3_500);
+});
+
 test("verified refresh accepts matching directory metadata and exposes additive provenance", async () => {
   const archive = zipWith();
   const requests: Array<{ url: string; headers: Headers }> = [];
@@ -155,8 +281,14 @@ test("verified refresh accepts matching directory metadata and exposes additive 
     fetchImpl: async (input, init) => {
       const url = String(input);
       requests.push({ url, headers: new Headers(init?.headers) });
-      if (url.includes("rsf_manifest")) {
+      if (url === "https://aeronav.faa.gov/Obst_Data/") {
         return new Response(directoryHtml(archive.length), { status: 200 });
+      }
+      if (init?.method === "HEAD") {
+        return new Response(null, {
+          status: 200,
+          headers: { "content-length": String(archive.length) },
+        });
       }
       return new Response(new Uint8Array(archive), {
         status: 200,
@@ -170,11 +302,14 @@ test("verified refresh accepts matching directory metadata and exposes additive 
   assert.equal(result.referenceData.stale, false);
   assert.equal(result.referenceData.provenance, "official-default");
   assert.ok(result.referenceData.freshnessBasis.includes("faa-directory-size"));
-  const archiveRequest = requests.find(({ url }) => url.includes("rsf_refresh="));
+  const archiveRequest = requests.find(
+    ({ url, headers }) =>
+      url === OFFICIAL_FAA_DDOF_URL && headers.get("accept") === "application/octet-stream",
+  );
   assert.ok(archiveRequest);
   assert.equal(archiveRequest.headers.get("accept"), "application/octet-stream");
   assert.equal(archiveRequest.headers.get("accept-encoding"), "identity");
-  assert.equal(archiveRequest.headers.get("cache-control"), null);
+  assert.equal(archiveRequest.headers.get("cache-control"), "no-cache");
 });
 
 test("directory size mismatch rejects an upstream stale copy", async () => {
@@ -183,10 +318,16 @@ test("directory size mismatch rejects an upstream stale copy", async () => {
     minRecords: 2,
     maxRecords: 10,
     now: () => Date.parse("2026-10-12T12:00:00Z"),
-    fetchImpl: async (input) => {
+    fetchImpl: async (input, init) => {
       const url = String(input);
-      if (url.includes("rsf_manifest")) {
+      if (url === "https://aeronav.faa.gov/Obst_Data/") {
         return new Response(directoryHtml(archive.length + 1), { status: 200 });
+      }
+      if (init?.method === "HEAD") {
+        return new Response(null, {
+          status: 200,
+          headers: { "content-length": String(archive.length) },
+        });
       }
       return new Response(new Uint8Array(archive), {
         status: 200,
@@ -200,16 +341,22 @@ test("directory size mismatch rejects an upstream stale copy", async () => {
   );
 });
 
-test("official publication timestamp must be current enough", async () => {
+test("stale HTTP metadata cannot override matching current directory and ZIP evidence", async () => {
   const archive = zipWith();
   const service = createFaaObstacleDataService({
     minRecords: 2,
     maxRecords: 10,
     now: () => Date.parse("2026-10-12T12:00:00Z"),
-    fetchImpl: async (input) => {
+    fetchImpl: async (input, init) => {
       const url = String(input);
-      if (url.includes("rsf_manifest")) {
+      if (url === "https://aeronav.faa.gov/Obst_Data/") {
         return new Response(directoryHtml(archive.length), { status: 200 });
+      }
+      if (init?.method === "HEAD") {
+        return new Response(null, {
+          status: 200,
+          headers: { "content-length": String(archive.length) },
+        });
       }
       return new Response(new Uint8Array(archive), {
         status: 200,
@@ -217,7 +364,8 @@ test("official publication timestamp must be current enough", async () => {
       });
     },
   });
-  await assert.rejects(service.getData(), /older than the accepted freshness window/);
+  const result = await service.getData();
+  assert.equal(result.referenceData.status, "fresh");
 });
 
 test("an environment override cannot bypass reliable stale publication timestamps", async () => {
@@ -251,10 +399,16 @@ test("a current HTTP timestamp cannot mask a stale ZIP publication", async () =>
     minRecords: 2,
     maxRecords: 10,
     now: () => Date.parse("2026-10-12T12:00:00Z"),
-    fetchImpl: async (input) => {
+    fetchImpl: async (input, init) => {
       const url = String(input);
-      if (url.includes("rsf_manifest")) {
+      if (url === "https://aeronav.faa.gov/Obst_Data/") {
         return new Response(directoryHtml(archive.length), { status: 200 });
+      }
+      if (init?.method === "HEAD") {
+        return new Response(null, {
+          status: 200,
+          headers: { "content-length": String(archive.length) },
+        });
       }
       return new Response(new Uint8Array(archive), {
         status: 200,
@@ -295,10 +449,16 @@ test("failed refresh serves verified last-known-good data and respects retry coo
     cacheTtlMs: 60_000,
     retryCooldownMs: 300_000,
     now: () => nowMs,
-    fetchImpl: async (input) => {
+    fetchImpl: async (input, init) => {
       const url = String(input);
-      if (url.includes("rsf_manifest")) {
+      if (url === "https://aeronav.faa.gov/Obst_Data/") {
         return new Response(directoryHtml(archive.length), { status: 200 });
+      }
+      if (init?.method === "HEAD") {
+        return new Response(null, {
+          status: 200,
+          headers: { "content-length": String(archive.length) },
+        });
       }
       archiveRequests += 1;
       if (failArchive) return new Response("missing", { status: 404 });
@@ -319,6 +479,181 @@ test("failed refresh serves verified last-known-good data and respects retry coo
   const duringCooldown = await service.getData();
   assert.equal(duringCooldown.referenceData.status, "stale");
   assert.equal(archiveRequests, 2);
+});
+
+test("verified data survives restart and a subsequent FAA 406 as stale durable LKG", async () => {
+  const archive = zipWith();
+  const store = new MemorySnapshotStore();
+  let nowMs = Date.parse("2026-10-12T12:00:00Z");
+  const firstService = createFaaObstacleDataService({
+    sourceUrl: "https://mirror.example/dof.zip",
+    sourceWasOverridden: true,
+    minRecords: 2,
+    maxRecords: 10,
+    now: () => nowMs,
+    snapshotStore: store,
+    fetchImpl: async () =>
+      new Response(new Uint8Array(archive), {
+        status: 200,
+        headers: { "last-modified": "Mon, 12 Oct 2026 03:31:49 GMT" },
+      }),
+  });
+  await firstService.getData();
+  assert.ok(store.snapshot);
+
+  nowMs += 60_000;
+  const restartedService = createFaaObstacleDataService({
+    sourceUrl: "https://mirror.example/dof.zip",
+    sourceWasOverridden: true,
+    minRecords: 2,
+    maxRecords: 10,
+    now: () => nowMs,
+    snapshotStore: store,
+    fetchImpl: async () => new Response("not acceptable", { status: 406 }),
+  });
+  const result = await restartedService.getData();
+  assert.equal(result.records.length, 2);
+  assert.equal(result.referenceData.status, "stale");
+  assert.equal(result.referenceData.stale, true);
+  assert.ok(result.referenceData.freshnessBasis.includes("durable-s3-snapshot"));
+  assert.match(result.referenceData.warning || "", /last-known-good/);
+});
+
+test("corrupt durable data is rejected and cannot replace an unavailable result", async () => {
+  const archive = zipWith();
+  const store = new MemorySnapshotStore();
+  const seedService = createFaaObstacleDataService({
+    sourceUrl: "https://mirror.example/dof.zip",
+    sourceWasOverridden: true,
+    minRecords: 2,
+    maxRecords: 10,
+    now: () => Date.parse("2026-10-12T12:00:00Z"),
+    snapshotStore: store,
+    fetchImpl: async () => new Response(new Uint8Array(archive), { status: 200 }),
+  });
+  await seedService.getData();
+  assert.ok(store.snapshot);
+  store.snapshot!.archive[0] ^= 0xff;
+
+  const service = createFaaObstacleDataService({
+    sourceUrl: "https://mirror.example/dof.zip",
+    sourceWasOverridden: true,
+    minRecords: 2,
+    maxRecords: 10,
+    now: () => Date.parse("2026-10-12T12:01:00Z"),
+    snapshotStore: store,
+    fetchImpl: async () => new Response("not acceptable", { status: 406 }),
+  });
+  await assert.rejects(service.getData(), /download failed \(406\)/);
+  assert.equal(service.getDiagnostics().hasSnapshot, false);
+});
+
+test("expired durable data is rejected and cannot be represented as current", async () => {
+  const archive = zipWith();
+  const store = new MemorySnapshotStore();
+  const fetchedAt = Date.parse("2026-10-12T12:00:00Z");
+  const seedService = createFaaObstacleDataService({
+    sourceUrl: "https://mirror.example/dof.zip",
+    sourceWasOverridden: true,
+    minRecords: 2,
+    maxRecords: 10,
+    now: () => fetchedAt,
+    maxStaleMs: 60_000,
+    snapshotStore: store,
+    fetchImpl: async () => new Response(new Uint8Array(archive), { status: 200 }),
+  });
+  await seedService.getData();
+
+  const restarted = createFaaObstacleDataService({
+    sourceUrl: "https://mirror.example/dof.zip",
+    sourceWasOverridden: true,
+    minRecords: 2,
+    maxRecords: 10,
+    now: () => fetchedAt + 120_000,
+    maxStaleMs: 60_000,
+    snapshotStore: store,
+    fetchImpl: async () => new Response("not acceptable", { status: 406 }),
+  });
+  await assert.rejects(restarted.getData(), /download failed \(406\)/);
+  assert.equal(restarted.getDiagnostics().hasSnapshot, false);
+});
+
+test("snapshot credential failure does not block a valid live FAA refresh", async () => {
+  const archive = zipWith();
+  const failingStore: FaaObstacleSnapshotStore = {
+    async load() {
+      throw new Error("S3 authorization failed");
+    },
+    async save() {
+      throw new Error("S3 authorization failed");
+    },
+  };
+  const service = createFaaObstacleDataService({
+    sourceUrl: "https://mirror.example/dof.zip",
+    sourceWasOverridden: true,
+    minRecords: 2,
+    maxRecords: 10,
+    now: () => Date.parse("2026-10-12T12:00:00Z"),
+    snapshotStore: failingStore,
+    fetchImpl: async () => new Response(new Uint8Array(archive), { status: 200 }),
+  });
+  const result = await service.getData();
+  assert.equal(result.referenceData.status, "fresh");
+  assert.equal(result.records.length, 2);
+});
+
+test("S3 durable replacement writes the verified archive before the manifest pointer", async () => {
+  const objects = new Map<string, Buffer>();
+  const writes: string[] = [];
+  const fakeStorage = {
+    async getObjectStream({ key }: { key: string }) {
+      const body = objects.get(key);
+      if (!body) {
+        const error = new Error("missing") as Error & { name: string };
+        error.name = "NoSuchKey";
+        throw error;
+      }
+      return { stream: Readable.from([body]) };
+    },
+    async uploadBuffer({ key, buffer }: { key: string; buffer: Buffer }) {
+      writes.push(key);
+      objects.set(key, Buffer.from(buffer));
+    },
+    async deleteObject(key: string) {
+      objects.delete(key);
+    },
+  };
+  const store = createS3FaaObstacleSnapshotStore({
+    maxArchiveBytes: 1024 * 1024,
+    storage: fakeStorage as never,
+  });
+  const archive = zipWith();
+  const checksumSha256 = (await import("node:crypto"))
+    .createHash("sha256")
+    .update(archive)
+    .digest("hex");
+  await store.save({
+    archive,
+    manifest: {
+      version: 1,
+      archiveKey: "reference-data/faa-obstacles/archives/pending.zip",
+      checksumSha256,
+      archiveBytes: archive.length,
+      csvBytes: csv().length,
+      recordCount: 2,
+      fetchedAt: "2026-10-12T12:00:00.000Z",
+      publishedAt: "2026-10-12T03:31:49.000Z",
+      provenance: "official-default",
+      sourceHost: "aeronav.faa.gov",
+      sourcePath: "/Obst_Data/DAILY_DOF_CSV.ZIP",
+      freshnessBasis: ["zip-entry-time"],
+    },
+  });
+  assert.match(writes[0], /\/archives\/[a-f0-9]{64}\.zip$/);
+  assert.equal(writes[1], "reference-data/faa-obstacles/latest.json");
+  const restored = await store.load();
+  assert.deepEqual(restored?.archive, archive);
+  assert.equal(restored?.manifest.recordCount, 2);
 });
 
 test("concurrent refreshes are deduplicated", async () => {

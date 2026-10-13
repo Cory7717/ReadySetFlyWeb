@@ -595,6 +595,9 @@ type NearbyObstacleResponse = {
   source: string;
   radiusNm: number;
   count: number;
+  mslElevationAvailableCount?: number;
+  missingMslElevationCount?: number;
+  clearanceStatus?: 'verifiable' | 'unverifiable' | 'no-nearby-obstacles';
   stale?: boolean;
   dataStatus?: 'fresh' | 'stale' | 'unavailable';
   referenceData?: {
@@ -4294,7 +4297,7 @@ export default function FlightPlannerScreen() {
     if (terrainClearanceFt < terrainAlertThresholds.cautionFt) return 'caution';
     return 'nominal';
   }, [terrainAlertThresholds.cautionFt, terrainAlertThresholds.warningFt, terrainClearanceFt]);
-  const highestObstacleHeightFt = obstacleScan?.highestObstacle?.amslFt ?? obstacleScan?.highestObstacle?.aglFt ?? null;
+  const highestObstacleHeightFt = obstacleScan?.highestObstacle?.amslFt ?? null;
   const closestObstacleDistanceNm = useMemo(() => {
     const obstacles = obstacleScan?.obstacles ?? [];
     if (!obstacles.length) return null;
@@ -6398,7 +6401,15 @@ export default function FlightPlannerScreen() {
       })
       .catch(() => {
         if (cancelled) return;
-        setObstacleScan(null);
+        setObstacleScan({
+          source: 'FAA Daily DOF',
+          radiusNm: 18,
+          count: 0,
+          stale: false,
+          dataStatus: 'unavailable',
+          highestObstacle: null,
+          obstacles: [],
+        });
         setObstacleScanLoading(false);
       });
 

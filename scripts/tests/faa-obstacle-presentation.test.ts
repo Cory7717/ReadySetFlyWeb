@@ -26,6 +26,8 @@ test("mobile visibly labels stale obstacle reference data", () => {
   assert.match(source, /obstacleScan\?\.stale/);
   assert.match(source, /verified last-known-good obstacle data/);
   assert.match(source, /Stale obstacle reference/);
+  assert.match(source, /Obstacle reference unavailable/);
+  assert.match(source, /No zero-obstacle or clearance conclusion has been made/);
   assert.match(source, /STALE ·/);
 });
 
@@ -36,7 +38,16 @@ test("obstacle recovery does not change active-flight or navigation ownership", 
   );
   assert.match(source, /api\s*\.get<NearbyObstacleResponse>\('\/api\/aviation\/obstacles\/nearby'/);
   assert.match(source, /setObstacleScan\(res\.data \|\| null\)/);
+  assert.match(source, /dataStatus: 'unavailable'/);
   assert.match(source, /deriveFlightDataState/);
+  assert.match(
+    source,
+    /highestObstacleHeightFt = obstacleScan\?\.highestObstacle\?\.amslFt \?\? null/,
+  );
+  assert.doesNotMatch(
+    source,
+    /highestObstacleHeightFt = obstacleScan\?\.highestObstacle\?\.amslFt \?\? obstacleScan\?\.highestObstacle\?\.aglFt/,
+  );
 });
 
 test("nearby obstacle response retains legacy fields and adds status metadata", () => {
@@ -48,4 +59,8 @@ test("nearby obstacle response retains legacy fields and adds status metadata", 
   assert.match(source, /obstacles: nearby/);
   assert.match(source, /dataStatus: obstacleData\.referenceData\.status/);
   assert.match(source, /referenceData: obstacleData\.referenceData/);
+  assert.match(source, /missingMslElevationCount/);
+  assert.match(source, /clearanceStatus/);
+  assert.match(source, /queryNearbyFaaObstacles/);
+  assert.match(source, /snapshotStore: process\.env\.AWS_S3_BUCKET/);
 });

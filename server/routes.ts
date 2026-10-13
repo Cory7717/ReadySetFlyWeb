@@ -23,6 +23,7 @@ import {
 import {
   createFaaObstacleDataService,
   DEFAULT_MAX_ARCHIVE_BYTES,
+  logFaaObstacleSnapshotDiagnostic,
   queryNearbyFaaObstacles,
   resolveFaaObstacleCacheTtlMs,
   resolveFaaObstacleSource,
@@ -921,12 +922,26 @@ const USGS_EPQS_URL = (
 const faaObstacleSource = resolveFaaObstacleSource(
   process.env.FAA_DDOF_ZIP_URL,
 );
+const faaObstacleSnapshotConfigurationReady = [
+  process.env.AWS_S3_BUCKET,
+  process.env.AWS_REGION,
+  process.env.AWS_ACCESS_KEY_ID,
+  process.env.AWS_SECRET_ACCESS_KEY,
+].every((value) => Boolean(String(value || "").trim()));
+if (!faaObstacleSnapshotConfigurationReady) {
+  logFaaObstacleSnapshotDiagnostic({
+    event: "faa_obstacle_snapshot_configuration_unavailable",
+    failureStage: "configuration",
+    errorCode: "missing_required_configuration",
+    cacheState: "disabled",
+  });
+}
 const faaObstacleDataService = createFaaObstacleDataService({
   ...faaObstacleSource,
   cacheTtlMs: resolveFaaObstacleCacheTtlMs(
     process.env.FAA_DDOF_CACHE_TTL_MS,
   ),
-  snapshotStore: process.env.AWS_S3_BUCKET
+  snapshotStore: faaObstacleSnapshotConfigurationReady
     ? createS3FaaObstacleSnapshotStore({
         maxArchiveBytes: DEFAULT_MAX_ARCHIVE_BYTES,
       })

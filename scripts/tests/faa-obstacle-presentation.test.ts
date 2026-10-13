@@ -62,5 +62,7 @@ test("nearby obstacle response retains legacy fields and adds status metadata", 
   assert.match(source, /missingMslElevationCount/);
   assert.match(source, /clearanceStatus/);
   assert.match(source, /queryNearbyFaaObstacles/);
-  assert.match(source, /snapshotStore: process\.env\.AWS_S3_BUCKET/);
+  assert.match(source, /snapshotStore: faaObstacleSnapshotConfigurationReady/);
+  assert.match(source, /process\.env\.AWS_ACCESS_KEY_ID/);
+  assert.match(source, /process\.env\.AWS_SECRET_ACCESS_KEY/);
 });

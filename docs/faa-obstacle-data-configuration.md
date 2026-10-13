@@ -19,9 +19,9 @@ official directory listing before replacing verified in-memory data.
   `43200000` (12 hours). Invalid, empty, zero, or negative values use the
   default. Valid values are clamped to 1 hour through 7 days.
 
-No cyclical `.Dat` archive support is provided. When the API's existing
-`AWS_S3_BUCKET`, `AWS_REGION`, `AWS_ACCESS_KEY_ID`, and
-`AWS_SECRET_ACCESS_KEY` configuration is present, RSF stores one compressed,
+No cyclical `.Dat` archive support is provided. When all four of the API's
+existing `AWS_S3_BUCKET`, `AWS_REGION`, `AWS_ACCESS_KEY_ID`, and
+`AWS_SECRET_ACCESS_KEY` settings are present, RSF stores one compressed,
 verified, content-addressed archive plus a small manifest under
 `reference-data/faa-obstacles/`. The manifest is written only after the archive,
 so a partial write cannot replace the last-known-good pointer. On restart, RSF
@@ -32,6 +32,11 @@ The official directory listing, ZIP entry timestamp, archive size, schema, and
 completeness checks are used as independent publication evidence. An HTTP
 `Last-Modified` header alone is not sufficient to establish currency. A restored
 durable snapshot is always presented as stale until a live FAA refresh succeeds.
+
+The snapshot integration uses `s3:GetObject` and `s3:PutObject` for that prefix.
+`s3:DeleteObject` is optional for service availability but recommended so the
+previous content-addressed archive can be removed after replacement. It does not
+call `s3:ListBucket`.
 
 Obstacle data is advisory reference material. Stale results are labeled in API
 metadata and clients; unavailable data must not be interpreted as a confirmed

@@ -4,6 +4,7 @@ import type {
   FaaObstacleDurableSnapshot,
   FaaObstacleSnapshotStore,
 } from "./faaObstacleSnapshotStore";
+import { FaaObstacleSnapshotStoreError } from "./faaObstacleSnapshotStore";
 
 export const OFFICIAL_FAA_DDOF_URL =
   "https://aeronav.faa.gov/Obst_Data/DAILY_DOF_CSV.ZIP";
@@ -185,7 +186,29 @@ export type FaaObstacleDataServiceOptions = {
   fetchImpl?: FetchLike;
   now?: () => number;
   snapshotStore?: FaaObstacleSnapshotStore;
+  snapshotDiagnostic?: (diagnostic: FaaObstacleSnapshotDiagnostic) => void;
 };
+
+export type FaaObstacleSnapshotDiagnostic = {
+  event: string;
+  failureStage: string;
+  errorCode: string;
+  cacheState: "disabled" | "empty" | "available" | "restored" | "written";
+  snapshotAgeMs?: number;
+  sourcePublicationTimestamp?: string | null;
+};
+
+export function logFaaObstacleSnapshotDiagnostic(diagnostic: FaaObstacleSnapshotDiagnostic) {
+  console.warn(JSON.stringify(diagnostic));
+}
+
+function snapshotFailureEvent(errorCode: string) {
+  if (errorCode === "manifest_invalid") return "faa_obstacle_snapshot_manifest_invalid";
+  if (errorCode === "archive_not_found") return "faa_obstacle_snapshot_archive_not_found";
+  if (errorCode === "authorization_denied") return "faa_obstacle_snapshot_authorization_denied";
+  if (errorCode === "checksum_mismatch") return "faa_obstacle_snapshot_checksum_mismatch";
+  return "faa_obstacle_snapshot_unexpected_s3_failure";
+}
 
 export class FaaObstacleDataError extends Error {
   constructor(message: string, options?: { cause?: unknown }) {
@@ -622,6 +645,7 @@ export function createFaaObstacleDataService(
   const fetchImpl = options.fetchImpl || fetch;
   const now = options.now || Date.now;
   const snapshotStore = options.snapshotStore;
+  const snapshotDiagnostic = options.snapshotDiagnostic || logFaaObstacleSnapshotDiagnostic;
   const sourceParts = safeSourceParts(sourceUrl);
   let snapshot: VerifiedSnapshot | null = null;
   let refreshPromise: Promise<VerifiedSnapshot> | null = null;
@@ -880,9 +904,24 @@ export function createFaaObstacleDataService(
       };
       try {
         await snapshotStore.save(durable);
+        snapshotDiagnostic({
+          event: "faa_obstacle_snapshot_written",
+          failureStage: "snapshot_write",
+          errorCode: "none",
+          cacheState: "written",
+          snapshotAgeMs: 0,
+          sourcePublicationTimestamp: durable.manifest.publishedAt,
+        });
       } catch (error) {
-        console.warn("faa_obstacle_snapshot_persist_failed", {
-          error: error instanceof Error ? error.message : "snapshot persistence failed",
+        const storeError = error instanceof FaaObstacleSnapshotStoreError ? error : null;
+        const errorCode = storeError?.errorCode || "unexpected_s3_failure";
+        snapshotDiagnostic({
+          event: snapshotFailureEvent(errorCode),
+          failureStage: storeError?.failureStage || "snapshot_write",
+          errorCode,
+          cacheState: "available",
+          snapshotAgeMs: 0,
+          sourcePublicationTimestamp: durable.manifest.publishedAt,
         });
       }
     }
@@ -892,9 +931,28 @@ export function createFaaObstacleDataService(
   const restoreDurableSnapshot = async () => {
     if (!snapshotStore || restoreAttempted) return;
     restoreAttempted = true;
+    let snapshotAgeMs: number | undefined;
+    let sourcePublicationTimestamp: string | null | undefined;
+    let failureStage = "snapshot_restore";
+    let errorCode = "unexpected_s3_failure";
     try {
       const durable = await snapshotStore.load();
-      if (!durable) return;
+      if (!durable) {
+        snapshotDiagnostic({
+          event: "faa_obstacle_snapshot_manifest_not_found",
+          failureStage: "manifest_read",
+          errorCode: "not_found",
+          cacheState: "empty",
+        });
+        return;
+      }
+      sourcePublicationTimestamp = durable.manifest.publishedAt;
+      const preliminaryFetchedAtMs = Date.parse(durable.manifest.fetchedAt);
+      if (Number.isFinite(preliminaryFetchedAtMs)) {
+        snapshotAgeMs = Math.max(0, now() - preliminaryFetchedAtMs);
+      }
+      failureStage = "archive_validation";
+      errorCode = "checksum_mismatch";
       const checksumSha256 = createHash("sha256")
         .update(durable.archive)
         .digest("hex");
@@ -910,6 +968,8 @@ export function createFaaObstacleDataService(
       const publishedAtMs = durable.manifest.publishedAt
         ? Date.parse(durable.manifest.publishedAt)
         : null;
+      failureStage = "freshness_validation";
+      errorCode = "snapshot_expired";
       if (
         !Number.isFinite(fetchedAtMs) ||
         (publishedAtMs !== null && !Number.isFinite(publishedAtMs)) ||
@@ -919,6 +979,8 @@ export function createFaaObstacleDataService(
       ) {
         throw new FaaObstacleDataError("FAA DDOF durable snapshot is expired or invalid");
       }
+      failureStage = "archive_validation";
+      errorCode = "archive_validation_failed";
       const restored = validateArchive(durable.archive, {
         fetchedAtMs,
         publishedAtMs,
@@ -931,9 +993,26 @@ export function createFaaObstacleDataService(
         sourcePath: durable.manifest.sourcePath,
       });
       snapshot = restored;
+      snapshotDiagnostic({
+        event: "faa_obstacle_snapshot_restored",
+        failureStage: "snapshot_restore",
+        errorCode: "none",
+        cacheState: "restored",
+        snapshotAgeMs: Math.max(0, now() - fetchedAtMs),
+        sourcePublicationTimestamp: durable.manifest.publishedAt,
+      });
     } catch (error) {
-      console.warn("faa_obstacle_snapshot_restore_failed", {
-        error: error instanceof Error ? error.message : "snapshot restore failed",
+      const storeError = error instanceof FaaObstacleSnapshotStoreError ? error : null;
+      const resolvedCode = storeError?.errorCode || errorCode;
+      snapshotDiagnostic({
+        event: resolvedCode === "snapshot_expired"
+          ? "faa_obstacle_snapshot_expired"
+          : snapshotFailureEvent(resolvedCode),
+        failureStage: storeError?.failureStage || failureStage,
+        errorCode: resolvedCode,
+        cacheState: "empty",
+        ...(snapshotAgeMs === undefined ? {} : { snapshotAgeMs }),
+        ...(sourcePublicationTimestamp === undefined ? {} : { sourcePublicationTimestamp }),
       });
     }
   };

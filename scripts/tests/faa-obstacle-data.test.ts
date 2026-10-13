@@ -11,6 +11,7 @@ import {
   createFaaObstacleDataService,
   parseFaaObstacleCsvBuffer,
   queryNearbyFaaObstacles,
+  logFaaObstacleSnapshotDiagnostic,
   resolveFaaObstacleCacheTtlMs,
   resolveFaaObstacleSource,
 } from "../../server/services/faaObstacleData";
@@ -19,7 +20,10 @@ import type {
   FaaObstacleDurableSnapshot,
   FaaObstacleSnapshotStore,
 } from "../../server/services/faaObstacleSnapshotStore";
-import { createS3FaaObstacleSnapshotStore } from "../../server/services/faaObstacleSnapshotStore";
+import {
+  createS3FaaObstacleSnapshotStore,
+  FaaObstacleSnapshotStoreError,
+} from "../../server/services/faaObstacleSnapshotStore";
 
 const HEADER =
   "OAS,VERIFIED STATUS,COUNTRY,STATE,CITY,LATDEC,LONDEC,DMSLAT,DMSLON,TYPE,QUANTITY,AGL,AMSL,LIGHTING,ACCURACY,MARKING,FAA STUDY,ACTION,JDATE";
@@ -484,6 +488,7 @@ test("failed refresh serves verified last-known-good data and respects retry coo
 test("verified data survives restart and a subsequent FAA 406 as stale durable LKG", async () => {
   const archive = zipWith();
   const store = new MemorySnapshotStore();
+  const diagnostics: Array<{ event: string }> = [];
   let nowMs = Date.parse("2026-10-12T12:00:00Z");
   const firstService = createFaaObstacleDataService({
     sourceUrl: "https://mirror.example/dof.zip",
@@ -492,6 +497,7 @@ test("verified data survives restart and a subsequent FAA 406 as stale durable L
     maxRecords: 10,
     now: () => nowMs,
     snapshotStore: store,
+    snapshotDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
     fetchImpl: async () =>
       new Response(new Uint8Array(archive), {
         status: 200,
@@ -509,6 +515,7 @@ test("verified data survives restart and a subsequent FAA 406 as stale durable L
     maxRecords: 10,
     now: () => nowMs,
     snapshotStore: store,
+    snapshotDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
     fetchImpl: async () => new Response("not acceptable", { status: 406 }),
   });
   const result = await restartedService.getData();
@@ -517,6 +524,8 @@ test("verified data survives restart and a subsequent FAA 406 as stale durable L
   assert.equal(result.referenceData.stale, true);
   assert.ok(result.referenceData.freshnessBasis.includes("durable-s3-snapshot"));
   assert.match(result.referenceData.warning || "", /last-known-good/);
+  assert.ok(diagnostics.some(({ event }) => event === "faa_obstacle_snapshot_written"));
+  assert.ok(diagnostics.some(({ event }) => event === "faa_obstacle_snapshot_restored"));
 });
 
 test("corrupt durable data is rejected and cannot replace an unavailable result", async () => {
@@ -552,6 +561,14 @@ test("expired durable data is rejected and cannot be represented as current", as
   const archive = zipWith();
   const store = new MemorySnapshotStore();
   const fetchedAt = Date.parse("2026-10-12T12:00:00Z");
+  const diagnostics: Array<{
+    event: string;
+    failureStage: string;
+    errorCode: string;
+    cacheState: string;
+    snapshotAgeMs?: number;
+    sourcePublicationTimestamp?: string | null;
+  }> = [];
   const seedService = createFaaObstacleDataService({
     sourceUrl: "https://mirror.example/dof.zip",
     sourceWasOverridden: true,
@@ -560,6 +577,7 @@ test("expired durable data is rejected and cannot be represented as current", as
     now: () => fetchedAt,
     maxStaleMs: 60_000,
     snapshotStore: store,
+    snapshotDiagnostic: () => undefined,
     fetchImpl: async () => new Response(new Uint8Array(archive), { status: 200 }),
   });
   await seedService.getData();
@@ -572,20 +590,28 @@ test("expired durable data is rejected and cannot be represented as current", as
     now: () => fetchedAt + 120_000,
     maxStaleMs: 60_000,
     snapshotStore: store,
+    snapshotDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
     fetchImpl: async () => new Response("not acceptable", { status: 406 }),
   });
   await assert.rejects(restarted.getData(), /download failed \(406\)/);
   assert.equal(restarted.getDiagnostics().hasSnapshot, false);
+  assert.equal(diagnostics[0].event, "faa_obstacle_snapshot_expired");
+  assert.equal(diagnostics[0].failureStage, "freshness_validation");
+  assert.equal(diagnostics[0].errorCode, "snapshot_expired");
+  assert.equal(diagnostics[0].cacheState, "empty");
+  assert.equal(diagnostics[0].snapshotAgeMs, 120_000);
+  assert.match(String(diagnostics[0].sourcePublicationTimestamp), /^2026-10-12T03:31:4[89]\.000Z$/);
 });
 
 test("snapshot credential failure does not block a valid live FAA refresh", async () => {
   const archive = zipWith();
+  const diagnostics: Array<{ event: string; failureStage: string; errorCode: string }> = [];
   const failingStore: FaaObstacleSnapshotStore = {
     async load() {
-      throw new Error("S3 authorization failed");
+      throw new FaaObstacleSnapshotStoreError("manifest_read", "authorization_denied");
     },
     async save() {
-      throw new Error("S3 authorization failed");
+      throw new FaaObstacleSnapshotStoreError("archive_write", "authorization_denied");
     },
   };
   const service = createFaaObstacleDataService({
@@ -595,11 +621,106 @@ test("snapshot credential failure does not block a valid live FAA refresh", asyn
     maxRecords: 10,
     now: () => Date.parse("2026-10-12T12:00:00Z"),
     snapshotStore: failingStore,
+    snapshotDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
     fetchImpl: async () => new Response(new Uint8Array(archive), { status: 200 }),
   });
   const result = await service.getData();
   assert.equal(result.referenceData.status, "fresh");
   assert.equal(result.records.length, 2);
+  assert.deepEqual(diagnostics.map(({ event, failureStage, errorCode }) => ({ event, failureStage, errorCode })), [
+    { event: "faa_obstacle_snapshot_authorization_denied", failureStage: "manifest_read", errorCode: "authorization_denied" },
+    { event: "faa_obstacle_snapshot_authorization_denied", failureStage: "archive_write", errorCode: "authorization_denied" },
+  ]);
+});
+
+test("missing snapshot manifest is an observable normal cache miss", async () => {
+  const diagnostics: Array<{ event: string; cacheState: string }> = [];
+  const service = createFaaObstacleDataService({
+    sourceUrl: "https://mirror.example/dof.zip",
+    sourceWasOverridden: true,
+    snapshotStore: new MemorySnapshotStore(),
+    snapshotDiagnostic: (diagnostic) => diagnostics.push(diagnostic),
+    fetchImpl: async () => new Response("not acceptable", { status: 406 }),
+  });
+  await assert.rejects(service.getData(), /download failed \(406\)/);
+  assert.deepEqual(diagnostics, [{
+    event: "faa_obstacle_snapshot_manifest_not_found",
+    failureStage: "manifest_read",
+    errorCode: "not_found",
+    cacheState: "empty",
+  }]);
+});
+
+test("snapshot store classifies invalid manifests and missing archives", async () => {
+  const objects = new Map<string, Buffer>();
+  const fakeStorage = {
+    async getObjectStream({ key }: { key: string }) {
+      const body = objects.get(key);
+      if (!body) {
+        const error = new Error("missing") as Error & { name: string };
+        error.name = "NoSuchKey";
+        throw error;
+      }
+      return { stream: Readable.from([body]) };
+    },
+    async uploadBuffer() {},
+    async deleteObject() {},
+  };
+  const store = createS3FaaObstacleSnapshotStore({
+    maxArchiveBytes: 1024 * 1024,
+    storage: fakeStorage as never,
+  });
+  objects.set("reference-data/faa-obstacles/latest.json", Buffer.from("not-json"));
+  await assert.rejects(store.load(), (error: unknown) =>
+    error instanceof FaaObstacleSnapshotStoreError &&
+    error.failureStage === "manifest_validation" &&
+    error.errorCode === "manifest_invalid");
+
+  const archive = zipWith();
+  const checksumSha256 = (await import("node:crypto")).createHash("sha256").update(archive).digest("hex");
+  objects.set("reference-data/faa-obstacles/latest.json", Buffer.from(JSON.stringify({
+    version: 1,
+    archiveKey: `reference-data/faa-obstacles/archives/${checksumSha256}.zip`,
+    checksumSha256,
+    archiveBytes: archive.length,
+    csvBytes: csv().length,
+    recordCount: 2,
+    fetchedAt: "2026-10-12T12:00:00.000Z",
+    publishedAt: "2026-10-12T03:31:49.000Z",
+    provenance: "official-default",
+    sourceHost: "aeronav.faa.gov",
+    sourcePath: "/Obst_Data/DAILY_DOF_CSV.ZIP",
+    freshnessBasis: ["zip-entry-time"],
+  })));
+  await assert.rejects(store.load(), (error: unknown) =>
+    error instanceof FaaObstacleSnapshotStoreError &&
+    error.failureStage === "archive_read" &&
+    error.errorCode === "archive_not_found");
+});
+
+test("default snapshot diagnostics are emitted as one sanitized JSON line", () => {
+  const originalWarn = console.warn;
+  const calls: unknown[][] = [];
+  console.warn = (...args: unknown[]) => calls.push(args);
+  try {
+    logFaaObstacleSnapshotDiagnostic({
+      event: "faa_obstacle_snapshot_authorization_denied",
+      failureStage: "manifest_read",
+      errorCode: "authorization_denied",
+      cacheState: "empty",
+    });
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].length, 1);
+  assert.equal(typeof calls[0][0], "string");
+  assert.deepEqual(JSON.parse(String(calls[0][0])), {
+    event: "faa_obstacle_snapshot_authorization_denied",
+    failureStage: "manifest_read",
+    errorCode: "authorization_denied",
+    cacheState: "empty",
+  });
 });
 
 test("S3 durable replacement writes the verified archive before the manifest pointer", async () => {

@@ -7,6 +7,7 @@ import { db } from "../db";
 import { storage } from "../storage";
 import { aiToolUsages } from "@shared/schema";
 import { getEntitlementsForUser } from "../membership";
+import { isAdmin, isAuthenticated } from "../auth";
 
 const openaiApiKey = process.env.AI_INTEGRATIONS_OPENAI_API_KEY || process.env.OPENAI_API_KEY;
 const configuredBaseUrl = (process.env.AI_INTEGRATIONS_OPENAI_BASE_URL || process.env.OPENAI_BASE_URL || "").trim();
@@ -152,6 +153,29 @@ function parseCabinBriefContent(content: string) {
 }
 
 export const aiToolsRouter = Router();
+
+aiToolsRouter.delete("/usage/me", isAuthenticated, isAdmin, async (req, res) => {
+  const userId = extractUserId(req.user);
+  if (!userId) {
+    return res.status(401).json({ message: "Unauthorized" });
+  }
+
+  try {
+    const deleted = await db
+      .delete(aiToolUsages)
+      .where(eq(aiToolUsages.userId, userId))
+      .returning({ id: aiToolUsages.id });
+
+    return res.json({
+      reset: true,
+      deletedUses: deleted.length,
+      remainingUses: AI_FREE_USE_LIMIT,
+    });
+  } catch (error) {
+    console.error("[ai-usage-reset] Failed to reset administrator usage", error);
+    return res.status(500).json({ message: "Unable to reset AI credits" });
+  }
+});
 
 aiToolsRouter.post("/weather-summary", async (req, res) => {
   const metar = truncateField(req.body?.metar, 3000);

@@ -1722,6 +1722,26 @@ export default function AdminDashboard() {
     },
   });
 
+  const resetMyAiCreditsMutation = useMutation({
+    mutationFn: async () => {
+      const response = await apiRequest("DELETE", "/api/ai-tools/usage/me");
+      return await response.json() as { deletedUses: number; remainingUses: number };
+    },
+    onSuccess: ({ deletedUses, remainingUses }) => {
+      toast({
+        title: "AI credits reset",
+        description: `${deletedUses} prior use${deletedUses === 1 ? "" : "s"} cleared. You now have ${remainingUses} free AI uses available.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Reset failed",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
   const markNotificationUnreadMutation = useMutation({
     mutationFn: async (id: string) => {
       return await apiRequest("PATCH", `/api/admin/notifications/${id}/unread`, {});
@@ -3482,6 +3502,16 @@ export default function AdminDashboard() {
                 <CardDescription>Usage across tools, training, and marketplace</CardDescription>
               </div>
               <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => resetMyAiCreditsMutation.mutate()}
+                  disabled={resetMyAiCreditsMutation.isPending}
+                >
+                  <RefreshCw className={`h-4 w-4 mr-1 ${resetMyAiCreditsMutation.isPending ? "animate-spin" : ""}`} />
+                  {resetMyAiCreditsMutation.isPending ? "Resetting..." : "Reset my AI credits"}
+                </Button>
                 <Select value={featureUsageRange} onValueChange={setFeatureUsageRange}>
                   <SelectTrigger className="w-[160px]">
                     <SelectValue placeholder="Select range" />

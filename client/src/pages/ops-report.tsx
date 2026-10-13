@@ -141,6 +141,7 @@ type OpsDraftResponse = {
     uploadedReports: Array<Record<string, any>>;
     updatedAt: string;
   };
+  carriedChargebacks?: Row[];
 };
 
 const ONLINE_REPUTATION_SOURCES = ["GOOGLE", "BOOKING.COM", "EXPEDIA", "TRIPADVISOR", "YELP", "BRAND.COM"];
@@ -326,6 +327,37 @@ function normalizeChargebackRows(rows: Row[] | undefined | null): Row[] {
     outcome: ["pending", "won", "lost", "n/a"].includes(row.outcome) ? row.outcome : "pending",
     evidenceStatus: ["not-started", "collecting", "submitted"].includes(row.evidenceStatus) ? row.evidenceStatus : "not-started",
   })).filter(chargebackHasContent);
+}
+
+function chargebackIdentityKeys(row: Row): string[] {
+  const normalized = (value: string | undefined) => String(value || "").trim().toLowerCase().replace(/\s+/g, " ");
+  const amount = Number(String(row.amount || "").replace(/[$,]/g, ""));
+  const fallback = [
+    normalized(row.guest || row.guestName),
+    normalized(row.reason),
+    Number.isFinite(amount) ? amount.toFixed(2) : normalized(row.amount),
+    normalized(row.responseDue || row.respondDate),
+  ].join("|");
+  return [
+    row.trackingId ? `tracking:${normalized(row.trackingId)}` : "",
+    row.caseId ? `case:${normalized(row.caseId)}` : "",
+    row.confirmationNumber ? `confirmation:${normalized(row.confirmationNumber)}` : "",
+    `fallback:${fallback}`,
+  ].filter(Boolean);
+}
+
+function mergeChargebackRows(current: Row[] | undefined | null, carried: Row[] | undefined | null): Row[] {
+  const currentRows = normalizeChargebackRows(current);
+  const carriedRows = normalizeChargebackRows(carried);
+  const seen = new Set(currentRows.flatMap(chargebackIdentityKeys));
+  const merged = [...currentRows];
+  for (const row of carriedRows) {
+    const keys = chargebackIdentityKeys(row);
+    if (keys.some((key) => seen.has(key))) continue;
+    merged.push(row);
+    keys.forEach((key) => seen.add(key));
+  }
+  return merged;
 }
 
 const GSS_TRACKED_LABELS = ["ITR", "Elite Appreciation", "Cleanliness", "Staff Service", "Maintenance", "Food & Beverage"];
@@ -1435,7 +1467,10 @@ function ChargebackTracker({ rows, onChange }: { rows: Row[]; onChange: (rows: R
             {rows.map((row, rowIndex) => (
               <Fragment key={rowIndex}>
                 <tr className="odd:bg-white even:bg-[#fbf6ee]">
-                  <td className="border border-[#e0d3c1] p-1"><div className="grid grid-cols-[1.25fr_1fr] gap-1"><Input aria-label="Guest name" placeholder="Guest name" className={`h-8 ${C.field}`} value={row.guest || ""} onChange={(event) => updateRow(rowIndex, { guest: event.target.value })} /><Input aria-label="Case or dispute ID" placeholder="Case ID" className={`h-8 ${C.field}`} value={row.caseId || ""} onChange={(event) => updateRow(rowIndex, { caseId: event.target.value })} /></div></td>
+                  <td className="border border-[#e0d3c1] p-1">
+                    <div className="grid grid-cols-[1.25fr_1fr] gap-1"><Input aria-label="Guest name" placeholder="Guest name" className={`h-8 ${C.field}`} value={row.guest || ""} onChange={(event) => updateRow(rowIndex, { guest: event.target.value })} /><Input aria-label="Case or dispute ID" placeholder="Case ID" className={`h-8 ${C.field}`} value={row.caseId || ""} onChange={(event) => updateRow(rowIndex, { caseId: event.target.value })} /></div>
+                    {row.carriedFromWeekStart && <div className="mt-0.5 text-[9px] font-semibold uppercase tracking-[0.08em] text-[#8a6334]">Carried from week of {row.carriedFromWeekStart}</div>}
+                  </td>
                   <td className="border border-[#e0d3c1] p-1"><Input aria-label="Chargeback reason" className={`h-8 ${C.field}`} value={row.reason || ""} onChange={(event) => updateRow(rowIndex, { reason: event.target.value })} /></td>
                   <td className="border border-[#e0d3c1] p-1"><Input aria-label="Chargeback amount" inputMode="decimal" className={`h-8 ${C.field}`} value={row.amount || ""} onBlur={() => updateRow(rowIndex, { amount: accounting(row.amount || "") })} onChange={(event) => updateRow(rowIndex, { amount: event.target.value })} /></td>
                   <td className="border border-[#e0d3c1] p-1"><Input aria-label="Response due date" type={!row.responseDue || /^\d{4}-\d{2}-\d{2}$/.test(row.responseDue) ? "date" : "text"} className={`h-8 ${C.field}`} value={row.responseDue || ""} onChange={(event) => updateRow(rowIndex, { responseDue: event.target.value })} /></td>
@@ -2440,12 +2475,12 @@ export default function OpsReportPage() {
     ]);
     setUploadedReports([]);
   };
-  function applyPayloadState(payload: Record<string, any>) {
+  function applyPayloadState(payload: Record<string, any>, carriedChargebacks: Row[] = []) {
     if (payload.setup) setSetup(payload.setup);
     if (payload.topMetrics) setTopMetrics(payload.topMetrics);
     if (payload.monthRows) setMonthRows(normalizeCurrentMonthRows(payload.monthRows));
     if (payload.nextMonthRows) setNextMonthRows(normalizeNextMonthRows(payload.nextMonthRows));
-    if (payload.chargebacks) setChargebacks(normalizeChargebackRows(payload.chargebacks));
+    if (payload.chargebacks || carriedChargebacks.length) setChargebacks(mergeChargebackRows(payload.chargebacks, carriedChargebacks));
     if (payload.maintenance) setMaintenance(payload.maintenance.map((row: Row) => ({
       ...row,
       pmStatus: row.pmStatus || (row.no ? `Task ${row.no}` : ""),
@@ -2475,7 +2510,7 @@ export default function OpsReportPage() {
     if (payload.followUp) setFollowUp(payload.followUp);
     if (payload.priorities) setPriorities(payload.priorities);
   }
-  const hydrateOpsDraft = (loaded: OpsDraftResponse["draft"]) => {
+  const hydrateOpsDraft = (loaded: OpsDraftResponse["draft"], carriedChargebacks: Row[] = []) => {
     if (!loaded?.payload) return false;
     const currentReports = (loaded.uploadedReports || []).filter((report) => {
       const sourceWeekStart = String(report.weekStartDate || "").trim();
@@ -2483,7 +2518,7 @@ export default function OpsReportPage() {
     });
     setWeek(loaded.weekLabel || "Week 1");
     // The saved payload is authoritative. Replaying imports here overwrites manual corrections.
-    applyPayloadState(loaded.payload);
+    applyPayloadState(loaded.payload, carriedChargebacks);
     setUploadedReports(currentReports.map((report) => compactUploadedReport(report as OpsImportResponse)));
     return true;
   };
@@ -2491,7 +2526,10 @@ export default function OpsReportPage() {
     const response = await fetch(apiUrl(`/api/opsreport/draft?weekStart=${encodeURIComponent(weekStart)}`), { credentials: "include" });
     if (!response.ok) throw new Error(await response.text());
     const data = await response.json() as OpsDraftResponse;
-    if (!hydrateOpsDraft(data.draft)) resetWeeklyWorksheet(weekStart, weekLabel);
+    if (!hydrateOpsDraft(data.draft, data.carriedChargebacks || [])) {
+      resetWeeklyWorksheet(weekStart, weekLabel);
+      setChargebacks(mergeChargebackRows([], data.carriedChargebacks || []));
+    }
   };
   const handleWeekLabelChange = (nextWeek: string) => {
     const currentNumber = Number((week.match(/\d+/) || [])[0] || 0);
@@ -2533,7 +2571,7 @@ export default function OpsReportPage() {
   useEffect(() => {
     if (!access.data?.unlocked || draft.isLoading || draftHydrated) return;
     const loaded = draft.data?.draft;
-    hydrateOpsDraft(loaded || null);
+    hydrateOpsDraft(loaded || null, draft.data?.carriedChargebacks || []);
     setDraftHydrated(true);
   }, [access.data?.unlocked, draft.data, draft.isLoading, draftHydrated]);
 

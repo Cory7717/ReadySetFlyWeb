@@ -2,7 +2,7 @@ import express, { type Express, type RequestHandler } from "express";
 import multer from "multer";
 import { z } from "zod";
 import bcrypt from "bcrypt";
-import { and, desc, eq, gte, lte } from "drizzle-orm";
+import { and, asc, desc, eq, gte, lt, lte } from "drizzle-orm";
 import { createRequire } from "module";
 import { randomUUID } from "crypto";
 import { db } from "../db";
@@ -20,6 +20,7 @@ import {
 } from "@shared/schema";
 import { parseOpsReportFile } from "../opsReportParsers";
 import { parseAbacusLaborCsv } from "../abacusLaborParser";
+import { collectOpenChargebacks } from "../services/opsReportChargebacks";
 import {
   buildMonthlySummaryDocx,
   buildMonthlySummaryPdf,
@@ -689,11 +690,23 @@ export function registerOpsReportRoutes(app: Express) {
           .where(and(eq(courtyardOpsReportDrafts.propertyId, "courtyard-austin-lakeline"), eq(courtyardOpsReportDrafts.weekStart, weekStart)))
           .limit(1);
       }
-      if (!draft && requestedWeekStart) return res.json({ draft: null });
-      if (!draft) {
+      if (!draft && !requestedWeekStart) {
         [draft] = await db.select().from(courtyardOpsReportDrafts).where(eq(courtyardOpsReportDrafts.propertyId, "courtyard-austin-lakeline")).orderBy(desc(courtyardOpsReportDrafts.updatedAt)).limit(1);
       }
-      res.json({ draft: publicDraft(draft) });
+      const carryBeforeWeekStart = requestedWeekStart || draft?.weekStart || "";
+      let carriedChargebacks: Array<Record<string, unknown>> = [];
+      if (carryBeforeWeekStart) {
+        const priorDrafts = await db
+          .select({ weekStart: courtyardOpsReportDrafts.weekStart, payloadJson: courtyardOpsReportDrafts.payloadJson })
+          .from(courtyardOpsReportDrafts)
+          .where(and(
+            eq(courtyardOpsReportDrafts.propertyId, "courtyard-austin-lakeline"),
+            lt(courtyardOpsReportDrafts.weekStart, carryBeforeWeekStart),
+          ))
+          .orderBy(asc(courtyardOpsReportDrafts.weekStart));
+        carriedChargebacks = collectOpenChargebacks(priorDrafts);
+      }
+      res.json({ draft: publicDraft(draft), carriedChargebacks });
     } catch (error) {
       next(error);
     }

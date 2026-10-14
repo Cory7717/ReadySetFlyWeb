@@ -56,7 +56,8 @@ test("phase 2 uses durable unique support jobs and password confirmation", () =>
   const worker = readFileSync("server/services/hotelOperationsSupportWorker.ts", "utf8");
   const page = readFileSync("client/src/pages/hotel-operations.tsx", "utf8");
   assert.match(migration, /UNIQUE INDEX IF NOT EXISTS uniq_hotel_ops_support_notification/);
-  assert.match(worker, /FOR UPDATE SKIP LOCKED/);
+  assert.match(worker, /FOR UPDATE OF n SKIP LOCKED/);
+  assert.doesNotMatch(worker, /ORDER BY n\.next_attempt_at FOR UPDATE SKIP LOCKED/);
   assert.match(worker, /first_human_response_at/);
   assert.match(routes, /passwordConfirmation/);
   assert.match(page, /Confirm password/);

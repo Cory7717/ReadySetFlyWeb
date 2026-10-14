@@ -19,7 +19,7 @@ async function claimDueNotification() {
       LEFT JOIN hotel_ops_hotels h ON h.id = c.hotel_id
       WHERE n.status IN ('queued','retry') AND n.next_attempt_at <= now()
         AND (n.lease_expires_at IS NULL OR n.lease_expires_at < now())
-      ORDER BY n.next_attempt_at FOR UPDATE SKIP LOCKED LIMIT 1`);
+      ORDER BY n.next_attempt_at FOR UPDATE OF n SKIP LOCKED LIMIT 1`);
     const job = rows[0];
     if (!job) { await client.query("COMMIT"); return null; }
     await client.query("UPDATE hotel_ops_support_notifications SET status='processing', lease_expires_at=now()+interval '2 minutes', attempts=attempts+1, updated_at=now() WHERE id=$1", [job.id]);
@@ -73,6 +73,6 @@ export async function processHotelOpsSupportNotificationsOnce() {
 
 export function startHotelOpsSupportNotificationWorker() {
   if (timer || process.env.HOTEL_OPS_SUPPORT_WORKER_DISABLED === "true") return;
-  const run = async () => { try { for (let i = 0; i < 10 && await processHotelOpsSupportNotificationsOnce(); i += 1) {} } catch (error: any) { console.error(JSON.stringify({ event: "hotel_ops_support_worker_failed", code: String(error?.code || "unknown") })); } };
+  const run = async () => { try { for (let i = 0; i < 10 && await processHotelOpsSupportNotificationsOnce(); i += 1) {} } catch (error: any) { console.error(JSON.stringify({ event: "hotel_ops_support_worker_failed", code: String(error?.code || "unknown"), stage: "claim_due_notification", message: String(error?.message || "Unexpected database error").slice(0, 240) })); } };
   void run(); timer = setInterval(() => void run(), 15_000); timer.unref?.();
 }

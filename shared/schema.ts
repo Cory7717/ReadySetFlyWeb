@@ -6367,6 +6367,7 @@ export const hotelOpsSupportSpecialists = pgTable("hotel_ops_support_specialists
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   accountId: varchar("account_id").notNull().references(() => hotelOpsAccounts.id, { onDelete: "cascade" }),
   enabled: boolean("enabled").notNull().default(true),
+  supportRole: text("support_role").notNull().default("support_specialist"),
   emailNotifications: boolean("email_notifications").notNull().default(true),
   escalationRecipient: boolean("escalation_recipient").notNull().default(true),
   presenceStatus: text("presence_status").notNull().default("offline"),
@@ -6374,6 +6375,19 @@ export const hotelOpsSupportSpecialists = pgTable("hotel_ops_support_specialists
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => [uniqueIndex("uniq_hotel_ops_support_specialist_account").on(table.accountId)]);
+
+export const hotelOpsSupportInvitations = pgTable("hotel_ops_support_invitations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: varchar("email", { length: 320 }).notNull(),
+  supportRole: text("support_role").notNull(),
+  tokenHash: varchar("token_hash", { length: 64 }).notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  acceptedAt: timestamp("accepted_at"),
+  revokedAt: timestamp("revoked_at"),
+  invitedByAccountId: varchar("invited_by_account_id").references(() => hotelOpsAccounts.id, { onDelete: "set null" }),
+  acceptedByAccountId: varchar("accepted_by_account_id").references(() => hotelOpsAccounts.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [index("idx_hotel_ops_support_invite_email").on(table.email, table.expiresAt)]);
 
 export const hotelOpsSupportSettings = pgTable("hotel_ops_support_settings", {
   id: varchar("id").primaryKey().default("platform"),

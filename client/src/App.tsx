@@ -478,6 +478,7 @@ function Router() {
         component={IncidentReportSharePage}
       />
       <Route path="/hoteloperations/invite/:token" component={({ params }: { params: { token: string } }) => <HotelOperationsPage mode="invite" token={params.token} />} />
+      <Route path="/hoteloperations/support-invite/:token" component={({ params }: { params: { token: string } }) => <HotelOperationsPage mode="support" token={params.token} />} />
       <Route path="/hoteloperations/reset/:token" component={({ params }: { params: { token: string } }) => <HotelOperationsPage mode="reset" token={params.token} />} />
       <Route path="/hoteloperations/admin/support/specialists" component={HotelOperationsAdminPage} />
       <Route path="/hoteloperations/admin/support" component={HotelOperationsAdminPage} />

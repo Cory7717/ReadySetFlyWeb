@@ -19,6 +19,7 @@ import {
   hotelOpsPasswordResets,
   hotelOpsReportingConfigurations,
   hotelOpsSessions,
+  hotelOpsSupportSpecialists,
 } from "@shared/schema";
 import { HOTEL_OPS_MODULES, HOTEL_OPS_ROLES, canAccessHotelOpsProperty, canInviteHotelOpsRole, safeHotelOpsReturnPath, type HotelOpsRole } from "../hotelOperationsPolicy";
 import { registerHotelOperationsPhase2Routes } from "./hotelOperationsPhase2";
@@ -67,6 +68,7 @@ type HotelOpsContext = {
   organizations: Array<typeof hotelOpsOrganizationMemberships.$inferSelect & { organization: typeof hotelOpsOrganizations.$inferSelect }>;
   hotelMemberships: Array<typeof hotelOpsHotelMemberships.$inferSelect>;
   session: typeof hotelOpsSessions.$inferSelect;
+  supportRole: string | null;
 };
 
 async function audit(input: { organizationId?: string | null; hotelId?: string | null; actorAccountId?: string | null; action: string; targetType?: string; targetId?: string; metadata?: Record<string, unknown> }) {
@@ -109,8 +111,9 @@ const requirePortalSession: RequestHandler = async (req: any, res, next) => {
       .innerJoin(hotelOpsOrganizations, eq(hotelOpsOrganizations.id, hotelOpsOrganizationMemberships.organizationId))
       .where(and(eq(hotelOpsOrganizationMemberships.accountId, portalSession.accountId), eq(hotelOpsOrganizationMemberships.status, "active"), eq(hotelOpsOrganizations.status, "active")));
     const hotelMemberships = await db.select().from(hotelOpsHotelMemberships).where(and(eq(hotelOpsHotelMemberships.accountId, portalSession.accountId), eq(hotelOpsHotelMemberships.status, "active")));
-    if (memberships.length === 0) return res.status(403).json({ error: "portal_access_revoked" });
-    req.hotelOps = { account: accounts[0], organizations: memberships.map((row) => ({ ...row.membership, organization: row.organization })), hotelMemberships, session: portalSession } satisfies HotelOpsContext;
+    const supportAccess = await db.select().from(hotelOpsSupportSpecialists).where(and(eq(hotelOpsSupportSpecialists.accountId, portalSession.accountId), eq(hotelOpsSupportSpecialists.enabled, true))).limit(1);
+    if (memberships.length === 0 && !supportAccess[0]) return res.status(403).json({ error: "portal_access_revoked" });
+    req.hotelOps = { account: accounts[0], organizations: memberships.map((row) => ({ ...row.membership, organization: row.organization })), hotelMemberships, session: portalSession, supportRole: supportAccess[0]?.supportRole || null } satisfies HotelOpsContext;
     next();
   } catch (error) { next(error); }
 };
@@ -211,7 +214,7 @@ export function registerHotelOperationsRoutes(app: Express) {
   router.get("/session", requirePortalSession, async (req: any, res) => {
     const context = req.hotelOps as HotelOpsContext;
     const org = primaryOrg(context);
-    res.json({ account: { id: context.account.id, email: context.account.email, displayName: context.account.displayName }, organizations: context.organizations.map((item) => ({ id: item.organization.id, name: item.organization.name, role: item.role, isDemo: item.organization.isDemo })), activeOrganizationId: org?.organizationId || null });
+    res.json({ account: { id: context.account.id, email: context.account.email, displayName: context.account.displayName }, organizations: context.organizations.map((item) => ({ id: item.organization.id, name: item.organization.name, role: item.role, isDemo: item.organization.isDemo })), activeOrganizationId: org?.organizationId || null, supportRole: context.supportRole });
   });
 
   router.post("/logout", requirePortalSession, requireCsrf, async (req: any, res) => {
@@ -445,7 +448,7 @@ export function registerHotelOperationsRoutes(app: Express) {
     res.json({ events });
   });
 
-  registerHotelOperationsPhase2Routes(router, { requirePortalSession, requireCsrf, audit, publicBaseUrl, sendPortalEmail });
+  registerHotelOperationsPhase2Routes(router, { requirePortalSession, requireCsrf, audit, publicBaseUrl, sendPortalEmail, createSession });
   app.use("/api/hotel-operations", router);
   startHotelOpsSupportNotificationWorker();
 }

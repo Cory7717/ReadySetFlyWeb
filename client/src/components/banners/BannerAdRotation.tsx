@@ -15,6 +15,10 @@ import { apiUrl } from "@/lib/api";
 import { trackEvent } from "@/lib/analytics";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import {
+  useDocumentVisibility,
+  useQualifiedBannerImpression,
+} from "@/hooks/useQualifiedBannerImpression";
 
 interface BannerAd {
   id: string;
@@ -81,11 +85,12 @@ export function BannerAdRotation({
   showLeadIn = true,
 }: BannerAdRotationProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [hasTrackedImpression, setHasTrackedImpression] = useState(false);
+  const [rotationSequence, setRotationSequence] = useState(0);
   const [contactDialogOpen, setContactDialogOpen] = useState(false);
   const [contactAd, setContactAd] = useState<BannerAd | null>(null);
   const { toast } = useToast();
   const { user } = useAuth();
+  const isDocumentVisible = useDocumentVisibility();
 
   const { data: bannerAds = [], isLoading } = useQuery<BannerAd[]>({
     queryKey: ["/api/banner-ads/active", placement, category],
@@ -175,6 +180,18 @@ export function BannerAdRotation({
   });
 
   const currentAd = bannerAds[currentIndex];
+  const bannerIds = bannerAds.map((banner) => banner.id).join("|");
+  const exposureKey = currentAd
+    ? JSON.stringify([placement, category ?? null, currentAd.id, rotationSequence])
+    : null;
+  const bannerRef = useQualifiedBannerImpression({
+    exposureKey,
+    isDocumentVisible,
+    onQualified: async (qualifiedExposureKey) => {
+      const [, , bannerId] = JSON.parse(qualifiedExposureKey) as [string, string | null, string, number];
+      await trackImpressionMutation.mutateAsync(bannerId);
+    },
+  });
   const isClickable = Boolean(currentAd?.link);
   const canContact = Boolean(currentAd?.orderId);
   const hasVideo = Boolean(currentAd?.videoUrl);
@@ -225,16 +242,17 @@ export function BannerAdRotation({
     return value;
   };
 
-  // Reset index and impression tracking when banner ads change
+  // Reset only when the actual campaign list changes. Query refetches that
+  // return the same ads must not create a new exposure.
   useEffect(() => {
     if (bannerAds.length > 0) {
       const startIndex = bannerAds.length > 1
         ? Math.floor(Math.random() * bannerAds.length)
         : 0;
       setCurrentIndex(startIndex);
-      setHasTrackedImpression(false);
+      setRotationSequence((sequence) => sequence + 1);
     }
-  }, [bannerAds]);
+  }, [bannerIds]);
 
   useEffect(() => {
     if (!contactDialogOpen) return;
@@ -249,23 +267,16 @@ export function BannerAdRotation({
 
   // Rotate through ads
   useEffect(() => {
-    if (bannerAds.length <= 1) return;
+    if (bannerAds.length <= 1 || !isDocumentVisible) return;
 
     const interval = setInterval(() => {
+      if (document.visibilityState !== "visible") return;
       setCurrentIndex((prev) => (prev + 1) % bannerAds.length);
-      setHasTrackedImpression(false);
+      setRotationSequence((sequence) => sequence + 1);
     }, rotationIntervalMs);
 
     return () => clearInterval(interval);
-  }, [bannerAds.length, rotationIntervalMs]);
-
-  // Track impression for current ad
-  useEffect(() => {
-    if (currentAd && !hasTrackedImpression) {
-      trackImpressionMutation.mutate(currentAd.id);
-      setHasTrackedImpression(true);
-    }
-  }, [currentAd?.id, hasTrackedImpression]);
+  }, [bannerAds.length, isDocumentVisible, rotationIntervalMs]);
 
   // Don't render anything if no ads or still loading
   if (isLoading || !currentAd || bannerAds.length === 0) {
@@ -397,6 +408,7 @@ export function BannerAdRotation({
     return (
       <>
         <Card
+          ref={bannerRef}
           className={`group rsf-metal-panel rsf-metal-panel-interactive overflow-hidden text-[#E8EDF4] transition-all duration-200 ${
             isClickable ? "cursor-pointer hover:scale-[1.02]" : "cursor-default"
           } ${className}`}
@@ -509,6 +521,7 @@ export function BannerAdRotation({
         </div>
       )}
       <Card
+        ref={bannerRef}
         className={`group relative overflow-hidden border-0 bg-gradient-to-br from-amber-50 via-white to-sky-50 shadow-[0_18px_40px_-24px_rgba(15,23,42,0.45)] transition-all duration-500 ${
           isClickable ? "cursor-pointer hover:-translate-y-0.5" : "cursor-default"
         }`}

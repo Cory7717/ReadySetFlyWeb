@@ -1,7 +1,10 @@
-import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import type { BannerAd } from "@shared/schema";
+import {
+  useDocumentVisibility,
+  useQualifiedBannerImpression,
+} from "@/hooks/useQualifiedBannerImpression";
 
 interface BannerAdProps {
   banner: BannerAd;
@@ -10,40 +13,16 @@ interface BannerAdProps {
 
 export function BannerAd({ banner, className = "" }: BannerAdProps) {
   const [, setLocation] = useLocation();
-  const [impressionTracked, setImpressionTracked] = useState(false);
-  const bannerRef = useRef<HTMLDivElement>(null);
+  const isDocumentVisible = useDocumentVisibility();
+  const bannerRef = useQualifiedBannerImpression({
+    exposureKey: banner.id,
+    isDocumentVisible,
+    onQualified: async () => {
+      await apiRequest("POST", `/api/banner-ads/${banner.id}/impression`, {});
+    },
+  });
   const hasVideo = Boolean(banner.videoUrl);
   const isVideoMuted = banner.videoMuted !== false;
-
-  // Track impression when banner is visible
-  useEffect(() => {
-    if (impressionTracked) return;
-
-    const observer = new IntersectionObserver(
-      async (entries) => {
-        const [entry] = entries;
-        if (entry.isIntersecting && !impressionTracked) {
-          try {
-            await apiRequest("POST", `/api/banner-ads/${banner.id}/impression`, {});
-            setImpressionTracked(true);
-          } catch (error) {
-            console.error("Failed to track banner impression:", error);
-          }
-        }
-      },
-      { threshold: 0.5 } // Trigger when 50% of banner is visible
-    );
-
-    const currentRef = bannerRef.current;
-    if (currentRef) {
-      observer.observe(currentRef);
-    }
-
-    return () => {
-      // Disconnect observer to stop all observations
-      observer.disconnect();
-    };
-  }, [banner.id, impressionTracked]);
 
   const handleClick = async () => {
     // Track click

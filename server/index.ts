@@ -13,14 +13,13 @@ const isProd = process.env.NODE_ENV === "production";
 if (!isProd) {
   console.log("DATABASE_URL loaded?", !!process.env.DATABASE_URL);
 }
-import express, { type Request, Response, NextFunction } from "express";
+import express from "express";
 import cors from "cors";
 import { prewarmOperationalCaches, registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
 import { startFinanceAlertsJob } from "./jobs/financeAlerts";
 import {
   buildCorsOptions,
-  CorsOriginDeniedError,
   createCorsRejectionDiagnostics,
   getAllowedOrigins,
 } from "./corsOptions";
@@ -29,6 +28,7 @@ import { scannerGuard } from "./middleware/scannerGuard";
 import { securityHeaders } from "./middleware/securityHeaders";
 import { apiNotFound } from "./middleware/apiNotFound";
 import { canonicalFrontendHost } from "./middleware/canonicalFrontendHost";
+import { globalErrorHandler } from "./middleware/globalErrorHandler";
 
 const allowedBrowserOrigins = getAllowedOrigins();
 const app = express();
@@ -118,23 +118,7 @@ app.use((req, res, next) => {
   // return index.html for client-side application routes.
   app.use("/api", apiNotFound);
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
-    if (err instanceof CorsOriginDeniedError || err?.code === "CORS_ORIGIN_DENIED") {
-      if (!res.headersSent) {
-        res.status(403).json({
-          message: "Origin not allowed",
-          requestId: res.locals.requestId || undefined,
-        });
-      }
-      return;
-    }
-
-    const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
-
-    res.status(status).json({ message });
-    throw err;
-  });
+  app.use(globalErrorHandler);
 
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route

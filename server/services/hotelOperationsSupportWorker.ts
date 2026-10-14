@@ -73,6 +73,6 @@ export async function processHotelOpsSupportNotificationsOnce() {
 
 export function startHotelOpsSupportNotificationWorker() {
   if (timer || process.env.HOTEL_OPS_SUPPORT_WORKER_DISABLED === "true") return;
-  const run = async () => { try { for (let i = 0; i < 10 && await processHotelOpsSupportNotificationsOnce(); i += 1) {} } catch (error: any) { console.error(JSON.stringify({ event: "hotel_ops_support_worker_failed", code: String(error?.code || "unknown"), stage: "claim_due_notification", message: String(error?.message || "Unexpected database error").slice(0, 240) })); } };
+  const run = async () => { try { for (let i = 0; i < 10 && await processHotelOpsSupportNotificationsOnce(); i += 1) {} } catch (error: any) { const code = String(error?.code || "unknown"); console.error(JSON.stringify({ event: "hotel_ops_support_worker_failed", code: /^[A-Za-z0-9_.:-]{1,64}$/.test(code) ? code : "unknown", stage: "claim_due_notification" })); } };
   void run(); timer = setInterval(() => void run(), 15_000); timer.unref?.();
 }

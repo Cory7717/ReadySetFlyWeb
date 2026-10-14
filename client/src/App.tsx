@@ -125,6 +125,7 @@ import BankDepositPage from "@/pages/bank-deposit";
 import IncidentReportPage from "@/pages/incident-report";
 import IncidentReportSharePage from "@/pages/incident-report-share";
 import HotelOperationsPage from "@/pages/hotel-operations";
+import HotelOperationsAdminPage from "@/pages/hotel-operations-admin";
 import VwBeetlePage from "@/pages/vw-beetle";
 import AviationBriefingsPage from "@/pages/aviation-briefings";
 import FlightServiceValidationPage from "@/pages/flight-service-validation";
@@ -478,6 +479,10 @@ function Router() {
       />
       <Route path="/hoteloperations/invite/:token" component={({ params }: { params: { token: string } }) => <HotelOperationsPage mode="invite" token={params.token} />} />
       <Route path="/hoteloperations/reset/:token" component={({ params }: { params: { token: string } }) => <HotelOperationsPage mode="reset" token={params.token} />} />
+      <Route path="/hoteloperations/admin/support/specialists" component={HotelOperationsAdminPage} />
+      <Route path="/hoteloperations/admin/support" component={HotelOperationsAdminPage} />
+      <Route path="/hoteloperations/admin/settings" component={HotelOperationsAdminPage} />
+      <Route path="/hoteloperations/admin" component={HotelOperationsAdminPage} />
       <Route path="/hoteloperations/dashboard" component={() => <HotelOperationsPage />} />
       <Route path="/hoteloperations" component={() => <HotelOperationsPage />} />
       <Route path="/vw-beetle" component={VwBeetlePage} />

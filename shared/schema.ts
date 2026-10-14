@@ -6188,6 +6188,7 @@ export const hotelOpsOrganizations = pgTable("hotel_ops_organizations", {
   slug: varchar("slug", { length: 100 }).notNull().unique(),
   status: text("status").notNull().default("active"),
   isDemo: boolean("is_demo").notNull().default(false),
+  profile: jsonb("profile").notNull().default(sql`'{}'::jsonb`),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });
@@ -6361,6 +6362,93 @@ export const hotelOpsReportingConfigurations = pgTable("hotel_ops_reporting_conf
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 }, (table) => [uniqueIndex("uniq_hotel_ops_reporting_config").on(table.hotelId, table.reportType)]);
+
+export const hotelOpsSupportSpecialists = pgTable("hotel_ops_support_specialists", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  accountId: varchar("account_id").notNull().references(() => hotelOpsAccounts.id, { onDelete: "cascade" }),
+  enabled: boolean("enabled").notNull().default(true),
+  emailNotifications: boolean("email_notifications").notNull().default(true),
+  escalationRecipient: boolean("escalation_recipient").notNull().default(true),
+  presenceStatus: text("presence_status").notNull().default("offline"),
+  lastHeartbeatAt: timestamp("last_heartbeat_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [uniqueIndex("uniq_hotel_ops_support_specialist_account").on(table.accountId)]);
+
+export const hotelOpsSupportSettings = pgTable("hotel_ops_support_settings", {
+  id: varchar("id").primaryKey().default("platform"),
+  liveChatEnabled: boolean("live_chat_enabled").notNull().default(true),
+  ticketsEnabled: boolean("tickets_enabled").notNull().default(true),
+  escalationEmailsEnabled: boolean("escalation_emails_enabled").notNull().default(true),
+  firstResponseSeconds: integer("first_response_seconds").notNull().default(120),
+  secondaryEscalationEnabled: boolean("secondary_escalation_enabled").notNull().default(false),
+  secondaryEscalationSeconds: integer("secondary_escalation_seconds").notNull().default(600),
+  availabilityMessage: text("availability_message").notNull().default("Our support team will respond as soon as possible."),
+  updatedByAccountId: varchar("updated_by_account_id").references(() => hotelOpsAccounts.id, { onDelete: "set null" }),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const hotelOpsSupportConversations = pgTable("hotel_ops_support_conversations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  reference: varchar("reference", { length: 32 }).notNull().unique(),
+  organizationId: varchar("organization_id").notNull().references(() => hotelOpsOrganizations.id, { onDelete: "cascade" }),
+  hotelId: varchar("hotel_id").references(() => hotelOpsHotels.id, { onDelete: "set null" }),
+  requesterAccountId: varchar("requester_account_id").notNull().references(() => hotelOpsAccounts.id, { onDelete: "restrict" }),
+  assignedSpecialistAccountId: varchar("assigned_specialist_account_id").references(() => hotelOpsAccounts.id, { onDelete: "set null" }),
+  type: text("type").notNull(),
+  subject: text("subject"),
+  category: text("category"),
+  priority: text("priority").notNull().default("normal"),
+  status: text("status").notNull().default("waiting"),
+  firstResponseDeadlineAt: timestamp("first_response_deadline_at"),
+  firstHumanResponseAt: timestamp("first_human_response_at"),
+  escalatedAt: timestamp("escalated_at"),
+  resolvedAt: timestamp("resolved_at"),
+  lastActivityAt: timestamp("last_activity_at").notNull().defaultNow(),
+  requesterUnreadCount: integer("requester_unread_count").notNull().default(0),
+  supportUnreadCount: integer("support_unread_count").notNull().default(0),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  index("idx_hotel_ops_support_org_activity").on(table.organizationId, table.lastActivityAt),
+  index("idx_hotel_ops_support_queue").on(table.status, table.type, table.lastActivityAt),
+]);
+
+export const hotelOpsSupportMessages = pgTable("hotel_ops_support_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  conversationId: varchar("conversation_id").notNull().references(() => hotelOpsSupportConversations.id, { onDelete: "cascade" }),
+  senderAccountId: varchar("sender_account_id").notNull().references(() => hotelOpsAccounts.id, { onDelete: "restrict" }),
+  senderType: text("sender_type").notNull(),
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [index("idx_hotel_ops_support_messages_conversation").on(table.conversationId, table.createdAt)]);
+
+export const hotelOpsSupportAssignments = pgTable("hotel_ops_support_assignments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  conversationId: varchar("conversation_id").notNull().references(() => hotelOpsSupportConversations.id, { onDelete: "cascade" }),
+  specialistAccountId: varchar("specialist_account_id").references(() => hotelOpsAccounts.id, { onDelete: "set null" }),
+  assignedByAccountId: varchar("assigned_by_account_id").notNull().references(() => hotelOpsAccounts.id, { onDelete: "restrict" }),
+  action: text("action").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const hotelOpsSupportNotifications = pgTable("hotel_ops_support_notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  conversationId: varchar("conversation_id").notNull().references(() => hotelOpsSupportConversations.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(),
+  dueAt: timestamp("due_at").notNull(),
+  status: text("status").notNull().default("queued"),
+  attempts: integer("attempts").notNull().default(0),
+  nextAttemptAt: timestamp("next_attempt_at").notNull(),
+  leaseExpiresAt: timestamp("lease_expires_at"),
+  providerAcceptedAt: timestamp("provider_accepted_at"),
+  lastErrorCode: varchar("last_error_code", { length: 80 }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("uniq_hotel_ops_support_notification").on(table.conversationId, table.kind),
+  index("idx_hotel_ops_support_notification_due").on(table.status, table.nextAttemptAt),
+]);
 
 const logbookDecimalField = z
   .union([

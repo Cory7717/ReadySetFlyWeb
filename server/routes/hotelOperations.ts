@@ -21,6 +21,8 @@ import {
   hotelOpsSessions,
 } from "@shared/schema";
 import { HOTEL_OPS_MODULES, HOTEL_OPS_ROLES, canAccessHotelOpsProperty, canInviteHotelOpsRole, safeHotelOpsReturnPath, type HotelOpsRole } from "../hotelOperationsPolicy";
+import { registerHotelOperationsPhase2Routes } from "./hotelOperationsPhase2";
+import { startHotelOpsSupportNotificationWorker } from "../services/hotelOperationsSupportWorker";
 
 const SESSION_COOKIE = "hotel_ops_session";
 const CSRF_COOKIE = "hotel_ops_csrf";
@@ -379,7 +381,7 @@ export function registerHotelOperationsRoutes(app: Express) {
 
   router.post("/invitations/:token/accept", authLimiter, async (req, res, next) => {
     try {
-      const input = z.object({ displayName: z.string().trim().min(2).max(120), password: z.string().min(12).max(200) }).parse(req.body);
+      const input = z.object({ displayName: z.string().trim().min(2).max(120), password: z.string().min(12).max(200), passwordConfirmation: z.string().min(12).max(200) }).refine((value) => value.password === value.passwordConfirmation, { path: ["passwordConfirmation"], message: "Passwords do not match." }).parse(req.body);
       const hash = hashToken(req.params.token);
       const rows = await db.select().from(hotelOpsInvitations).where(and(eq(hotelOpsInvitations.tokenHash, hash), isNull(hotelOpsInvitations.acceptedAt), isNull(hotelOpsInvitations.revokedAt), gt(hotelOpsInvitations.expiresAt, new Date()))).limit(1);
       const invitation = rows[0]; if (!invitation) return res.status(404).json({ error: "invitation_invalid_or_expired" });
@@ -422,7 +424,8 @@ export function registerHotelOperationsRoutes(app: Express) {
 
   router.post("/password-reset/:token", authLimiter, async (req, res, next) => {
     try {
-      const password = z.object({ password: z.string().min(12).max(200) }).parse(req.body).password;
+      const input = z.object({ password: z.string().min(12).max(200), passwordConfirmation: z.string().min(12).max(200) }).refine((value) => value.password === value.passwordConfirmation, { path: ["passwordConfirmation"], message: "Passwords do not match." }).parse(req.body);
+      const password = input.password;
       const rows = await db.select().from(hotelOpsPasswordResets).where(and(eq(hotelOpsPasswordResets.tokenHash, hashToken(req.params.token)), isNull(hotelOpsPasswordResets.usedAt), gt(hotelOpsPasswordResets.expiresAt, new Date()))).limit(1);
       const reset = rows[0]; if (!reset) return res.status(404).json({ error: "reset_invalid_or_expired" });
       await db.transaction(async (tx) => {
@@ -442,5 +445,7 @@ export function registerHotelOperationsRoutes(app: Express) {
     res.json({ events });
   });
 
+  registerHotelOperationsPhase2Routes(router, { requirePortalSession, requireCsrf, audit, publicBaseUrl, sendPortalEmail });
   app.use("/api/hotel-operations", router);
+  startHotelOpsSupportNotificationWorker();
 }

@@ -6180,6 +6180,188 @@ export const aviationBriefingSuggestions = pgTable(
   ],
 );
 
+// Enterprise hotel operations control plane. These tables intentionally do
+// not reuse RSF aviation users or the legacy single-property Courtyard users.
+export const hotelOpsOrganizations = pgTable("hotel_ops_organizations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  slug: varchar("slug", { length: 100 }).notNull().unique(),
+  status: text("status").notNull().default("active"),
+  isDemo: boolean("is_demo").notNull().default(false),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const hotelOpsAccounts = pgTable("hotel_ops_accounts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: varchar("email", { length: 320 }).notNull().unique(),
+  displayName: text("display_name").notNull(),
+  passwordHash: text("password_hash").notNull(),
+  status: text("status").notNull().default("active"),
+  lastLoginAt: timestamp("last_login_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+});
+
+export const hotelOpsOrganizationMemberships = pgTable(
+  "hotel_ops_organization_memberships",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    organizationId: varchar("organization_id").notNull().references(() => hotelOpsOrganizations.id, { onDelete: "cascade" }),
+    accountId: varchar("account_id").notNull().references(() => hotelOpsAccounts.id, { onDelete: "cascade" }),
+    role: text("role").notNull(),
+    status: text("status").notNull().default("active"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("uniq_hotel_ops_org_membership").on(table.organizationId, table.accountId),
+    index("idx_hotel_ops_org_membership_account").on(table.accountId, table.status),
+  ],
+);
+
+export const hotelOpsHotels = pgTable(
+  "hotel_ops_hotels",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    organizationId: varchar("organization_id").notNull().references(() => hotelOpsOrganizations.id, { onDelete: "cascade" }),
+    propertyCode: varchar("property_code", { length: 40 }).notNull(),
+    name: text("name").notNull(),
+    brand: text("brand"),
+    propertyType: text("property_type"),
+    ownershipEntity: text("ownership_entity"),
+    managementEntity: text("management_entity"),
+    streetAddress: text("street_address"),
+    city: text("city").notNull(),
+    state: varchar("state", { length: 80 }).notNull(),
+    postalCode: varchar("postal_code", { length: 24 }),
+    country: varchar("country", { length: 80 }).notNull().default("US"),
+    phone: varchar("phone", { length: 40 }),
+    timeZone: varchar("time_zone", { length: 80 }).notNull(),
+    roomCount: integer("room_count"),
+    activeRoomCount: integer("active_room_count"),
+    meetingRoomCount: integer("meeting_room_count"),
+    foodBeverageOutletCount: integer("food_beverage_outlet_count"),
+    pmsProvider: text("pms_provider"),
+    reportingPlatform: text("reporting_platform"),
+    accountingSystem: text("accounting_system"),
+    laborSchedulingSystem: text("labor_scheduling_system"),
+    brandReportingEcosystem: text("brand_reporting_ecosystem"),
+    businessDayCutoff: time("business_day_cutoff"),
+    currency: varchar("currency", { length: 3 }).notNull().default("USD"),
+    departments: jsonb("departments").notNull().default(sql`'[]'::jsonb`),
+    enabledModules: jsonb("enabled_modules").notNull().default(sql`'[]'::jsonb`),
+    reportSourceTypes: jsonb("report_source_types").notNull().default(sql`'[]'::jsonb`),
+    reportingIntegrationStatus: text("reporting_integration_status").notNull().default("not_configured"),
+    status: text("status").notNull().default("active"),
+    createdByAccountId: varchar("created_by_account_id").references(() => hotelOpsAccounts.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("uniq_hotel_ops_property_code").on(table.organizationId, table.propertyCode),
+    index("idx_hotel_ops_hotels_org_status").on(table.organizationId, table.status),
+  ],
+);
+
+export const hotelOpsHotelMemberships = pgTable(
+  "hotel_ops_hotel_memberships",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    hotelId: varchar("hotel_id").notNull().references(() => hotelOpsHotels.id, { onDelete: "cascade" }),
+    accountId: varchar("account_id").notNull().references(() => hotelOpsAccounts.id, { onDelete: "cascade" }),
+    role: text("role").notNull(),
+    status: text("status").notNull().default("active"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("uniq_hotel_ops_hotel_membership").on(table.hotelId, table.accountId),
+    index("idx_hotel_ops_hotel_membership_account").on(table.accountId, table.status),
+  ],
+);
+
+export const hotelOpsModulePermissions = pgTable(
+  "hotel_ops_module_permissions",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    accountId: varchar("account_id").notNull().references(() => hotelOpsAccounts.id, { onDelete: "cascade" }),
+    hotelId: varchar("hotel_id").notNull().references(() => hotelOpsHotels.id, { onDelete: "cascade" }),
+    moduleKey: varchar("module_key", { length: 80 }).notNull(),
+    canView: boolean("can_view").notNull().default(true),
+    canManage: boolean("can_manage").notNull().default(false),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [uniqueIndex("uniq_hotel_ops_module_permission").on(table.accountId, table.hotelId, table.moduleKey)],
+);
+
+export const hotelOpsInvitations = pgTable(
+  "hotel_ops_invitations",
+  {
+    id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+    organizationId: varchar("organization_id").notNull().references(() => hotelOpsOrganizations.id, { onDelete: "cascade" }),
+    hotelId: varchar("hotel_id").references(() => hotelOpsHotels.id, { onDelete: "cascade" }),
+    email: varchar("email", { length: 320 }).notNull(),
+    role: text("role").notNull(),
+    moduleKeys: jsonb("module_keys").notNull().default(sql`'[]'::jsonb`),
+    tokenHash: varchar("token_hash", { length: 64 }).notNull().unique(),
+    expiresAt: timestamp("expires_at").notNull(),
+    acceptedAt: timestamp("accepted_at"),
+    revokedAt: timestamp("revoked_at"),
+    invitedByAccountId: varchar("invited_by_account_id").references(() => hotelOpsAccounts.id, { onDelete: "set null" }),
+    acceptedByAccountId: varchar("accepted_by_account_id").references(() => hotelOpsAccounts.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_hotel_ops_invite_lookup").on(table.email, table.expiresAt),
+    index("idx_hotel_ops_invite_org").on(table.organizationId, table.createdAt),
+  ],
+);
+
+export const hotelOpsSessions = pgTable("hotel_ops_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  accountId: varchar("account_id").notNull().references(() => hotelOpsAccounts.id, { onDelete: "cascade" }),
+  tokenHash: varchar("token_hash", { length: 64 }).notNull().unique(),
+  csrfTokenHash: varchar("csrf_token_hash", { length: 64 }).notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+  lastSeenAt: timestamp("last_seen_at").notNull().defaultNow(),
+  revokedAt: timestamp("revoked_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [index("idx_hotel_ops_sessions_account").on(table.accountId, table.expiresAt)]);
+
+export const hotelOpsPasswordResets = pgTable("hotel_ops_password_resets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  accountId: varchar("account_id").notNull().references(() => hotelOpsAccounts.id, { onDelete: "cascade" }),
+  tokenHash: varchar("token_hash", { length: 64 }).notNull().unique(),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const hotelOpsAuditEvents = pgTable("hotel_ops_audit_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  organizationId: varchar("organization_id").references(() => hotelOpsOrganizations.id, { onDelete: "set null" }),
+  hotelId: varchar("hotel_id").references(() => hotelOpsHotels.id, { onDelete: "set null" }),
+  actorAccountId: varchar("actor_account_id").references(() => hotelOpsAccounts.id, { onDelete: "set null" }),
+  action: varchar("action", { length: 100 }).notNull(),
+  targetType: varchar("target_type", { length: 80 }),
+  targetId: varchar("target_id", { length: 100 }),
+  metadata: jsonb("metadata").notNull().default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+}, (table) => [index("idx_hotel_ops_audit_org_created").on(table.organizationId, table.createdAt)]);
+
+export const hotelOpsReportingConfigurations = pgTable("hotel_ops_reporting_configurations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  hotelId: varchar("hotel_id").notNull().references(() => hotelOpsHotels.id, { onDelete: "cascade" }),
+  reportType: varchar("report_type", { length: 80 }).notNull(),
+  formatKey: varchar("format_key", { length: 100 }),
+  configuration: jsonb("configuration").notNull().default(sql`'{}'::jsonb`),
+  status: text("status").notNull().default("not_configured"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+  updatedAt: timestamp("updated_at").notNull().defaultNow(),
+}, (table) => [uniqueIndex("uniq_hotel_ops_reporting_config").on(table.hotelId, table.reportType)]);
+
 const logbookDecimalField = z
   .union([
     z.string().regex(/^\d+(\.\d{1,2})?$/),

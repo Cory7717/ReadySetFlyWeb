@@ -277,6 +277,7 @@ import { registerCourtyardBudgetRoutes } from "./routes/courtyardBudget";
 import { registerCourtyardSalesIntelligenceRoutes } from "./routes/courtyardSalesIntelligence";
 import { registerCourtyardRevenueRoutes } from "./routes/courtyardRevenue";
 import { registerComptrollerRoutes } from "./routes/comptroller";
+import { registerHotelOperationsRoutes } from "./routes/hotelOperations";
 import { registerVehicleListingRoutes } from "./routes/vehicleListings";
 import { registerAviationBriefingRoutes } from "./routes/aviationBriefings";
 import { registerFlightServiceValidationReportRoutes } from "./routes/flightServiceValidationReports";
@@ -6771,6 +6772,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   registerCourtyardSalesIntelligenceRoutes(app);
   registerCourtyardRevenueRoutes(app);
   registerComptrollerRoutes(app);
+  registerHotelOperationsRoutes(app);
   registerVehicleListingRoutes(app);
   registerAviationBriefingEngagementRoutes(app);
   registerAviationBriefingPhotoSubmissionRoutes(app);

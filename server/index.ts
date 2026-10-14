@@ -77,7 +77,12 @@ app.use("/api", cloudflareGuard);
 
 app.use((req, res, next) => {
   const start = Date.now();
-  const path = req.path;
+  // Hotel portal invitation/reset paths contain bearer-style one-time tokens.
+  // Keep them out of the shared request log while retaining route diagnostics.
+  const path = req.path.replace(
+    /^(\/api\/hotel-operations\/(?:invitations|password-reset)\/)[^/]+/,
+    "$1[redacted]",
+  );
   let capturedJsonResponse: Record<string, any> | undefined = undefined;
 
   const originalResJson = res.json;

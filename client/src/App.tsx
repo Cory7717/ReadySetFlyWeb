@@ -124,6 +124,7 @@ import CourtyardRevenuePage from "@/pages/courtyard-revenue";
 import BankDepositPage from "@/pages/bank-deposit";
 import IncidentReportPage from "@/pages/incident-report";
 import IncidentReportSharePage from "@/pages/incident-report-share";
+import HotelOperationsPage from "@/pages/hotel-operations";
 import VwBeetlePage from "@/pages/vw-beetle";
 import AviationBriefingsPage from "@/pages/aviation-briefings";
 import FlightServiceValidationPage from "@/pages/flight-service-validation";
@@ -475,6 +476,10 @@ function Router() {
         path="/incidentreport/share/:token"
         component={IncidentReportSharePage}
       />
+      <Route path="/hoteloperations/invite/:token" component={({ params }: { params: { token: string } }) => <HotelOperationsPage mode="invite" token={params.token} />} />
+      <Route path="/hoteloperations/reset/:token" component={({ params }: { params: { token: string } }) => <HotelOperationsPage mode="reset" token={params.token} />} />
+      <Route path="/hoteloperations/dashboard" component={() => <HotelOperationsPage />} />
+      <Route path="/hoteloperations" component={() => <HotelOperationsPage />} />
       <Route path="/vw-beetle" component={VwBeetlePage} />
       <Route path="/vw-beetle/admin" component={VwBeetlePage} />
       <Route path="/404" component={NotFound} />
@@ -772,6 +777,7 @@ function AppShell() {
     location.startsWith("/comptroller") || location.startsWith("/comtroller");
   const isDosReportingPage = location.startsWith("/dosreporting");
   const isIncidentReportPage = location.startsWith("/incidentreport");
+  const isHotelOperationsPage = location.startsWith("/hoteloperations");
   const isVwBeetlePage = location.startsWith("/vw-beetle");
   const isStandalonePage =
     isNoiseAndFuryPage ||
@@ -788,6 +794,7 @@ function AppShell() {
     isComptrollerPage ||
     isDosReportingPage ||
     isIncidentReportPage ||
+    isHotelOperationsPage ||
     isVwBeetlePage;
   useEffect(() => {
     setAuthState(isAuthenticated);
@@ -803,7 +810,7 @@ function AppShell() {
           {!isStandalonePage && <Header />}
           {!isStandalonePage && <FreeAccountValueBar />}
           <div className="flex-1">
-            <AnalyticsTracker />
+            {!isHotelOperationsPage && <AnalyticsTracker />}
             <ScrollToTopOnRoute />
             <Router />
           </div>

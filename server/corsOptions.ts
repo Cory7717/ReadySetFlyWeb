@@ -169,6 +169,7 @@ export function buildCorsOptions(allowedOrigins: readonly string[] = getAllowedO
       "Accept",
       "Origin",
       "X-Requested-With",
+      "X-Hotel-Ops-CSRF",
     ],
     optionsSuccessStatus: 204,
   };

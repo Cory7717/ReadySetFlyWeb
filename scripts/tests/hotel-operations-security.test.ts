@@ -63,3 +63,21 @@ test("phase 2 uses durable unique support jobs and password confirmation", () =>
   assert.match(page, /Confirm password/);
   assert.match(page, /SupportWidget/);
 });
+
+test("hotel operations invitations distinguish provider acceptance from inbox delivery", () => {
+  const routes = readFileSync("server/routes/hotelOperations.ts", "utf8");
+  const phase2 = readFileSync("server/routes/hotelOperationsPhase2.ts", "utf8");
+  const portal = readFileSync("client/src/pages/hotel-operations.tsx", "utf8");
+  const admin = readFileSync("client/src/pages/hotel-operations-admin.tsx", "utf8");
+
+  assert.match(routes, /hotel_ops_invitation_email_accepted/);
+  assert.match(routes, /hotel_ops_invitation_email_failed/);
+  assert.match(routes, /emailStatus: emailAccepted \? "accepted" : "failed"/);
+  assert.match(routes, /providerMessageId/);
+  assert.match(phase2, /hotel_ops_invitation_resend_email_accepted/);
+  assert.match(phase2, /hotel_ops_invitation_resend_email_failed/);
+  assert.match(phase2, /portalEmailFailureCode\(emailError\)/);
+  assert.match(portal, /accepted by the email provider/);
+  assert.match(admin, /Inbox delivery may still be pending/);
+  assert.match(admin, /the email provider did not accept it/);
+});

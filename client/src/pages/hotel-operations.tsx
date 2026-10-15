@@ -1211,11 +1211,12 @@ function InviteForm({
         body: JSON.stringify(payload),
       });
       setMessage(
-        result.invitation.delivered
-          ? "Invitation sent."
+        result.invitation.emailStatus === "accepted" ||
+          result.invitation.delivered
+          ? "Invitation created and accepted by the email provider. Delivery to the inbox may still be pending."
           : result.demoLink
             ? `Email delivery unavailable. Demo link: ${result.demoLink}`
-            : "Invitation created, but email delivery needs configuration.",
+            : "Invitation created, but the email provider did not accept it. Check the email configuration or delivery logs before retrying.",
       );
       onChanged?.();
     } catch (e) {

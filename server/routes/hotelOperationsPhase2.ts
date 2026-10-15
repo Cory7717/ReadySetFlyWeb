@@ -42,7 +42,7 @@ type Dependencies = {
     subject: string,
     text: string,
     link: string,
-  ) => Promise<void>;
+  ) => Promise<{ provider: "brevo"; messageId: string | null }>;
   createSession: (res: any, accountId: string) => Promise<void>;
 };
 const normalizeEmail = (value: string) => value.trim().toLowerCase();
@@ -71,6 +71,14 @@ const ownsHotel = (context: any, id: string, organizationId: string) =>
 const reference = (type: string) =>
   `${type === "live_chat" ? "CHAT" : "TKT"}-${new Date().toISOString().slice(2, 10).replace(/-/g, "")}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
 const messageSchema = z.object({ body: z.string().trim().min(1).max(8000) });
+
+function portalEmailFailureCode(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error || "");
+  if (message.includes("Missing BREVO_API_KEY")) return "email_provider_not_configured";
+  const status = message.match(/Brevo error\s+(\d{3})/i)?.[1];
+  if (status) return `email_provider_http_${status}`;
+  return "email_provider_request_failed";
+}
 
 async function specialist(context: any) {
   if (isPlatformOwner(context)) return { platformOwner: true };
@@ -695,16 +703,34 @@ export function registerHotelOperationsPhase2Routes(
           })
           .returning();
         const link = `${publicBaseUrl()}/hoteloperations/invite/${encodeURIComponent(token)}`;
-        let delivered = true;
+        let emailAccepted = false;
+        let providerMessageId: string | null = null;
         try {
-          await sendPortalEmail(
+          const acceptance = await sendPortalEmail(
             input.email,
-            "Your hotel operations portal invitation",
-            `You have been invited to join ${org.name}. This secure invitation expires in 72 hours.`,
+            "You're invited to INNTRIX",
+            `You have been invited to join ${org.name} in INNTRIX. This secure invitation expires in 72 hours.`,
             link,
           );
-        } catch {
-          delivered = false;
+          emailAccepted = true;
+          providerMessageId = acceptance.messageId;
+          console.info(
+            JSON.stringify({
+              event: "hotel_ops_invitation_email_accepted",
+              invitationId: invitation.id,
+              provider: acceptance.provider,
+              providerMessageId,
+            }),
+          );
+        } catch (emailError) {
+          console.error(
+            JSON.stringify({
+              event: "hotel_ops_invitation_email_failed",
+              invitationId: invitation.id,
+              stage: "provider_send",
+              code: portalEmailFailureCode(emailError),
+            }),
+          );
         }
         await audit({
           organizationId: org.id,
@@ -713,12 +739,23 @@ export function registerHotelOperationsPhase2Routes(
           action: "invitation_created",
           targetType: "invitation",
           targetId: invitation.id,
-          metadata: { role: input.role, delivered },
+          metadata: {
+            role: input.role,
+            delivered: emailAccepted,
+            emailStatus: emailAccepted ? "accepted" : "failed",
+            providerMessageId,
+          },
         });
         res
           .status(201)
           .json({
-            invitation: { ...invitation, tokenHash: undefined, delivered },
+            invitation: {
+              ...invitation,
+              tokenHash: undefined,
+              delivered: emailAccepted,
+              emailStatus: emailAccepted ? "accepted" : "failed",
+              providerMessageId,
+            },
           });
       } catch (e) {
         if (e instanceof z.ZodError)
@@ -792,16 +829,34 @@ export function registerHotelOperationsPhase2Routes(
         .set({ tokenHash: hashToken(token), expiresAt, revokedAt: null })
         .where(eq(hotelOpsInvitations.id, existing.invitation.id));
       const link = `${publicBaseUrl()}/hoteloperations/invite/${encodeURIComponent(token)}`;
-      let delivered = true;
+      let emailAccepted = false;
+      let providerMessageId: string | null = null;
       try {
-        await sendPortalEmail(
+        const acceptance = await sendPortalEmail(
           existing.invitation.email,
-          "Your hotel operations portal invitation",
-          `Your invitation to ${existing.organization.name} has been renewed and expires in 72 hours.`,
+          "Your renewed INNTRIX invitation",
+          `Your invitation to ${existing.organization.name} in INNTRIX has been renewed and expires in 72 hours.`,
           link,
         );
-      } catch {
-        delivered = false;
+        emailAccepted = true;
+        providerMessageId = acceptance.messageId;
+        console.info(
+          JSON.stringify({
+            event: "hotel_ops_invitation_resend_email_accepted",
+            invitationId: existing.invitation.id,
+            provider: acceptance.provider,
+            providerMessageId,
+          }),
+        );
+      } catch (emailError) {
+        console.error(
+          JSON.stringify({
+            event: "hotel_ops_invitation_resend_email_failed",
+            invitationId: existing.invitation.id,
+            stage: "provider_send",
+            code: portalEmailFailureCode(emailError),
+          }),
+        );
       }
       await audit({
         organizationId: existing.invitation.organizationId,
@@ -810,9 +865,19 @@ export function registerHotelOperationsPhase2Routes(
         action: "invitation_resent",
         targetType: "invitation",
         targetId: existing.invitation.id,
-        metadata: { delivered },
+        metadata: {
+          delivered: emailAccepted,
+          emailStatus: emailAccepted ? "accepted" : "failed",
+          providerMessageId,
+        },
       });
-      res.json({ ok: true, delivered, expiresAt });
+      res.json({
+        ok: true,
+        delivered: emailAccepted,
+        emailStatus: emailAccepted ? "accepted" : "failed",
+        providerMessageId,
+        expiresAt,
+      });
     },
   );
 

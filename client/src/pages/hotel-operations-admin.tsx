@@ -433,8 +433,15 @@ function Organizations({ data, reload }: any) {
   );
 }
 function Invitations({ data, reload }: any) {
+  const [message, setMessage] = useState("");
+  const [resendingId, setResendingId] = useState<string | null>(null);
   return (
     <Panel title="Invitation history">
+      {message && (
+        <p className="mb-3 rounded-lg bg-[#f3f0e8] p-3 text-sm text-[#536761]" role="status">
+          {message}
+        </p>
+      )}
       {(data.invitations || []).map((x: any) => {
         const pending = !x.invitation.acceptedAt && !x.invitation.revokedAt;
         return (
@@ -460,14 +467,33 @@ function Invitations({ data, reload }: any) {
                 <Button
                   variant="outline"
                   size="sm"
+                  disabled={resendingId === x.invitation.id}
                   onClick={async () => {
-                    await api(`/admin/invitations/${x.invitation.id}/resend`, {
-                      method: "POST",
-                    });
-                    await reload();
+                    setMessage("");
+                    setResendingId(x.invitation.id);
+                    try {
+                      const result = await api(
+                        `/admin/invitations/${x.invitation.id}/resend`,
+                        { method: "POST" },
+                      );
+                      setMessage(
+                        result.emailStatus === "accepted" || result.delivered
+                          ? "The renewed invitation was accepted by the email provider. Inbox delivery may still be pending."
+                          : "The invitation was renewed, but the email provider did not accept it. Check the delivery logs before retrying.",
+                      );
+                      await reload();
+                    } catch (error) {
+                      setMessage(
+                        error instanceof Error
+                          ? error.message
+                          : "Unable to resend the invitation.",
+                      );
+                    } finally {
+                      setResendingId(null);
+                    }
                   }}
                 >
-                  Resend
+                  {resendingId === x.invitation.id ? "Resending…" : "Resend"}
                 </Button>
                 {pending && (
                   <Button

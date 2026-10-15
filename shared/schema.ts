@@ -7299,6 +7299,44 @@ export const hotelOpsSupportNotifications = pgTable(
   ],
 );
 
+export const hotelOpsSalesInquiries = pgTable(
+  "hotel_ops_sales_inquiries",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    reference: varchar("reference", { length: 32 }).notNull().unique(),
+    fullName: varchar("full_name", { length: 120 }).notNull(),
+    email: varchar("email", { length: 320 }).notNull(),
+    companyName: varchar("company_name", { length: 200 }).notNull(),
+    propertyCount: integer("property_count"),
+    message: text("message").notNull(),
+    status: text("status").notNull().default("new"),
+    assignedToAccountId: varchar("assigned_to_account_id").references(
+      () => hotelOpsAccounts.id,
+      { onDelete: "set null" },
+    ),
+    internalNotes: text("internal_notes"),
+    salesNotifiedAt: timestamp("sales_notified_at"),
+    confirmationSentAt: timestamp("confirmation_sent_at"),
+    closedAt: timestamp("closed_at"),
+    retentionExpiresAt: timestamp("retention_expires_at")
+      .notNull()
+      .default(sql`now() + interval '24 months'`),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    index("idx_hotel_ops_sales_inquiry_queue").on(
+      table.status,
+      table.createdAt,
+    ),
+    index("idx_hotel_ops_sales_inquiry_retention").on(
+      table.retentionExpiresAt,
+    ),
+  ],
+);
+
 const logbookDecimalField = z
   .union([
     z.string().regex(/^\d+(\.\d{1,2})?$/),

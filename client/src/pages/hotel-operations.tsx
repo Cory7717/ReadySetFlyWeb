@@ -43,6 +43,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import SupportWidget from "@/components/hotel-operations/SupportWidget";
+import PublicSalesInquiryWidget from "@/components/hotel-operations/PublicSalesInquiryWidget";
 
 type PortalSession = {
   account: { id: string; email: string; displayName: string };
@@ -740,6 +741,7 @@ function Landing({ onSignedIn }: { onSignedIn: () => void }) {
           <p className="text-sm text-white/55">Operational intelligence for independent hotel teams and portfolios.</p>
         </div>
       </footer>
+      <PublicSalesInquiryWidget />
     </main>
   );
 }

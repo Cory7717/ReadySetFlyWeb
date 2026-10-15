@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   LogOut,
   Mail,
+  MessageSquareText,
   Settings,
   ShieldCheck,
   UserCog,
@@ -49,6 +50,7 @@ const NAV = [
   ["users", "Users & Access", Users],
   ["invitations", "Invitations", Mail],
   ["support", "Support Center", Headphones],
+  ["sales", "Sales Inquiries", MessageSquareText],
   ["specialists", "Support Specialists", UserCog],
   ["audit", "Audit History", ClipboardList],
   ["health", "System Health", HeartPulse],
@@ -108,6 +110,7 @@ export default function HotelOperationsAdminPage() {
         users: "/admin/users",
         invitations: "/admin/invitations",
         support: "/admin/support",
+        sales: "/admin/sales-inquiries",
         specialists: "/admin/support-specialists",
         audit: "/audit",
         health: "/admin/overview",
@@ -191,7 +194,9 @@ export default function HotelOperationsAdminPage() {
           </div>
           {NAV.filter(
             ([key]) =>
-              isOwner || key === "support" || (isSupportAdmin && key === "specialists"),
+              isOwner ||
+              key === "support" ||
+              (isSupportAdmin && ["sales", "specialists"].includes(key)),
           ).map(
             ([key, label, Icon]) => (
               <button
@@ -308,6 +313,7 @@ export default function HotelOperationsAdminPage() {
               setPresence={setPresence}
             />
           )}
+          {tab === "sales" && <SalesInquiries data={data} reload={load} />}
           {tab === "specialists" && (
             <Specialists data={data} users={data.users || []} reload={load} />
           )}
@@ -619,6 +625,103 @@ function SupportCenter({
         ))}
       </Panel>
     </>
+  );
+}
+function SalesInquiries({ data, reload }: any) {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
+  const inquiries = data.inquiries || [];
+  const selected = inquiries.find((item: any) => item.id === selectedId);
+
+  async function updateInquiry(values: Record<string, unknown>) {
+    if (!selected) return;
+    setSaving(true);
+    try {
+      await api(`/admin/sales-inquiries/${selected.id}`, {
+        method: "PATCH",
+        body: JSON.stringify(values),
+      });
+      await reload();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="grid gap-5">
+      {!data.salesRecipientConfigured && (
+        <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          Sales inquiries are being stored, but email notifications require the server-only HOTEL_OPS_SALES_EMAIL setting.
+        </p>
+      )}
+      <div className="grid gap-4 sm:grid-cols-4">
+        {(["new", "contacted", "qualified", "closed"] as const).map((status) => (
+          <Card key={status} label={status[0].toUpperCase() + status.slice(1)} value={inquiries.filter((item: any) => item.status === status).length} />
+        ))}
+      </div>
+      <div className="grid gap-5 xl:grid-cols-[.85fr_1.15fr]">
+        <Panel title="INNTRIX sales inquiry queue">
+          {inquiries.length === 0 && <p className="py-5 text-sm text-[#6a7772]">No sales inquiries yet.</p>}
+          {inquiries.map((item: any) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => {
+                setSelectedId(item.id);
+                setNotes(item.internalNotes || "");
+              }}
+              className={`block w-full border-b px-2 py-3 text-left last:border-0 ${selectedId === item.id ? "bg-[#eef3f0]" : "hover:bg-[#f7f5ef]"}`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <b>{item.fullName}</b>
+                <span className="rounded-full bg-[#ebe5d8] px-2 py-1 text-[10px] font-bold uppercase tracking-wide">{item.status}</span>
+              </div>
+              <div className="mt-1 text-sm text-[#687671]">{item.companyName} · {new Date(item.createdAt).toLocaleString()}</div>
+            </button>
+          ))}
+        </Panel>
+        <Panel title={selected ? `${selected.reference} · ${selected.status}` : "Inquiry details"}>
+          {!selected ? (
+            <p className="py-5 text-sm text-[#6a7772]">Select an inquiry to review contact details and follow-up status.</p>
+          ) : (
+            <div className="grid gap-5">
+              <div className="grid gap-2 rounded-xl bg-[#f5f2eb] p-4 text-sm">
+                <div><b>Name:</b> {selected.fullName}</div>
+                <div><b>Business email:</b> <a className="text-[#176357] underline" href={`mailto:${selected.email}`}>{selected.email}</a></div>
+                <div><b>Hotel / company:</b> {selected.companyName}</div>
+                <div><b>Properties:</b> {selected.propertyCount || "Not provided"}</div>
+                <div><b>Received:</b> {new Date(selected.createdAt).toLocaleString()}</div>
+                <div><b>Sales notification:</b> {selected.salesNotifiedAt ? "Sent" : "Not sent"}</div>
+                <div><b>Prospect confirmation:</b> {selected.confirmationSentAt ? "Sent" : "Not sent"}</div>
+              </div>
+              <div>
+                <div className="mb-1 text-xs font-bold uppercase tracking-wide text-[#7a6a4f]">Inquiry</div>
+                <p className="whitespace-pre-wrap rounded-xl border bg-white p-4 text-sm leading-6">{selected.message}</p>
+              </div>
+              <label className="grid gap-1.5 text-sm font-medium">
+                Follow-up status
+                <select value={selected.status} disabled={saving} onChange={(event) => void updateInquiry({ status: event.target.value })} className="w-fit rounded-lg border bg-white px-3 py-2">
+                  {(["new", "contacted", "qualified", "closed"] as const).map((status) => <option key={status} value={status}>{status[0].toUpperCase() + status.slice(1)}</option>)}
+                </select>
+              </label>
+              <form
+                className="grid gap-2"
+                onSubmit={async (event) => {
+                  event.preventDefault();
+                  await updateInquiry({ internalNotes: notes || null });
+                }}
+              >
+                <label htmlFor="sales-internal-notes" className="text-sm font-medium">Internal follow-up notes</label>
+                <textarea id="sales-internal-notes" value={notes} onChange={(event) => setNotes(event.target.value)} maxLength={4000} rows={4} className="rounded-lg border bg-white p-3 text-sm" />
+                <Button disabled={saving} className="w-fit bg-[#184f46]">{saving ? "Saving…" : "Save notes"}</Button>
+              </form>
+            </div>
+          )}
+        </Panel>
+      </div>
+      <p className="text-xs leading-5 text-[#77837f]">Sales inquiry contact information is restricted to Platform Owners and Support Administrators and expires after 24 months.</p>
+    </div>
   );
 }
 function Specialists({ data, reload }: any) {

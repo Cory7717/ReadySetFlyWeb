@@ -1,7 +1,7 @@
 import crypto from "crypto";
 import bcrypt from "bcrypt";
 import type { RequestHandler } from "express";
-import { and, asc, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, lt, sql } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
 import { getUncachableResendClient } from "../resendClient";
@@ -29,6 +29,7 @@ import {
   hotelOpsSupportInvitations,
   hotelOpsPasswordResets,
   hotelOpsSessions,
+  hotelOpsSalesInquiries,
 } from "@shared/schema";
 
 type Dependencies = {
@@ -123,6 +124,12 @@ export function registerHotelOperationsPhase2Routes(
     anonMax: 10,
     authMax: 90,
   });
+  const publicSalesLimiter = createSoftAuthRateLimiter({
+    key: "hotel-operations-public-sales",
+    windowMs: 15 * 60_000,
+    anonMax: 5,
+    authMax: 10,
+  });
   const owner: RequestHandler = (req: any, res, next) =>
     isPlatformOwner(req.hotelOps)
       ? next()
@@ -136,6 +143,87 @@ export function registerHotelOperationsPhase2Routes(
     req.hotelOps.supportRole === "support_administrator"
       ? next()
       : res.status(403).json({ error: "support_administrator_required" });
+
+  router.post(
+    "/public/sales-inquiries",
+    publicSalesLimiter,
+    async (req: any, res: any, next: any) => {
+      try {
+        const input = z
+          .object({
+            fullName: z.string().trim().min(2).max(120),
+            email: z.string().trim().email().max(320),
+            companyName: z.string().trim().min(2).max(200),
+            propertyCount: z.number().int().min(1).max(10_000).nullable().optional(),
+            message: z.string().trim().min(10).max(4000),
+            website: z.string().max(200).optional(),
+          })
+          .parse(req.body);
+
+        // Honeypot submissions receive the same response without being stored.
+        if (input.website)
+          return res.status(201).json({ ok: true, received: true });
+
+        await db
+          .delete(hotelOpsSalesInquiries)
+          .where(
+            lt(hotelOpsSalesInquiries.retentionExpiresAt, new Date()),
+          );
+        const now = new Date();
+        const reference = `SALES-${now.toISOString().slice(2, 10).replace(/-/g, "")}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
+        const [inquiry] = await db
+          .insert(hotelOpsSalesInquiries)
+          .values({
+            reference,
+            fullName: input.fullName,
+            email: normalizeEmail(input.email),
+            companyName: input.companyName,
+            propertyCount: input.propertyCount || null,
+            message: input.message,
+          })
+          .returning();
+
+        const salesRecipient = normalizeEmail(
+          String(process.env.HOTEL_OPS_SALES_EMAIL || ""),
+        );
+        if (z.string().email().safeParse(salesRecipient).success) {
+          try {
+            await sendPortalEmail(
+              salesRecipient,
+              `New INNTRIX sales inquiry ${reference}`,
+              "A new public sales inquiry is ready for authorized review in the Hotel Operations administration portal.",
+              `${publicBaseUrl()}/hoteloperations/admin/support`,
+            );
+            await db
+              .update(hotelOpsSalesInquiries)
+              .set({ salesNotifiedAt: new Date(), updatedAt: new Date() })
+              .where(eq(hotelOpsSalesInquiries.id, inquiry.id));
+          } catch {
+            // The durable inquiry remains available when notification delivery fails.
+          }
+        }
+        try {
+          await sendPortalEmail(
+            inquiry.email,
+            `We received your INNTRIX inquiry (${reference})`,
+            "Thank you for contacting INNTRIX. Your inquiry has been received, and our team will follow up using the business email you provided.",
+            `${publicBaseUrl()}/hoteloperations`,
+          );
+          await db
+            .update(hotelOpsSalesInquiries)
+            .set({ confirmationSentAt: new Date(), updatedAt: new Date() })
+            .where(eq(hotelOpsSalesInquiries.id, inquiry.id));
+        } catch {
+          // On-page confirmation remains available if email delivery fails.
+        }
+        res.status(201).json({ ok: true, received: true, reference });
+      } catch (error) {
+        if (error instanceof z.ZodError)
+          return res.status(400).json({ error: "invalid_sales_inquiry" });
+        next(error);
+      }
+    },
+  );
 
   router.get(
     "/support-invitations/:token",
@@ -1337,6 +1425,67 @@ export function registerHotelOperationsPhase2Routes(
             eq(hotelOpsSupportSpecialists.accountId, req.hotelOps.account.id),
           );
       res.json({ ok: true });
+    },
+  );
+  router.get(
+    "/admin/sales-inquiries",
+    requirePortalSession,
+    supportAdmin,
+    async (_req: any, res: any) => {
+      await db
+        .delete(hotelOpsSalesInquiries)
+        .where(lt(hotelOpsSalesInquiries.retentionExpiresAt, new Date()));
+      const inquiries = await db
+        .select()
+        .from(hotelOpsSalesInquiries)
+        .orderBy(desc(hotelOpsSalesInquiries.createdAt));
+      res.json({
+        inquiries,
+        salesRecipientConfigured: z
+          .string()
+          .email()
+          .safeParse(normalizeEmail(String(process.env.HOTEL_OPS_SALES_EMAIL || "")))
+          .success,
+      });
+    },
+  );
+  router.patch(
+    "/admin/sales-inquiries/:id",
+    requirePortalSession,
+    supportAdmin,
+    requireCsrf,
+    async (req: any, res: any) => {
+      const input = z
+        .object({
+          status: z.enum(["new", "contacted", "qualified", "closed"]).optional(),
+          internalNotes: z.string().trim().max(4000).nullable().optional(),
+        })
+        .refine(
+          (value) => value.status !== undefined || value.internalNotes !== undefined,
+        )
+        .parse(req.body);
+      const [updated] = await db
+        .update(hotelOpsSalesInquiries)
+        .set({
+          ...input,
+          closedAt: input.status === "closed" ? new Date() : input.status ? null : undefined,
+          updatedAt: new Date(),
+        })
+        .where(eq(hotelOpsSalesInquiries.id, req.params.id))
+        .returning();
+      if (!updated)
+        return res.status(404).json({ error: "sales_inquiry_not_found" });
+      await audit({
+        actorAccountId: req.hotelOps.account.id,
+        action: "sales_inquiry_updated",
+        targetType: "sales_inquiry",
+        targetId: updated.id,
+        metadata: {
+          statusChanged: input.status !== undefined,
+          notesChanged: input.internalNotes !== undefined,
+        },
+      });
+      res.json({ inquiry: updated });
     },
   );
   router.get(

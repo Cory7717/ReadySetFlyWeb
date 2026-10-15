@@ -8,13 +8,20 @@ import { useLocation } from "wouter";
 import {
   ArrowRight,
   BarChart3,
+  Banknote,
+  BedDouble,
+  BrainCircuit,
   Building2,
   CalendarRange,
   CheckCircle2,
   ChevronRight,
   ClipboardCheck,
+  ClipboardPlus,
+  Coins,
+  DollarSign,
   Eye,
   EyeOff,
+  FileSpreadsheet,
   Gauge,
   Hotel,
   LayoutDashboard,
@@ -24,8 +31,11 @@ import {
   ShieldCheck,
   Sparkles,
   TrendingDown,
+  TrendingUp,
   UserPlus,
   Users,
+  Wrench,
+  type LucideIcon,
 } from "lucide-react";
 import { apiUrl } from "@/lib/api";
 import { calculateLaborRoi } from "@/lib/inntrix-roi";
@@ -214,6 +224,163 @@ function PublicBrand({ light = false }: { light?: boolean }) {
         </div>
       </div>
     </div>
+  );
+}
+
+type CapabilityStatus = "Available" | "In Development" | "Planned";
+type MarketingCapability = {
+  icon: LucideIcon;
+  title: string;
+  status: CapabilityStatus;
+  copy: string;
+};
+
+const CAPABILITY_GROUPS: Array<{
+  eyebrow: string;
+  title: string;
+  copy: string;
+  capabilities: MarketingCapability[];
+}> = [
+  {
+    eyebrow: "Revenue & Sales Intelligence",
+    title: "See performance, pace, and opportunity more clearly.",
+    copy: "Existing property-level tools are being adapted for secure, multi-property INNTRIX use.",
+    capabilities: [
+      {
+        icon: TrendingUp,
+        title: "Revenue Intelligence",
+        status: "In Development",
+        copy: "Analyze on-the-books revenue, occupancy, ADR, booking pace, pickup, historical comparisons, budget variance, and potential demand opportunities.",
+      },
+      {
+        icon: BarChart3,
+        title: "Sales Intelligence",
+        status: "In Development",
+        copy: "Track account production, group opportunities, historical performance, account activity, and sales-development priorities.",
+      },
+      {
+        icon: DollarSign,
+        title: "Budget & Financial Intelligence",
+        status: "In Development",
+        copy: "Monitor budget performance, compare results with prior-year benchmarks, and identify operating and financial variances.",
+      },
+      {
+        icon: CalendarRange,
+        title: "Group & Meeting Management",
+        status: "In Development",
+        copy: "Coordinate meeting-space events, group room blocks, event details, setup requirements, and sales activity in one calendar-driven workflow.",
+      },
+    ],
+  },
+  {
+    eyebrow: "Operations & Management",
+    title: "Connect daily work to stronger operational control.",
+    copy: "Practical workflows help hotel teams reduce administrative friction and keep responsibilities visible.",
+    capabilities: [
+      {
+        icon: Users,
+        title: "Labor & Scheduling Intelligence",
+        status: "In Development",
+        copy: "Use demand-based staffing recommendations, employee schedules, room forecasts, and labor-efficiency analysis to support staffing decisions.",
+      },
+      {
+        icon: ClipboardCheck,
+        title: "Hotel Operations Management",
+        status: "Available",
+        copy: "Centralize management workflows, operational accountability, controlled property access, and organization-level oversight.",
+      },
+      {
+        icon: FileSpreadsheet,
+        title: "Daily Operations Reporting",
+        status: "In Development",
+        copy: "Streamline weekly and daily management reports, departmental updates, operational reviews, and leadership communication.",
+      },
+      {
+        icon: ClipboardPlus,
+        title: "Incident Management",
+        status: "In Development",
+        copy: "Document incidents, maintain retrievable records, produce consistent reports, and support accountable management follow-up.",
+      },
+      {
+        icon: Banknote,
+        title: "Financial Controls & Reporting",
+        status: "In Development",
+        copy: "Support bank-deposit reconciliation, operating variance visibility, financial accountability, and related daily controls.",
+      },
+      {
+        icon: Coins,
+        title: "Employee Tip Management",
+        status: "In Development",
+        copy: "Simplify employee tip entry, event-tip allocation, documentation, pay-period review, and reporting workflows.",
+      },
+    ],
+  },
+  {
+    eyebrow: "Advanced Intelligence",
+    title: "Extend intelligence into the next operational opportunities.",
+    copy: "These planned capabilities reflect the platform roadmap and are not represented as currently available modules.",
+    capabilities: [
+      {
+        icon: PackageSearch,
+        title: "Inventory Intelligence",
+        status: "Planned",
+        copy: "Manage maintenance tools, equipment, linen and supply counts, par levels, valuations, and Front Desk Market discrepancies.",
+      },
+      {
+        icon: BrainCircuit,
+        title: "Guest Experience Intelligence",
+        status: "Planned",
+        copy: "Support forensic guest-satisfaction analysis, complaint trends, issue identification, and corrective-action planning.",
+      },
+      {
+        icon: BedDouble,
+        title: "Room Condition Intelligence",
+        status: "Planned",
+        copy: "Connect room-specific complaint histories with recurring cleanliness and maintenance patterns and visual issue heat maps.",
+      },
+      {
+        icon: Wrench,
+        title: "Operational ROI Intelligence",
+        status: "In Development",
+        copy: "The public labor opportunity calculator is available today; broader visibility into inventory, maintenance, and administrative efficiency is being developed.",
+      },
+    ],
+  },
+];
+
+function CapabilityCard({ capability }: { capability: MarketingCapability }) {
+  const { icon: Icon, title, status, copy } = capability;
+  const styles = {
+    Available: {
+      card: "border-[#d8d2c5] bg-white shadow-sm",
+      icon: "bg-[#deebe6] text-[#174d45]",
+      badge: "bg-[#e1eee9] text-[#175347]",
+    },
+    "In Development": {
+      card: "border-[#d7c7a9] bg-[#fcfaf5]",
+      icon: "bg-[#efe4cf] text-[#80602c]",
+      badge: "bg-[#eee1c9] text-[#755626]",
+    },
+    Planned: {
+      card: "border-dashed border-[#cfc8bb] bg-[#f1ede3]/70",
+      icon: "bg-[#e5e1d8] text-[#666c68]",
+      badge: "bg-[#e5e1d8] text-[#5f6763]",
+    },
+  }[status];
+
+  return (
+    <article className={`flex h-full flex-col rounded-3xl border p-6 md:p-7 ${styles.card}`}>
+      <div className="flex items-start justify-between gap-4">
+        <div className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl ${styles.icon}`}>
+          <Icon size={23} aria-hidden="true" />
+        </div>
+        <span className={`rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${styles.badge}`}>
+          {status}
+        </span>
+      </div>
+      <h3 className="mt-6 text-xl font-semibold">{title}</h3>
+      <p className="mt-3 leading-7 text-[#65726e]">{copy}</p>
+    </article>
   );
 }
 
@@ -453,26 +620,43 @@ function Landing({ onSignedIn }: { onSignedIn: () => void }) {
 
       <section id="capabilities" className="mx-auto max-w-7xl px-5 py-20 md:px-8 md:py-28">
         <div className="max-w-3xl">
-          <p className="text-sm font-bold uppercase tracking-[.2em] text-[#9a7136]">One operational view</p>
-          <h2 className="mt-3 text-3xl font-semibold tracking-tight md:text-5xl">Intelligence that helps operators act.</h2>
-          <p className="mt-5 text-lg leading-8 text-[#5d6b67]">Focus the team on the work, labor, and decisions that shape property performance—without losing portfolio-level visibility.</p>
+          <p className="text-sm font-bold uppercase tracking-[.2em] text-[#9a7136]">A comprehensive operating platform</p>
+          <h2 className="mt-3 text-3xl font-semibold tracking-tight md:text-5xl">Intelligence that helps hotel operators act.</h2>
+          <p className="mt-5 text-lg leading-8 text-[#5d6b67]">Connect revenue visibility, labor decisions, financial accountability, and daily management workflows without losing property or portfolio context.</p>
         </div>
-        <div className="mt-12 grid gap-5 md:grid-cols-2">
+        <div className="mt-8 flex flex-wrap gap-x-5 gap-y-2 text-xs font-semibold text-[#5f6c68]" aria-label="Availability key">
           {[
-            { icon: CalendarRange, title: "Labor & Scheduling Intelligence", status: "Available", copy: "Demand-driven housekeeping staffing recommendations, labor efficiency review, schedule optimization, and forecast-based operational planning.", available: true },
-            { icon: ClipboardCheck, title: "Hotel Operations Management", status: "Available", copy: "Centralized daily management workflows, operational accountability, task tracking, and property or organization oversight.", available: true },
-            { icon: PackageSearch, title: "Inventory Intelligence", status: "Planned", copy: "Maintenance tools and equipment, housekeeping supply par levels, and Front Desk Market inventory and loss tracking.", available: false },
-            { icon: Sparkles, title: "Guest Experience Intelligence", status: "Planned", copy: "AI-assisted forensic GSS investigations, room-level issue heat maps, and corrective-action recommendations and tracking.", available: false },
-          ].map(({ icon: Icon, title, status, copy, available }) => (
-            <article key={title} className={`rounded-3xl border p-6 md:p-8 ${available ? "border-[#d8d2c5] bg-white shadow-sm" : "border-dashed border-[#d0c5af] bg-[#f1ede3]/70"}`}>
-              <div className="flex items-start justify-between gap-4">
-                <div className={`grid h-12 w-12 place-items-center rounded-2xl ${available ? "bg-[#deebe6] text-[#174d45]" : "bg-[#e8e0d1] text-[#806333]"}`}><Icon size={23} aria-hidden="true" /></div>
-                <span className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider ${available ? "bg-[#e1eee9] text-[#175347]" : "bg-[#e9dfcc] text-[#795d2d]"}`}>{status}</span>
-              </div>
-              <h3 className="mt-6 text-xl font-semibold">{title}</h3>
-              <p className="mt-3 leading-7 text-[#65726e]">{copy}</p>
-            </article>
+            ["bg-[#2d7165]", "Available in INNTRIX"],
+            ["bg-[#b18442]", "In development for INNTRIX"],
+            ["bg-[#858b87]", "Planned capability"],
+          ].map(([color, label]) => (
+            <span key={label} className="inline-flex items-center gap-2">
+              <span className={`h-2 w-2 rounded-full ${color}`} aria-hidden="true" />
+              {label}
+            </span>
           ))}
+        </div>
+
+        <div className="mt-16 grid gap-16 md:gap-20">
+          {CAPABILITY_GROUPS.map((group) => {
+            const headingId = `capability-${group.eyebrow.toLowerCase().replace(/[^a-z]+/g, "-")}`;
+            return (
+              <section key={group.eyebrow} aria-labelledby={headingId}>
+                <div className="grid gap-4 lg:grid-cols-[.72fr_1.28fr] lg:items-end">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[.2em] text-[#98713a]">{group.eyebrow}</p>
+                    <h3 id={headingId} className="mt-2 text-2xl font-semibold tracking-tight md:text-3xl">{group.title}</h3>
+                  </div>
+                  <p className="max-w-2xl leading-7 text-[#687570] lg:justify-self-end">{group.copy}</p>
+                </div>
+                <div className="mt-7 grid items-stretch gap-5 md:grid-cols-2">
+                  {group.capabilities.map((capability) => (
+                    <CapabilityCard key={capability.title} capability={capability} />
+                  ))}
+                </div>
+              </section>
+            );
+          })}
         </div>
       </section>
 

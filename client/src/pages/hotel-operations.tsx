@@ -15,6 +15,7 @@ import {
   Building2,
   CalendarRange,
   CheckCircle2,
+  ChevronDown,
   ChevronRight,
   ClipboardCheck,
   ClipboardPlus,
@@ -24,18 +25,25 @@ import {
   EyeOff,
   FileSpreadsheet,
   Gauge,
+  HelpCircle,
   Hotel,
   LayoutDashboard,
   LockKeyhole,
   LogOut,
+  Menu,
   PackageSearch,
+  PanelLeftClose,
+  PanelLeftOpen,
+  Settings,
   ShieldCheck,
   Sparkles,
   TrendingDown,
   TrendingUp,
   UserPlus,
+  UserCog,
   Users,
   Wrench,
+  X,
   type LucideIcon,
 } from "lucide-react";
 import { apiUrl } from "@/lib/api";
@@ -146,6 +154,233 @@ const MODULES = [
     "Preview Only",
   ],
 ] as const;
+
+type PortalTab = "overview" | "property" | "hotels" | "team" | "audit";
+type NavigationAvailability = "available" | "development" | "planned";
+type NavigationItem = {
+  id: string;
+  label: string;
+  icon: LucideIcon;
+  availability: NavigationAvailability;
+  tab?: PortalTab;
+  href?: string;
+  action?: "support";
+  moduleKey?: (typeof MODULES)[number][0];
+  requiresPortfolioAdmin?: boolean;
+  requiresTeamAdmin?: boolean;
+  requiresPlatformOwner?: boolean;
+};
+type NavigationGroup = {
+  id: string;
+  label: string;
+  icon: LucideIcon;
+  items: NavigationItem[];
+};
+
+const AUTHENTICATED_NAVIGATION: NavigationGroup[] = [
+  {
+    id: "dashboard",
+    label: "Dashboard",
+    icon: LayoutDashboard,
+    items: [
+      {
+        id: "command-center",
+        label: "Property Command Center",
+        icon: LayoutDashboard,
+        availability: "available",
+        tab: "overview",
+      },
+      {
+        id: "property-overview",
+        label: "Property Overview",
+        icon: Hotel,
+        availability: "available",
+        tab: "property",
+      },
+    ],
+  },
+  {
+    id: "revenue-finance",
+    label: "Revenue & Finance",
+    icon: DollarSign,
+    items: [
+      {
+        id: "revenue-intelligence",
+        label: "Revenue Intelligence",
+        icon: TrendingUp,
+        availability: "development",
+        moduleKey: "revenue_intelligence",
+      },
+      {
+        id: "budget-financial",
+        label: "Budget & Financial Intelligence",
+        icon: BarChart3,
+        availability: "development",
+        moduleKey: "budget_financial",
+      },
+      {
+        id: "financial-controls",
+        label: "Bank Deposits / Financial Controls",
+        icon: Banknote,
+        availability: "development",
+        moduleKey: "bank_deposits",
+      },
+    ],
+  },
+  {
+    id: "sales",
+    label: "Sales",
+    icon: Users,
+    items: [
+      {
+        id: "sales-intelligence",
+        label: "Sales Intelligence",
+        icon: TrendingUp,
+        availability: "development",
+        moduleKey: "sales_intelligence",
+      },
+      {
+        id: "group-meetings",
+        label: "Group & Meeting Management",
+        icon: CalendarRange,
+        availability: "development",
+        moduleKey: "meeting_group_calendar",
+      },
+      {
+        id: "dos-reporting",
+        label: "Director of Sales Reporting",
+        icon: FileSpreadsheet,
+        availability: "development",
+        moduleKey: "sales_intelligence",
+      },
+      {
+        id: "crm",
+        label: "CRM",
+        icon: Users,
+        availability: "planned",
+      },
+      {
+        id: "account-leads",
+        label: "Account & Lead Management",
+        icon: UserPlus,
+        availability: "planned",
+      },
+    ],
+  },
+  {
+    id: "operations",
+    label: "Operations",
+    icon: ClipboardCheck,
+    items: [
+      {
+        id: "scheduling-labor",
+        label: "Employee Scheduling & Labor",
+        icon: CalendarRange,
+        availability: "development",
+        moduleKey: "staff_scheduling",
+      },
+      {
+        id: "housekeeping-productivity",
+        label: "Housekeeping Productivity",
+        icon: BedDouble,
+        availability: "development",
+        moduleKey: "staff_scheduling",
+      },
+      {
+        id: "daily-operations",
+        label: "Daily Operations Reporting",
+        icon: FileSpreadsheet,
+        availability: "development",
+        moduleKey: "operations_reporting",
+      },
+      {
+        id: "incident-management",
+        label: "Incident Management",
+        icon: ClipboardPlus,
+        availability: "development",
+        moduleKey: "incident_reporting",
+      },
+      {
+        id: "tip-management",
+        label: "Employee Tip Management",
+        icon: Coins,
+        availability: "development",
+        moduleKey: "restaurant_operations",
+      },
+    ],
+  },
+  {
+    id: "inventory-maintenance",
+    label: "Inventory & Maintenance",
+    icon: Wrench,
+    items: [
+      { id: "maintenance-inventory", label: "Maintenance Inventory", icon: Wrench, availability: "planned" },
+      { id: "housekeeping-inventory", label: "Housekeeping Inventory", icon: BedDouble, availability: "planned" },
+      { id: "pantry-inventory", label: "Market / Pantry Inventory", icon: PackageSearch, availability: "planned" },
+      { id: "asset-accountability", label: "Asset & Tool Accountability", icon: ClipboardCheck, availability: "planned" },
+      { id: "preventive-maintenance", label: "Preventive Maintenance", icon: Wrench, availability: "planned" },
+    ],
+  },
+  {
+    id: "guest-experience",
+    label: "Guest Experience",
+    icon: Sparkles,
+    items: [
+      { id: "guest-intelligence", label: "Guest Experience Intelligence", icon: Sparkles, availability: "planned" },
+      { id: "gss-analysis", label: "Forensic GSS Analysis", icon: BrainCircuit, availability: "planned" },
+      { id: "room-heatmaps", label: "Room Condition Heat Maps", icon: BedDouble, availability: "planned" },
+      { id: "corrective-actions", label: "Corrective Action Tracking", icon: ClipboardCheck, availability: "planned" },
+    ],
+  },
+  {
+    id: "administration",
+    label: "Administration",
+    icon: Settings,
+    items: [
+      {
+        id: "property-settings",
+        label: "Property Settings",
+        icon: Settings,
+        availability: "available",
+        tab: "hotels",
+        requiresPortfolioAdmin: true,
+      },
+      {
+        id: "user-management",
+        label: "User & Department Management",
+        icon: UserCog,
+        availability: "available",
+        tab: "team",
+        requiresTeamAdmin: true,
+      },
+      {
+        id: "audit-history",
+        label: "Audit History",
+        icon: ShieldCheck,
+        availability: "available",
+        tab: "audit",
+        requiresPortfolioAdmin: true,
+      },
+      { id: "report-automation", label: "Report Automation", icon: FileSpreadsheet, availability: "planned" },
+      { id: "subscription-billing", label: "Subscription & Billing", icon: Banknote, availability: "planned" },
+      {
+        id: "help-support",
+        label: "Help & Support",
+        icon: HelpCircle,
+        availability: "available",
+        action: "support",
+      },
+      {
+        id: "platform-administration",
+        label: "INNTRIX Platform Administration",
+        icon: ShieldCheck,
+        availability: "available",
+        href: "/hoteloperations/admin",
+        requiresPlatformOwner: true,
+      },
+    ],
+  },
+];
 
 const ROLE_NAMES: Record<string, string> = {
   platform_owner: "Platform Owner",
@@ -1263,7 +1498,15 @@ function DashboardView({
     session.activeOrganizationId || session.organizations[0]?.id || "",
   );
   const [hotelId, setHotelId] = useState("all");
-  const [tab, setTab] = useState("overview");
+  const [tab, setTab] = useState<PortalTab>("overview");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>(
+    () =>
+      Object.fromEntries(
+        AUTHENTICATED_NAVIGATION.map((group) => [group.id, true]),
+      ),
+  );
   const [error, setError] = useState("");
   async function load(nextHotelId = hotelId) {
     try {
@@ -1323,23 +1566,200 @@ function DashboardView({
           ),
         )
     : [];
+  const isPlatformOwner = session.organizations.some(
+    (organization) => organization.role === "platform_owner",
+  );
+  function isNavigationItemVisible(item: NavigationItem) {
+    if (!dashboard) return false;
+    if (item.requiresPlatformOwner && !isPlatformOwner) return false;
+    if (item.requiresPortfolioAdmin && !canPortfolioAdmin) return false;
+    if (item.requiresTeamAdmin && !canTeamAdmin) return false;
+    if (!item.moduleKey || dashboard.canUseAllProperties) return true;
+    return dashboard.permissions.some(
+      (permission) =>
+        permission.hotelId === dashboard.selectedHotelId &&
+        permission.moduleKey === item.moduleKey &&
+        permission.canView,
+    );
+  }
+  const navigationGroups = AUTHENTICATED_NAVIGATION.map((group) => ({
+    ...group,
+    items: group.items.filter(isNavigationItemVisible),
+  })).filter((group) => group.items.length > 0);
+  const quickAccessItems = navigationGroups
+    .flatMap((group) => group.items)
+    .filter(
+      (item) =>
+        item.availability === "available" &&
+        ["property-overview", "user-management", "help-support"].includes(
+          item.id,
+        ),
+    );
+  function activateNavigationItem(item: NavigationItem) {
+    if (item.availability !== "available") return;
+    if (item.tab) setTab(item.tab);
+    if (item.href) navigate(item.href);
+    if (item.action === "support") {
+      const supportButton = document.querySelector<HTMLButtonElement>(
+        '[aria-label="Open support"]',
+      );
+      supportButton?.click();
+    }
+    setMobileNavigationOpen(false);
+  }
+  function renderNavigation(compact = false) {
+    return (
+      <>
+        <div
+          className={`rounded-2xl bg-[#153f38] text-white ${compact ? "p-3" : "p-4"}`}
+        >
+          {compact ? (
+            <button
+              type="button"
+              title={dashboard?.organization.name || "Organization"}
+              aria-label={`Organization: ${dashboard?.organization.name || "loading"}`}
+              onClick={() => setSidebarCollapsed(false)}
+              className="grid w-full place-items-center rounded-xl p-2 hover:bg-white/10"
+            >
+              <Building2 size={20} />
+            </button>
+          ) : (
+            <>
+              <div className="text-xs uppercase tracking-widest text-[#b8d0c8]">
+                Organization
+              </div>
+              <select
+                aria-label="Organization"
+                value={organizationId}
+                onChange={(event) => setOrganizationId(event.target.value)}
+                className="mt-2 w-full rounded-lg border border-white/20 bg-white/10 px-2 py-2 text-sm"
+              >
+                {session.organizations.map((organization) => (
+                  <option
+                    className="text-black"
+                    value={organization.id}
+                    key={organization.id}
+                  >
+                    {organization.name}
+                  </option>
+                ))}
+              </select>
+              {dashboard?.organization.isDemo && (
+                <div className="mt-3 rounded-md bg-amber-300/20 px-2 py-1 text-xs text-amber-100">
+                  Demo organization · fictional data only
+                </div>
+              )}
+            </>
+          )}
+        </div>
+        <nav aria-label="INNTRIX workspace" className="mt-4 grid gap-2">
+          {navigationGroups.map((group) => {
+            const GroupIcon = group.icon;
+            const groupIsActive = group.items.some((item) => item.tab === tab);
+            if (compact) {
+              return (
+                <button
+                  key={group.id}
+                  type="button"
+                  title={group.label}
+                  aria-label={`${group.label} navigation`}
+                  onClick={() => {
+                    setSidebarCollapsed(false);
+                    setExpandedGroups((current) => ({
+                      ...current,
+                      [group.id]: true,
+                    }));
+                  }}
+                  className={`mx-auto grid h-11 w-11 place-items-center rounded-xl transition-colors ${
+                    groupIsActive
+                      ? "bg-[#153f38] text-white shadow-sm"
+                      : "text-[#5c6c67] hover:bg-white"
+                  }`}
+                >
+                  <GroupIcon size={19} />
+                </button>
+              );
+            }
+            const expanded = expandedGroups[group.id] ?? true;
+            return (
+              <div key={group.id} className="border-b border-[#ded8cc] pb-2 last:border-0">
+                <button
+                  type="button"
+                  aria-expanded={expanded}
+                  onClick={() =>
+                    setExpandedGroups((current) => ({
+                      ...current,
+                      [group.id]: !expanded,
+                    }))
+                  }
+                  className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-[11px] font-bold uppercase tracking-[0.12em] text-[#52635e] hover:bg-white/70"
+                >
+                  <GroupIcon size={15} aria-hidden="true" />
+                  <span className="min-w-0 flex-1">{group.label}</span>
+                  <ChevronDown
+                    size={14}
+                    className={`transition-transform ${expanded ? "rotate-180" : ""}`}
+                    aria-hidden="true"
+                  />
+                </button>
+                {expanded && (
+                  <div className="mt-1 grid gap-1">
+                    {group.items.map((item) => {
+                      const ItemIcon = item.icon;
+                      const available = item.availability === "available";
+                      const active = Boolean(item.tab && item.tab === tab);
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          disabled={!available}
+                          aria-current={active ? "page" : undefined}
+                          aria-label={`${item.label}${available ? "" : `, ${item.availability === "planned" ? "planned" : "in development"}`}`}
+                          onClick={() => activateNavigationItem(item)}
+                          className={`flex min-h-10 w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-sm transition-colors ${
+                            active
+                              ? "bg-white font-semibold text-[#153f38] shadow-sm"
+                              : available
+                                ? "text-[#51625d] hover:bg-white/70 hover:text-[#153f38]"
+                                : "cursor-not-allowed text-[#7b8783]"
+                          }`}
+                        >
+                          <ItemIcon size={16} className="shrink-0" aria-hidden="true" />
+                          <span className="min-w-0 flex-1">{item.label}</span>
+                          {!available && (
+                            <span className="shrink-0 rounded-full bg-[#e9e4da] px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-wide text-[#78633d]">
+                              {item.availability === "planned" ? "Planned" : "In dev"}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </nav>
+      </>
+    );
+  }
   return (
     <div className="min-h-screen bg-[#f4f2ec] text-[#17332e]">
       <header className="sticky top-0 z-20 border-b border-[#d9d4c8] bg-white/95 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4">
-          <Brand compact />
+        <div className="mx-auto flex max-w-[1600px] items-center justify-between gap-3 px-4 py-3 sm:px-5">
+          <div className="flex min-w-0 items-center gap-2">
+            <button
+              type="button"
+              aria-label="Open navigation"
+              aria-expanded={mobileNavigationOpen}
+              onClick={() => setMobileNavigationOpen(true)}
+              className="grid h-10 w-10 shrink-0 place-items-center rounded-xl border border-[#d9d4c8] text-[#153f38] lg:hidden"
+            >
+              <Menu size={20} />
+            </button>
+            <Brand compact />
+          </div>
           <div className="flex items-center gap-3">
-            {session.organizations.some(
-              (org) => org.role === "platform_owner",
-            ) && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => navigate("/hoteloperations/admin")}
-              >
-                Platform admin
-              </Button>
-            )}
             <div className="hidden text-right sm:block">
               <div className="text-sm font-semibold">
                 {session.account.displayName}
@@ -1349,59 +1769,42 @@ function DashboardView({
               </div>
             </div>
             <Button variant="outline" size="sm" onClick={logout}>
-              <LogOut size={15} /> Sign out
+              <LogOut size={15} /> <span className="hidden sm:inline">Sign out</span>
             </Button>
           </div>
         </div>
       </header>
-      <div className="mx-auto grid max-w-7xl gap-6 px-5 py-7 lg:grid-cols-[230px_1fr]">
-        <aside className="space-y-4">
-          <div className="rounded-2xl bg-[#153f38] p-4 text-white">
-            <div className="text-xs uppercase tracking-widest text-[#b8d0c8]">
-              Organization
+      {mobileNavigationOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <button type="button" aria-label="Close navigation" onClick={() => setMobileNavigationOpen(false)} className="absolute inset-0 bg-[#0d2722]/55" />
+          <aside role="dialog" aria-modal="true" aria-label="INNTRIX navigation" className="absolute inset-y-0 left-0 w-[min(340px,calc(100vw-2rem))] overflow-y-auto bg-[#f4f2ec] p-4 shadow-2xl">
+            <div className="mb-4 flex items-center justify-between">
+              <Brand compact />
+              <button type="button" aria-label="Close navigation" onClick={() => setMobileNavigationOpen(false)} className="grid h-10 w-10 place-items-center rounded-xl border border-[#d9d4c8] bg-white"><X size={19} /></button>
             </div>
-            <select
-              value={organizationId}
-              onChange={(e) => setOrganizationId(e.target.value)}
-              className="mt-2 w-full rounded-lg border border-white/20 bg-white/10 px-2 py-2 text-sm"
+            {renderNavigation(false)}
+            <div className="mt-5 border-t border-[#d9d4c8] pt-4">
+              <div className="text-sm font-semibold">{session.account.displayName}</div>
+              <div className="truncate text-xs text-[#71807b]">{session.account.email}</div>
+              <Button className="mt-3 w-full" variant="outline" size="sm" onClick={logout}><LogOut size={15} /> Sign out</Button>
+            </div>
+          </aside>
+        </div>
+      )}
+      <div className={`mx-auto grid max-w-[1600px] gap-6 px-4 py-6 sm:px-5 ${sidebarCollapsed ? "lg:grid-cols-[76px_1fr]" : "lg:grid-cols-[290px_1fr]"}`}>
+        <aside className="sticky top-[77px] hidden max-h-[calc(100vh-92px)] self-start overflow-y-auto pb-4 lg:block">
+          <div className="flex justify-end pb-2">
+            <button
+              type="button"
+              title={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
+              aria-label={sidebarCollapsed ? "Expand navigation" : "Collapse navigation"}
+              onClick={() => setSidebarCollapsed((current) => !current)}
+              className="grid h-9 w-9 place-items-center rounded-lg text-[#5c6c67] hover:bg-white"
             >
-              {session.organizations.map((org) => (
-                <option className="text-black" value={org.id} key={org.id}>
-                  {org.name}
-                </option>
-              ))}
-            </select>
-            {dashboard?.organization.isDemo && (
-              <div className="mt-3 rounded-md bg-amber-300/20 px-2 py-1 text-xs text-amber-100">
-                Demo organization · fictional data only
-              </div>
-            )}
+              {sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+            </button>
           </div>
-          <nav className="grid gap-1">
-            {[
-              ["overview", "Overview", LayoutDashboard],
-              ["hotels", "Hotels", Hotel],
-              ["team", "Team access", UserPlus],
-            ].map(([key, label, Icon]: any) => (
-              <button
-                key={key}
-                onClick={() => setTab(key)}
-                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium ${tab === key ? "bg-white shadow-sm" : "text-[#5c6c67] hover:bg-white/60"}`}
-              >
-                <Icon size={17} />
-                {label}
-              </button>
-            ))}
-            {canPortfolioAdmin && (
-              <button
-                onClick={() => setTab("audit")}
-                className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium ${tab === "audit" ? "bg-white shadow-sm" : "text-[#5c6c67] hover:bg-white/60"}`}
-              >
-                <ShieldCheck size={17} />
-                Audit history
-              </button>
-            )}
-          </nav>
+          {renderNavigation(sidebarCollapsed)}
         </aside>
         <main>
           {error && (
@@ -1422,13 +1825,20 @@ function DashboardView({
                   </div>
                   <h1 className="mt-1 text-3xl font-semibold tracking-tight">
                     {tab === "overview"
-                      ? "Portfolio overview"
+                      ? "Property Command Center"
+                      : tab === "property"
+                        ? "Property Overview"
                       : tab === "hotels"
-                        ? "Hotel administration"
+                        ? "Property Settings"
                         : tab === "audit"
                           ? "Audit history"
-                          : "Team access"}
+                          : "User & Department Management"}
                   </h1>
+                  <p className="mt-1 text-sm text-[#687671]">
+                    {activeHotel
+                      ? `${activeHotel.name} · ${activeHotel.propertyCode}`
+                      : `${dashboard.organization.name} · All authorized properties`}
+                  </p>
                 </div>
                 <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-[#61716c]">
                   <span>Property context</span>
@@ -1450,6 +1860,32 @@ function DashboardView({
               </div>
               {tab === "overview" && (
                 <>
+                  <section className="mb-6 rounded-2xl border border-[#d8d1c4] bg-[#153f38] p-5 text-white">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <h2 className="text-lg font-semibold">Quick access</h2>
+                        <p className="mt-1 text-sm text-white/70">
+                          Open the authorized property tools you use most often.
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {quickAccessItems.map((item) => {
+                          const Icon = item.icon;
+                          return (
+                            <button
+                              key={item.id}
+                              type="button"
+                              onClick={() => activateNavigationItem(item)}
+                              className="flex min-h-10 items-center gap-2 rounded-xl border border-white/20 bg-white/10 px-3 py-2 text-sm font-semibold transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                            >
+                              <Icon size={16} aria-hidden="true" />
+                              {item.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </section>
                   <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
                     <div className="rounded-2xl border border-[#ddd7cb] bg-white p-5">
                       <div className="text-sm text-[#687671]">
@@ -1539,6 +1975,57 @@ function DashboardView({
                     </div>
                   )}
                 </>
+              )}
+              {tab === "property" && (
+                <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {dashboard.hotels.length === 0 ? (
+                    <div className="col-span-full rounded-2xl border border-dashed border-[#cfc5b2] bg-white p-10 text-center">
+                      <Hotel className="mx-auto text-[#98763c]" />
+                      <h2 className="mt-3 font-semibold">No authorized properties</h2>
+                      <p className="mt-1 text-sm text-[#6c7975]">
+                        Contact your organization administrator if a property assignment is missing.
+                      </p>
+                    </div>
+                  ) : (
+                    dashboard.hotels.map((hotel) => (
+                      <article
+                        key={hotel.id}
+                        className={`rounded-2xl border bg-white p-5 ${hotel.id === dashboard.selectedHotelId ? "border-[#9b783b] shadow-sm" : "border-[#ddd7cb]"}`}
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <h2 className="font-semibold">{hotel.name}</h2>
+                            <p className="mt-1 text-sm text-[#687671]">
+                              {hotel.propertyCode} · {hotel.city}, {hotel.state}
+                            </p>
+                          </div>
+                          <span className={`rounded-full px-2 py-1 text-[10px] font-bold uppercase ${hotel.status === "active" ? "bg-emerald-50 text-emerald-700" : "bg-[#eee9df] text-[#766b58]"}`}>
+                            {hotel.status}
+                          </span>
+                        </div>
+                        <dl className="mt-5 grid grid-cols-2 gap-3 border-t border-[#ece7dd] pt-4 text-sm">
+                          <div>
+                            <dt className="text-xs uppercase tracking-wide text-[#78847f]">Brand</dt>
+                            <dd className="mt-1 font-medium">{hotel.brand || "Independent / unassigned"}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs uppercase tracking-wide text-[#78847f]">Rooms</dt>
+                            <dd className="mt-1 font-medium">{hotel.roomCount || "Pending"}</dd>
+                          </div>
+                        </dl>
+                        {hotel.id !== dashboard.selectedHotelId && (
+                          <button
+                            type="button"
+                            onClick={() => setHotelId(hotel.id)}
+                            className="mt-4 text-sm font-semibold text-[#176253] underline-offset-4 hover:underline"
+                          >
+                            Use this property context
+                          </button>
+                        )}
+                      </article>
+                    ))
+                  )}
+                </section>
               )}
               {tab === "hotels" && (
                 <div className="space-y-5">

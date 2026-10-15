@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useId,
   useState,
   type FormEvent,
   type InputHTMLAttributes,
@@ -38,7 +39,6 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { apiUrl } from "@/lib/api";
-import { calculateLaborRoi } from "@/lib/inntrix-roi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -233,6 +233,11 @@ type MarketingCapability = {
   title: string;
   status: CapabilityStatus;
   copy: string;
+  roi?: {
+    result: string;
+    calculation: string;
+    note: string;
+  };
 };
 
 const CAPABILITY_GROUPS: Array<{
@@ -251,12 +256,22 @@ const CAPABILITY_GROUPS: Array<{
         title: "Revenue Intelligence",
         status: "In Development",
         copy: "Analyze on-the-books revenue, occupancy, ADR, booking pace, pickup, historical comparisons, budget variance, and potential demand opportunities.",
+        roi: {
+          result: "$18,250 potential annual gross room revenue uplift",
+          calculation: "$5 ADR improvement × 10 rooms sold daily × 365 days",
+          note: "Assumes the property can capture and sustain the modeled ADR improvement.",
+        },
       },
       {
         icon: BarChart3,
         title: "Sales Intelligence",
         status: "In Development",
         copy: "Track account production, group opportunities, historical performance, account activity, and sales-development priorities.",
+        roi: {
+          result: "$5,000 potential gross room revenue",
+          calculation: "40 incremental room nights × $125 ADR",
+          note: "Illustrates the value of one incremental room-night opportunity.",
+        },
       },
       {
         icon: DollarSign,
@@ -282,6 +297,11 @@ const CAPABILITY_GROUPS: Array<{
         title: "Labor & Scheduling Intelligence",
         status: "In Development",
         copy: "Use demand-based staffing recommendations, employee schedules, room forecasts, and labor-efficiency analysis to support staffing decisions.",
+        roi: {
+          result: "$26,000 potential annual labor cost avoidance",
+          calculation: "25 hours saved weekly × $20 per hour × 52 weeks",
+          note: "Assumes hours can be reduced without affecting staffing requirements or service standards.",
+        },
       },
       {
         icon: ClipboardCheck,
@@ -294,6 +314,11 @@ const CAPABILITY_GROUPS: Array<{
         title: "Daily Operations Reporting",
         status: "In Development",
         copy: "Streamline weekly and daily management reports, departmental updates, operational reviews, and leadership communication.",
+        roi: {
+          result: "$6,500 in potential annual administrative capacity",
+          calculation: "5 hours redirected weekly × $25 per hour × 52 weeks",
+          note: "Represents time that may be redirected to higher-value operational work, not guaranteed payroll savings.",
+        },
       },
       {
         icon: ClipboardPlus,
@@ -325,12 +350,22 @@ const CAPABILITY_GROUPS: Array<{
         title: "Inventory Intelligence",
         status: "Planned",
         copy: "Manage maintenance tools, equipment, linen and supply counts, par levels, valuations, and Front Desk Market discrepancies.",
+        roi: {
+          result: "$3,000 potential annual inventory cost avoidance",
+          calculation: "$250 in reduced inventory losses monthly × 12 months",
+          note: "Actual opportunity depends on current purchasing controls, shrinkage, and inventory volume.",
+        },
       },
       {
         icon: BrainCircuit,
         title: "Guest Experience Intelligence",
         status: "Planned",
         copy: "Support forensic guest-satisfaction analysis, complaint trends, issue identification, and corrective-action planning.",
+        roi: {
+          result: "$3,600 potential annual service-recovery cost avoidance",
+          calculation: "2 avoided recovery costs monthly × $150 × 12 months",
+          note: "Uses an illustrative recovery cost; guest issues and remedies vary by property.",
+        },
       },
       {
         icon: BedDouble,
@@ -340,6 +375,17 @@ const CAPABILITY_GROUPS: Array<{
       },
       {
         icon: Wrench,
+        title: "Maintenance & Asset Management",
+        status: "Planned",
+        copy: "Track equipment location, condition, quantity, value, and replacement needs to improve asset visibility and purchasing decisions.",
+        roi: {
+          result: "$2,500 potential annual replacement cost avoidance",
+          calculation: "5 premature equipment replacements avoided × $500 average cost",
+          note: "Actual value depends on equipment condition, replacement cycles, and purchasing practices.",
+        },
+      },
+      {
+        icon: Gauge,
         title: "Operational ROI Intelligence",
         status: "In Development",
         copy: "The public labor opportunity calculator is available today; broader visibility into inventory, maintenance, and administrative efficiency is being developed.",
@@ -349,7 +395,9 @@ const CAPABILITY_GROUPS: Array<{
 ];
 
 function CapabilityCard({ capability }: { capability: MarketingCapability }) {
-  const { icon: Icon, title, status, copy } = capability;
+  const { icon: Icon, title, status, copy, roi } = capability;
+  const [roiOpen, setRoiOpen] = useState(false);
+  const roiId = useId();
   const styles = {
     Available: {
       card: "border-[#d8d2c5] bg-white shadow-sm",
@@ -369,7 +417,7 @@ function CapabilityCard({ capability }: { capability: MarketingCapability }) {
   }[status];
 
   return (
-    <article className={`flex h-full flex-col rounded-3xl border p-6 md:p-7 ${styles.card}`}>
+    <article className={`group relative flex h-full flex-col rounded-3xl border p-6 md:p-7 ${styles.card}`}>
       <div className="flex items-start justify-between gap-4">
         <div className={`grid h-12 w-12 shrink-0 place-items-center rounded-2xl ${styles.icon}`}>
           <Icon size={23} aria-hidden="true" />
@@ -380,6 +428,32 @@ function CapabilityCard({ capability }: { capability: MarketingCapability }) {
       </div>
       <h3 className="mt-6 text-xl font-semibold">{title}</h3>
       <p className="mt-3 leading-7 text-[#65726e]">{copy}</p>
+      {roi && (
+        <div className="mt-auto pt-6">
+          <button
+            type="button"
+            aria-expanded={roiOpen}
+            aria-controls={roiId}
+            aria-label={`${roiOpen ? "Hide" : "Show"} potential ROI example for ${title}`}
+            onClick={() => setRoiOpen((current) => !current)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setRoiOpen(false);
+            }}
+            className="inline-flex items-center gap-2 rounded-full border border-[#cfb98f] bg-[#f5eddd] px-3 py-1.5 text-xs font-bold uppercase tracking-[.12em] text-[#735525] transition hover:border-[#ae8444] hover:bg-[#eee0c6] focus:outline-none focus:ring-2 focus:ring-[#ae8444] focus:ring-offset-2"
+          >
+            <TrendingUp size={14} aria-hidden="true" /> Potential ROI
+          </button>
+          <div
+            id={roiId}
+            role="note"
+            className={`${roiOpen ? "visible opacity-100 md:visible md:opacity-100" : "invisible opacity-0 md:invisible md:opacity-0 md:group-hover:visible md:group-hover:opacity-100"} absolute inset-x-4 bottom-16 z-10 rounded-2xl border border-[#ccb98f] bg-[#173f38] p-4 text-white shadow-xl transition-opacity duration-150`}
+          >
+            <p className="text-sm font-semibold leading-5 text-[#f0cf94]">{roi.result}</p>
+            <p className="mt-2 text-xs font-medium leading-5 text-white/85">{roi.calculation}</p>
+            <p className="mt-2 text-[11px] leading-4 text-white/55">{roi.note}</p>
+          </div>
+        </div>
+      )}
     </article>
   );
 }
@@ -448,36 +522,6 @@ function Landing({ onSignedIn }: { onSignedIn: () => void }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [resetSent, setResetSent] = useState(false);
-  const [currentHours, setCurrentHours] = useState(675);
-  const [targetHours, setTargetHours] = useState(600);
-  const [hourlyCost, setHourlyCost] = useState(20);
-  const [monthlySubscription, setMonthlySubscription] = useState(199);
-
-  const {
-    currentWeeklyHours: current,
-    targetWeeklyHours: target,
-    weeklyHoursSaved,
-    annualizedHoursSaved: annualHoursSaved,
-    estimatedAnnualLaborSavings: annualLaborSavings,
-    estimatedAnnualSubscriptionExpense: annualSubscription,
-    estimatedAnnualNetBenefit: annualNetBenefit,
-  } = calculateLaborRoi({
-    currentWeeklyHours: currentHours,
-    targetWeeklyHours: targetHours,
-    hourlyLaborCost: hourlyCost,
-    monthlySubscription,
-  });
-  const laborScale = Math.max(current, target, 1);
-  const currency = new Intl.NumberFormat("en-US", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 0,
-  });
-
-  const updateNumber = (
-    setter: (value: number) => void,
-    value: string,
-  ) => setter(value === "" ? 0 : Math.max(0, Number(value) || 0));
 
   async function login(event: FormEvent) {
     event.preventDefault();
@@ -516,8 +560,8 @@ function Landing({ onSignedIn }: { onSignedIn: () => void }) {
             <a href="#capabilities" className="hidden px-3 py-2 text-sm font-medium text-[#52645f] hover:text-[#174d45] md:block">
               Platform
             </a>
-            <a href="#roi" className="hidden px-3 py-2 text-sm font-medium text-[#52645f] hover:text-[#174d45] md:block">
-              ROI calculator
+            <a href="#capabilities" className="hidden px-3 py-2 text-sm font-medium text-[#52645f] hover:text-[#174d45] md:block">
+              Potential ROI
             </a>
             <a href="#login" className="rounded-lg px-3 py-2 text-sm font-semibold text-[#174d45] hover:bg-[#e5ece8]">
               Login
@@ -556,8 +600,8 @@ function Landing({ onSignedIn }: { onSignedIn: () => void }) {
               </p>
             </div>
             <div className="mt-9 flex flex-wrap gap-3">
-              <a href="#roi" className="inline-flex items-center gap-2 rounded-xl bg-[#c79a4f] px-5 py-3 font-semibold text-[#102d29] shadow-lg shadow-black/10 hover:bg-[#dab36f]">
-                Estimate your opportunity <ArrowRight size={17} />
+              <a href="#capabilities" className="inline-flex items-center gap-2 rounded-xl bg-[#c79a4f] px-5 py-3 font-semibold text-[#102d29] shadow-lg shadow-black/10 hover:bg-[#dab36f]">
+                Explore potential value <ArrowRight size={17} />
               </a>
               <a href="#capabilities" className="rounded-xl border border-white/25 px-5 py-3 font-semibold text-white hover:bg-white/10">
                 Explore the platform
@@ -658,68 +702,9 @@ function Landing({ onSignedIn }: { onSignedIn: () => void }) {
             );
           })}
         </div>
-      </section>
-
-      <section id="roi" className="bg-[#e8eee9] px-5 py-20 md:px-8 md:py-28">
-        <div className="mx-auto max-w-7xl">
-          <div className="max-w-3xl">
-            <p className="text-sm font-bold uppercase tracking-[.2em] text-[#8b672f]">Interactive labor ROI calculator</p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight md:text-5xl">Put your labor opportunity into perspective.</h2>
-            <p className="mt-5 text-lg leading-8 text-[#5b6965]">Adjust the assumptions to model the financial effect of moving from current labor usage toward an operational target.</p>
-          </div>
-          <div className="mt-12 grid overflow-hidden rounded-[2rem] border border-[#cdd7d1] bg-white shadow-xl shadow-[#2f5148]/10 lg:grid-cols-[.82fr_1.18fr]">
-            <div className="border-b border-[#d9e0dc] bg-[#faf9f5] p-6 md:p-9 lg:border-b-0 lg:border-r">
-              <h3 className="text-lg font-semibold">Your assumptions</h3>
-              <div className="mt-6 grid gap-5">
-                {[
-                  ["Current average weekly labor hours", currentHours, setCurrentHours, "hours"],
-                  ["Target average weekly labor hours", targetHours, setTargetHours, "hours"],
-                  ["Fully burdened hourly labor cost", hourlyCost, setHourlyCost, "$ / hour"],
-                  ["Estimated monthly INNTRIX subscription", monthlySubscription, setMonthlySubscription, "$ / month"],
-                ].map(([label, value, setter, suffix], index) => (
-                  <label key={String(label)} className="grid gap-2 text-sm font-semibold text-[#304b45]">
-                    <span>{String(label)}</span>
-                    <span className="relative">
-                      <Input type="number" min="0" step={index > 1 ? "0.01" : "1"} value={Number(value)} onChange={(event) => updateNumber(setter as (value: number) => void, event.target.value)} className="h-12 border-[#cdd7d1] bg-white pr-24 text-base" />
-                      <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs font-medium text-[#74817d]">{String(suffix)}</span>
-                    </span>
-                    {index === 3 && <span className="font-normal text-[#7b8783]">Illustrative placeholder—not published pricing.</span>}
-                  </label>
-                ))}
-              </div>
-              <div className="mt-8 border-t border-[#ddd8cd] pt-6">
-                <div className="mb-3 flex justify-between text-xs font-semibold"><span>Current labor</span><span>{current.toLocaleString()} hrs</span></div>
-                <div className="h-3 overflow-hidden rounded-full bg-[#e3ded2]"><div className="h-full rounded-full bg-[#806a48] transition-all" style={{ width: `${(current / laborScale) * 100}%` }} /></div>
-                <div className="mb-3 mt-5 flex justify-between text-xs font-semibold"><span>Target labor</span><span>{target.toLocaleString()} hrs</span></div>
-                <div className="h-3 overflow-hidden rounded-full bg-[#e3ded2]"><div className="h-full rounded-full bg-[#2d7165] transition-all" style={{ width: `${(target / laborScale) * 100}%` }} /></div>
-              </div>
-            </div>
-            <div className="bg-[#143f38] p-6 text-white md:p-9">
-              <div className="flex items-center gap-2 text-sm font-semibold text-[#e7c488]"><BarChart3 size={18} /> Illustrative annual impact</div>
-              <div className="mt-6 rounded-2xl bg-white/10 p-6">
-                <p className="text-sm text-white/65">Potential annual labor savings</p>
-                <p className="mt-2 text-4xl font-semibold tracking-tight md:text-5xl">{currency.format(annualLaborSavings)}</p>
-              </div>
-              <div className="mt-4 grid gap-4 sm:grid-cols-3">
-                {[
-                  ["Weekly hours saved", weeklyHoursSaved.toLocaleString()],
-                  ["Annual hours saved", annualHoursSaved.toLocaleString()],
-                  ["Annual net benefit", currency.format(annualNetBenefit)],
-                ].map(([label, value]) => (
-                  <div key={label} className="rounded-2xl border border-white/10 bg-white/[.06] p-4">
-                    <p className="text-xs leading-5 text-white/60">{label}</p>
-                    <p className="mt-2 text-xl font-semibold">{value}</p>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-7 flex items-start gap-3 rounded-2xl border border-[#d4b16f]/25 bg-[#d4b16f]/10 p-4">
-                <CheckCircle2 className="mt-0.5 shrink-0 text-[#e5c17e]" size={18} />
-                <div><p className="text-sm font-semibold">Subscription assumption: {currency.format(annualSubscription)} annually</p><p className="mt-1 text-xs leading-5 text-white/60">Based on the monthly placeholder entered at left.</p></div>
-              </div>
-              <p className="mt-6 text-xs leading-5 text-white/55">Illustrative estimates only. Actual results depend on staffing requirements, occupancy, service standards, payroll costs, and management decisions. INNTRIX does not guarantee savings, and software alone does not create the modeled labor reduction.</p>
-            </div>
-          </div>
-        </div>
+        <p className="mt-12 border-t border-[#ddd6c9] pt-5 text-xs leading-5 text-[#77817d]">
+          Potential ROI examples are illustrative scenarios, not customer results or guaranteed outcomes. Actual financial impact depends on each property&apos;s occupancy, staffing requirements, rates, costs, operating practices, and ability to implement identified opportunities.
+        </p>
       </section>
 
       <section className="mx-auto grid max-w-7xl gap-12 px-5 py-20 md:px-8 md:py-28 lg:grid-cols-[1fr_.8fr] lg:items-center">

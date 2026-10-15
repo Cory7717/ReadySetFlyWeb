@@ -250,6 +250,14 @@ function primaryOrg(context: HotelOpsContext) {
   );
 }
 
+function selectedOrg(context: HotelOpsContext, organizationId: unknown) {
+  const requestedId = String(organizationId || "").trim();
+  if (!requestedId) return primaryOrg(context);
+  return context.organizations.find(
+    (membership) => membership.organizationId === requestedId,
+  );
+}
+
 function canSeeAllHotels(role: string) {
   return role === "platform_owner" || role === "above_property_admin";
 }
@@ -360,6 +368,7 @@ const hotelUpdateSchema = hotelBaseSchema
   .partial()
   .superRefine(validateRoomCounts);
 const inviteSchema = z.object({
+  organizationId: z.string().uuid(),
   email: z.string().email(),
   role: z.enum(HOTEL_OPS_ROLES),
   hotelId: z.string().uuid().optional().nullable(),
@@ -647,7 +656,7 @@ export function registerHotelOperationsRoutes(app: Express) {
     async (req: any, res, next) => {
       try {
         const context = req.hotelOps as HotelOpsContext;
-        const org = primaryOrg(context);
+        const org = selectedOrg(context, req.query.organizationId);
         if (!org || !canSeeAllHotels(org.role))
           return res.status(403).json({ error: "hotel_create_denied" });
         const input = hotelSchema.parse(req.body);
@@ -771,7 +780,7 @@ export function registerHotelOperationsRoutes(app: Express) {
     async (req: any, res, next) => {
       try {
         const context = req.hotelOps as HotelOpsContext;
-        const org = primaryOrg(context);
+        const org = selectedOrg(context, req.query.organizationId);
         if (!org || !canSeeAllHotels(org.role))
           return res.status(403).json({ error: "hotel_update_denied" });
         const allowed = (
@@ -856,8 +865,8 @@ export function registerHotelOperationsRoutes(app: Express) {
     async (req: any, res, next) => {
       try {
         const context = req.hotelOps as HotelOpsContext;
-        const org = primaryOrg(context);
         const input = inviteSchema.parse(req.body);
+        const org = selectedOrg(context, input.organizationId);
         const actorHotelRole = input.hotelId
           ? context.hotelMemberships.find(
               (item) => item.hotelId === input.hotelId,
@@ -873,18 +882,21 @@ export function registerHotelOperationsRoutes(app: Express) {
         )
           return res.status(403).json({ error: "role_escalation_denied" });
         if (
-          ["property_admin", "property_manager", "property_employee"].includes(
-            input.role,
-          ) &&
+          [
+            "above_property_admin",
+            "property_admin",
+            "property_manager",
+            "property_employee",
+          ].includes(input.role) &&
           !input.hotelId
         )
           return res.status(400).json({ error: "hotel_required_for_role" });
-        if (
-          input.hotelId &&
-          !(await authorizedHotels(context, org.organizationId)).some(
-            (hotel) => hotel.id === input.hotelId,
-          )
-        )
+        const selectedHotel = input.hotelId
+          ? (await authorizedHotels(context, org.organizationId)).find(
+              (hotel) => hotel.id === input.hotelId,
+            )
+          : null;
+        if (input.hotelId && !selectedHotel)
           return res.status(403).json({ error: "hotel_access_denied" });
         const token = randomToken();
         const expiresAt = new Date(Date.now() + INVITE_TTL_MS);
@@ -908,7 +920,7 @@ export function registerHotelOperationsRoutes(app: Express) {
           const acceptance = await sendPortalEmail(
             input.email,
             "You're invited to INNTRIX",
-            `You have been invited to join ${org.organization.name} in INNTRIX. This secure invitation expires in 72 hours.`,
+            `You have been invited to join ${org.organization.name} in INNTRIX${selectedHotel ? `, with ${selectedHotel.name} as your initial property context` : ""}. This secure invitation expires in 72 hours.`,
             link,
           );
           emailAccepted = true;
@@ -975,7 +987,7 @@ export function registerHotelOperationsRoutes(app: Express) {
 
   router.get("/team", requirePortalSession, async (req: any, res) => {
     const context = req.hotelOps as HotelOpsContext;
-    const org = primaryOrg(context);
+    const org = selectedOrg(context, req.query.organizationId);
     if (!org)
       return res.status(403).json({ error: "organization_access_denied" });
     const mayManageTeam =
@@ -1095,7 +1107,7 @@ export function registerHotelOperationsRoutes(app: Express) {
     requireCsrf,
     async (req: any, res) => {
       const context = req.hotelOps as HotelOpsContext;
-      const org = primaryOrg(context);
+      const org = selectedOrg(context, req.query.organizationId);
       if (!org)
         return res.status(403).json({ error: "organization_access_denied" });
       const rows = await db
@@ -1151,9 +1163,9 @@ export function registerHotelOperationsRoutes(app: Express) {
     async (req: any, res, next) => {
       try {
         const context = req.hotelOps as HotelOpsContext;
-        const org = primaryOrg(context);
         const input = z
           .object({
+            organizationId: z.string().uuid(),
             hotelId: z.string().uuid(),
             role: z.enum([
               "property_admin",
@@ -1164,6 +1176,7 @@ export function registerHotelOperationsRoutes(app: Express) {
             status: z.enum(["active", "inactive"]).default("active"),
           })
           .parse(req.body);
+        const org = selectedOrg(context, input.organizationId);
         if (
           !org ||
           !(await authorizedHotels(context, org.organizationId)).some(
@@ -1250,10 +1263,14 @@ export function registerHotelOperationsRoutes(app: Express) {
     async (req: any, res, next) => {
       try {
         const context = req.hotelOps as HotelOpsContext;
-        const org = primaryOrg(context);
-        const status = z
-          .object({ status: z.enum(["active", "inactive"]) })
-          .parse(req.body).status;
+        const input = z
+          .object({
+            organizationId: z.string().uuid(),
+            status: z.enum(["active", "inactive"]),
+          })
+          .parse(req.body);
+        const org = selectedOrg(context, input.organizationId);
+        const status = input.status;
         if (
           !org ||
           org.role !== "platform_owner" ||
@@ -1350,6 +1367,18 @@ export function registerHotelOperationsRoutes(app: Express) {
           return res
             .status(404)
             .json({ error: "invitation_invalid_or_expired" });
+        if (
+          [
+            "above_property_admin",
+            "property_admin",
+            "property_manager",
+            "property_employee",
+          ].includes(invitation.role) &&
+          !invitation.hotelId
+        )
+          return res
+            .status(409)
+            .json({ error: "invitation_property_scope_required" });
         const passwordHash = await bcrypt.hash(input.password, 12);
         const account = await db.transaction(async (tx) => {
           const [claimed] = await tx
@@ -1399,7 +1428,10 @@ export function registerHotelOperationsRoutes(app: Express) {
               role: invitation.role,
             })
             .onConflictDoNothing();
-          if (invitation.hotelId)
+          if (
+            invitation.hotelId &&
+            invitation.role !== "above_property_admin"
+          )
             await tx
               .insert(hotelOpsHotelMemberships)
               .values({
@@ -1418,7 +1450,10 @@ export function registerHotelOperationsRoutes(app: Express) {
                   updatedAt: new Date(),
                 },
               });
-          if (invitation.hotelId)
+          if (
+            invitation.hotelId &&
+            invitation.role !== "above_property_admin"
+          )
             for (const moduleKey of Array.isArray(invitation.moduleKeys)
               ? (invitation.moduleKeys as string[])
               : [])
@@ -1450,7 +1485,14 @@ export function registerHotelOperationsRoutes(app: Express) {
           return account;
         });
         await createSession(res, account.id);
-        res.json({ ok: true, returnTo: "/hoteloperations/dashboard" });
+        const returnParams = new URLSearchParams({
+          organizationId: invitation.organizationId,
+        });
+        if (invitation.hotelId) returnParams.set("hotelId", invitation.hotelId);
+        res.json({
+          ok: true,
+          returnTo: `/hoteloperations/dashboard?${returnParams.toString()}`,
+        });
       } catch (error: any) {
         if (error instanceof z.ZodError)
           return res.status(400).json({ error: "invalid_acceptance" });
@@ -1571,7 +1613,7 @@ export function registerHotelOperationsRoutes(app: Express) {
 
   router.get("/audit", requirePortalSession, async (req: any, res) => {
     const context = req.hotelOps as HotelOpsContext;
-    const org = primaryOrg(context);
+    const org = selectedOrg(context, req.query.organizationId);
     if (!org || !canSeeAllHotels(org.role))
       return res.status(403).json({ error: "audit_access_denied" });
     const events = await db

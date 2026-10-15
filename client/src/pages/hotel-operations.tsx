@@ -1015,7 +1015,13 @@ function Landing({ onSignedIn }: { onSignedIn: () => void }) {
   );
 }
 
-function HotelForm({ onCreated }: { onCreated: () => void }) {
+function HotelForm({
+  organizationId,
+  onCreated,
+}: {
+  organizationId: string;
+  onCreated: () => void;
+}) {
   const [form, setForm] = useState({
     propertyCode: "",
     name: "",
@@ -1072,10 +1078,13 @@ function HotelForm({ onCreated }: { onCreated: () => void }) {
           .map((value) => value.trim())
           .filter(Boolean);
       });
-      await portalFetch("/hotels", {
+      await portalFetch(
+        `/hotels?organizationId=${encodeURIComponent(organizationId)}`,
+        {
         method: "POST",
         body: JSON.stringify(body),
-      });
+        },
+      );
       onCreated();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unable to add hotel");
@@ -1159,10 +1168,12 @@ function HotelForm({ onCreated }: { onCreated: () => void }) {
 }
 
 function InviteForm({
+  organizationId,
   hotels,
   actorRole,
   onChanged,
 }: {
+  organizationId: string;
   hotels: HotelRecord[];
   actorRole: string;
   onChanged?: () => void;
@@ -1204,7 +1215,7 @@ function InviteForm({
     try {
       const payload = {
         ...form,
-        hotelId: form.role === "above_property_admin" ? null : form.hotelId,
+        organizationId,
       };
       const result = await portalFetch("/invitations", {
         method: "POST",
@@ -1233,8 +1244,9 @@ function InviteForm({
           Invite a property leader or team member
         </h3>
         <p className="text-sm text-[#687671]">
-          Invitations are single-use, expire in 72 hours, and never grant access
-          beyond the selected property.
+          Invitations are single-use and expire in 72 hours. Above Property
+          access covers this organization; the selected hotel establishes the
+          initial property context.
         </p>
       </div>
       <Field
@@ -1259,19 +1271,17 @@ function InviteForm({
         </select>
       </label>
       <label className="grid gap-1.5 text-sm font-medium">
-        <span>Hotel</span>
+        <span>
+          {form.role === "above_property_admin" ? "Initial property" : "Hotel"}
+        </span>
         <select
           className="h-10 rounded-md border border-[#d8d1c4] bg-white px-3"
           value={form.hotelId}
           onChange={(e) => setForm({ ...form, hotelId: e.target.value })}
-          required={form.role !== "above_property_admin"}
-          disabled={form.role === "above_property_admin"}
+          required
+          disabled={hotels.length === 0}
         >
-          <option value="">
-            {form.role === "above_property_admin"
-              ? "Portfolio-wide role"
-              : "Select hotel"}
-          </option>
+          <option value="">Select hotel</option>
           {hotels.map((hotel) => (
             <option value={hotel.id} key={hotel.id}>
               {hotel.name}
@@ -1279,6 +1289,12 @@ function InviteForm({
           ))}
         </select>
       </label>
+      {hotels.length === 0 && (
+        <p className="md:col-span-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
+          Create at least one hotel and property code for this organization
+          before sending an invitation.
+        </p>
+      )}
       {form.role !== "above_property_admin" && (
         <fieldset className="md:col-span-3">
           <legend className="mb-2 text-sm font-semibold">
@@ -1314,7 +1330,7 @@ function InviteForm({
         </p>
       )}
       <div className="md:col-span-3">
-        <Button className="bg-[#184f46]">
+        <Button className="bg-[#184f46]" disabled={hotels.length === 0}>
           <UserPlus size={16} /> Send invitation
         </Button>
       </div>
@@ -1323,9 +1339,11 @@ function InviteForm({
 }
 
 function TeamPanel({
+  organizationId,
   hotels,
   actorRole,
 }: {
+  organizationId: string;
   hotels: HotelRecord[];
   actorRole: string;
 }) {
@@ -1336,17 +1354,18 @@ function TeamPanel({
   }>({ portfolioMembers: [], members: [], invitations: [] });
   const [error, setError] = useState("");
   const load = () =>
-    portalFetch("/team")
+    portalFetch(`/team?organizationId=${encodeURIComponent(organizationId)}`)
       .then(setData)
       .catch((e) => setError(e.message));
   useEffect(() => {
     void load();
-  }, []);
+  }, [organizationId]);
   async function revoke(id: string) {
     try {
-      await portalFetch(`/invitations/${encodeURIComponent(id)}/revoke`, {
-        method: "POST",
-      });
+      await portalFetch(
+        `/invitations/${encodeURIComponent(id)}/revoke?organizationId=${encodeURIComponent(organizationId)}`,
+        { method: "POST" },
+      );
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unable to revoke invitation");
@@ -1357,6 +1376,7 @@ function TeamPanel({
       await portalFetch(`/team/${encodeURIComponent(member.id)}/access`, {
         method: "PATCH",
         body: JSON.stringify({
+          organizationId,
           hotelId: member.hotelId,
           role: member.role,
           moduleKeys: member.moduleKeys || [],
@@ -1372,7 +1392,10 @@ function TeamPanel({
     try {
       await portalFetch(
         `/team/${encodeURIComponent(member.id)}/organization-access`,
-        { method: "PATCH", body: JSON.stringify({ status: "inactive" }) },
+        {
+          method: "PATCH",
+          body: JSON.stringify({ organizationId, status: "inactive" }),
+        },
       );
       await load();
     } catch (e) {
@@ -1386,7 +1409,12 @@ function TeamPanel({
       {error && (
         <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>
       )}
-      <InviteForm hotels={hotels} actorRole={actorRole} onChanged={load} />
+      <InviteForm
+        organizationId={organizationId}
+        hotels={hotels}
+        actorRole={actorRole}
+        onChanged={load}
+      />
       <section className="rounded-2xl border border-[#d9d1c2] bg-white p-5">
         <h3 className="font-semibold">Current access</h3>
         <div className="mt-3 grid gap-2">
@@ -1479,14 +1507,14 @@ function TeamPanel({
   );
 }
 
-function AuditPanel() {
+function AuditPanel({ organizationId }: { organizationId: string }) {
   const [events, setEvents] = useState<any[]>([]);
   const [error, setError] = useState("");
   useEffect(() => {
-    portalFetch("/audit")
+    portalFetch(`/audit?organizationId=${encodeURIComponent(organizationId)}`)
       .then((result) => setEvents(result.events || []))
       .catch((e) => setError(e.message));
-  }, []);
+  }, [organizationId]);
   return (
     <section className="rounded-2xl border border-[#d9d1c2] bg-white p-5">
       <h3 className="font-semibold">Administrative audit history</h3>
@@ -1527,12 +1555,20 @@ function DashboardView({
   session: PortalSession;
   reloadSession: () => void;
 }) {
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
+  const initialDashboardParams = new URLSearchParams(
+    location.includes("?") ? location.slice(location.indexOf("?") + 1) : "",
+  );
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
   const [organizationId, setOrganizationId] = useState(
-    session.activeOrganizationId || session.organizations[0]?.id || "",
+    initialDashboardParams.get("organizationId") ||
+      session.activeOrganizationId ||
+      session.organizations[0]?.id ||
+      "",
   );
-  const [hotelId, setHotelId] = useState("all");
+  const [hotelId, setHotelId] = useState(
+    initialDashboardParams.get("hotelId") || "all",
+  );
   const [tab, setTab] = useState<PortalTab>("overview");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
@@ -1566,12 +1602,15 @@ function DashboardView({
   }
   async function toggleHotelStatus(hotel: HotelRecord) {
     try {
-      await portalFetch(`/hotels/${encodeURIComponent(hotel.id)}`, {
+      await portalFetch(
+        `/hotels/${encodeURIComponent(hotel.id)}?organizationId=${encodeURIComponent(organizationId)}`,
+        {
         method: "PATCH",
         body: JSON.stringify({
           status: hotel.status === "active" ? "inactive" : "active",
         }),
-      });
+        },
+      );
       await load();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Unable to update hotel");
@@ -1685,7 +1724,10 @@ function DashboardView({
               <select
                 aria-label="Organization"
                 value={organizationId}
-                onChange={(event) => setOrganizationId(event.target.value)}
+                onChange={(event) => {
+                  setOrganizationId(event.target.value);
+                  setHotelId("all");
+                }}
                 className="mt-2 w-full rounded-lg border border-white/20 bg-white/10 px-2 py-2 text-sm"
               >
                 {session.organizations.map((organization) => (
@@ -2120,13 +2162,17 @@ function DashboardView({
                     </div>
                   )}
                   {canPortfolioAdmin && (
-                    <HotelForm onCreated={() => void load()} />
+                    <HotelForm
+                      organizationId={organizationId}
+                      onCreated={() => void load()}
+                    />
                   )}
                 </div>
               )}
               {tab === "team" &&
                 (canTeamAdmin ? (
                   <TeamPanel
+                    organizationId={organizationId}
                     hotels={dashboard.hotels}
                     actorRole={dashboard.role}
                   />
@@ -2136,7 +2182,9 @@ function DashboardView({
                     or portfolio administrator.
                   </div>
                 ))}
-              {tab === "audit" && canPortfolioAdmin && <AuditPanel />}
+              {tab === "audit" && canPortfolioAdmin && (
+                <AuditPanel organizationId={organizationId} />
+              )}
             </>
           )}
         </main>
@@ -2175,13 +2223,14 @@ function TokenPage({
     if (password !== passwordConfirmation)
       return setError("Passwords do not match.");
     try {
+      let result: any;
       if (mode === "invite")
-        await portalFetch(`/invitations/${encodeURIComponent(token)}/accept`, {
+        result = await portalFetch(`/invitations/${encodeURIComponent(token)}/accept`, {
           method: "POST",
           body: JSON.stringify({ displayName, password, passwordConfirmation }),
         });
       else if (mode === "support")
-        await portalFetch(
+        result = await portalFetch(
           `/support-invitations/${encodeURIComponent(token)}/accept`,
           {
             method: "POST",
@@ -2193,7 +2242,7 @@ function TokenPage({
           },
         );
       else
-        await portalFetch(`/password-reset/${encodeURIComponent(token)}`, {
+        result = await portalFetch(`/password-reset/${encodeURIComponent(token)}`, {
           method: "POST",
           body: JSON.stringify({ password, passwordConfirmation }),
         });
@@ -2201,7 +2250,7 @@ function TokenPage({
         mode === "support"
           ? "/hoteloperations/admin/support"
           : mode === "invite"
-            ? "/hoteloperations/dashboard"
+            ? result?.returnTo || "/hoteloperations/dashboard"
             : "/hoteloperations",
       );
     } catch (e) {

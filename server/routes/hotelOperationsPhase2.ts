@@ -487,14 +487,22 @@ export function registerHotelOperationsPhase2Routes(
             profile: z.record(z.unknown()).optional(),
           })
           .parse(req.body);
-        const [organization] = await db
-          .insert(hotelOpsOrganizations)
-          .values({
-            name: input.name,
-            slug: `${cleanSlug(input.name)}-${crypto.randomBytes(3).toString("hex")}`,
-            profile: input.profile || {},
-          })
-          .returning();
+        const organization = await db.transaction(async (tx) => {
+          const [created] = await tx
+            .insert(hotelOpsOrganizations)
+            .values({
+              name: input.name,
+              slug: `${cleanSlug(input.name)}-${crypto.randomBytes(3).toString("hex")}`,
+              profile: input.profile || {},
+            })
+            .returning();
+          await tx.insert(hotelOpsOrganizationMemberships).values({
+            organizationId: created.id,
+            accountId: req.hotelOps.account.id,
+            role: "platform_owner",
+          });
+          return created;
+        });
         await audit({
           organizationId: organization.id,
           actorAccountId: req.hotelOps.account.id,
@@ -669,6 +677,8 @@ export function registerHotelOperationsPhase2Routes(
         )[0];
         if (!org)
           return res.status(404).json({ error: "organization_not_found" });
+        if (!input.hotelId)
+          return res.status(400).json({ error: "hotel_required_for_role" });
         if (input.hotelId) {
           const hotel = (
             await db

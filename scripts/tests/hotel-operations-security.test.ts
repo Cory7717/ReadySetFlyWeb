@@ -83,3 +83,23 @@ test("hotel operations invitations distinguish provider acceptance from inbox de
   assert.match(admin, /aria-live="polite"/);
   assert.match(admin, /fixed bottom-5/);
 });
+
+test("hotel operations onboarding is explicitly organization and property scoped", () => {
+  const routes = readFileSync("server/routes/hotelOperations.ts", "utf8");
+  const phase2 = readFileSync("server/routes/hotelOperationsPhase2.ts", "utf8");
+  const portal = readFileSync("client/src/pages/hotel-operations.tsx", "utf8");
+
+  assert.match(routes, /function selectedOrg\(context: HotelOpsContext/);
+  assert.match(routes, /organizationId: z\.string\(\)\.uuid\(\),\s*email:/);
+  assert.match(routes, /"above_property_admin",\s*"property_admin"/);
+  assert.match(routes, /invitation\.role !== "above_property_admin"/);
+  assert.match(routes, /invitation_property_scope_required/);
+  assert.match(routes, /returnTo: `\/hoteloperations\/dashboard\?\$\{returnParams\.toString\(\)\}`/);
+  assert.match(phase2, /role: "platform_owner"/);
+  assert.match(phase2, /hotel_required_for_role/);
+  assert.match(portal, /organizationId,\s*hotels,\s*actorRole/);
+  assert.match(portal, /Create at least one hotel and property code/);
+  assert.match(portal, /initial property context/);
+  assert.match(portal, /\[organizationId\]/);
+  assert.match(portal, /result\?\.returnTo \|\| "\/hoteloperations\/dashboard"/);
+});

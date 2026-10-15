@@ -434,13 +434,29 @@ function Organizations({ data, reload }: any) {
 }
 function Invitations({ data, reload }: any) {
   const [message, setMessage] = useState("");
+  const [messageTone, setMessageTone] = useState<"success" | "error">("success");
   const [resendingId, setResendingId] = useState<string | null>(null);
   return (
     <Panel title="Invitation history">
       {message && (
-        <p className="mb-3 rounded-lg bg-[#f3f0e8] p-3 text-sm text-[#536761]" role="status">
-          {message}
-        </p>
+        <div
+          className={`fixed bottom-5 left-1/2 z-[60] flex w-[min(520px,calc(100vw-2rem))] -translate-x-1/2 items-start justify-between gap-4 rounded-xl border p-4 text-sm shadow-2xl ${
+            messageTone === "success"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-900"
+              : "border-red-200 bg-red-50 text-red-800"
+          }`}
+          role="status"
+          aria-live="polite"
+        >
+          <span>{message}</span>
+          <button
+            type="button"
+            onClick={() => setMessage("")}
+            className="shrink-0 font-semibold underline underline-offset-2"
+          >
+            Dismiss
+          </button>
+        </div>
       )}
       {(data.invitations || []).map((x: any) => {
         const pending = !x.invitation.acceptedAt && !x.invitation.revokedAt;
@@ -476,13 +492,17 @@ function Invitations({ data, reload }: any) {
                         `/admin/invitations/${x.invitation.id}/resend`,
                         { method: "POST" },
                       );
+                      const accepted =
+                        result.emailStatus === "accepted" || result.delivered;
+                      setMessageTone(accepted ? "success" : "error");
                       setMessage(
-                        result.emailStatus === "accepted" || result.delivered
+                        accepted
                           ? "The renewed invitation was accepted by the email provider. Inbox delivery may still be pending."
                           : "The invitation was renewed, but the email provider did not accept it. Check the delivery logs before retrying.",
                       );
                       await reload();
                     } catch (error) {
+                      setMessageTone("error");
                       setMessage(
                         error instanceof Error
                           ? error.message

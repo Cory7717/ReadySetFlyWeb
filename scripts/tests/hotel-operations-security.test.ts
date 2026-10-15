@@ -80,4 +80,6 @@ test("hotel operations invitations distinguish provider acceptance from inbox de
   assert.match(portal, /accepted by the email provider/);
   assert.match(admin, /Inbox delivery may still be pending/);
   assert.match(admin, /the email provider did not accept it/);
+  assert.match(admin, /aria-live="polite"/);
+  assert.match(admin, /fixed bottom-5/);
 });

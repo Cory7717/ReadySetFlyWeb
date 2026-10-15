@@ -379,6 +379,15 @@ function Landing({ onSignedIn }: { onSignedIn: () => void }) {
             <p className="mt-7 max-w-2xl text-lg leading-8 text-white/75 md:text-xl">
               INNTRIX brings operational planning, labor intelligence, and management visibility into one platform designed for hotel operators.
             </p>
+            <div className="mt-7 flex max-w-2xl items-center gap-4 border-l-2 border-[#d6ad68] pl-4">
+              <div className="shrink-0 text-center">
+                <div className="text-2xl font-semibold leading-none text-[#f0cc8d]">15+</div>
+                <div className="mt-1 text-[10px] font-bold uppercase tracking-[.16em] text-white/55">Years</div>
+              </div>
+              <p className="text-sm leading-6 text-white/70">
+                Created by a hotel operations professional with more than 15 years of hands-on hospitality management experience.
+              </p>
+            </div>
             <div className="mt-9 flex flex-wrap gap-3">
               <a href="#roi" className="inline-flex items-center gap-2 rounded-xl bg-[#c79a4f] px-5 py-3 font-semibold text-[#102d29] shadow-lg shadow-black/10 hover:bg-[#dab36f]">
                 Estimate your opportunity <ArrowRight size={17} />
@@ -401,6 +410,43 @@ function Landing({ onSignedIn }: { onSignedIn: () => void }) {
                 <p className="mt-2 text-sm leading-6 text-white/65">{String(copy)}</p>
               </div>
             ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="border-b border-[#ded8cc] bg-white px-5 py-20 md:px-8 md:py-24">
+        <div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[.72fr_1.28fr] lg:items-center">
+          <div className="relative overflow-hidden rounded-3xl bg-[#163f38] p-8 text-white shadow-xl shadow-[#274a42]/10 md:p-10">
+            <div className="absolute -right-16 -top-16 h-48 w-48 rounded-full border-[32px] border-white/[.04]" aria-hidden="true" />
+            <div className="relative">
+              <p className="text-6xl font-semibold tracking-tight text-[#e0b76f] md:text-7xl">15+</p>
+              <p className="mt-3 max-w-xs text-sm font-bold uppercase leading-6 tracking-[.18em] text-white/80">
+                Years of Hospitality Operations Experience
+              </p>
+              <div className="mt-8 h-px w-16 bg-[#d5aa63]" />
+              <p className="mt-6 text-sm leading-6 text-white/65">
+                Firsthand experience across labor, staffing, guest satisfaction, maintenance, inventory control, management reporting, and profitability.
+              </p>
+            </div>
+          </div>
+          <div>
+            <p className="text-sm font-bold uppercase tracking-[.2em] text-[#936d34]">Experience behind the platform</p>
+            <h2 className="mt-3 max-w-4xl text-3xl font-semibold leading-tight tracking-tight md:text-5xl">
+              Built by a Hotelier. Designed for the Realities of Hotel Operations.
+            </h2>
+            <p className="mt-6 text-lg leading-8 text-[#566762]">
+              INNTRIX was built from firsthand experience in hotel operations—not assumptions about how hotels should operate. More than 15 years of hospitality management experience shaped a platform intended to simplify daily responsibilities, reduce unnecessary administrative work, maximize operational efficiency, and help teams identify opportunities to improve hotel profitability.
+            </p>
+            <p className="mt-5 text-base leading-7 text-[#687570]">
+              Its workflows reflect the practical needs of General Managers and department heads at the property level, while giving ownership groups and hotel management companies the visibility needed to support informed decisions across a portfolio.
+            </p>
+            <div className="mt-7 flex flex-wrap gap-2">
+              {["General Managers", "Department Heads", "Ownership Groups", "Management Companies"].map((audience) => (
+                <span key={audience} className="rounded-full border border-[#d5cbb9] bg-[#f8f5ee] px-3 py-1.5 text-sm font-medium text-[#40534e]">
+                  {audience}
+                </span>
+              ))}
+            </div>
           </div>
         </div>
       </section>

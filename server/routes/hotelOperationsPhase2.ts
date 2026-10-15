@@ -28,6 +28,7 @@ import {
   hotelOpsSupportSpecialists,
   hotelOpsSupportInvitations,
   hotelOpsPasswordResets,
+  hotelOpsRegions,
   hotelOpsSessions,
   hotelOpsSalesInquiries,
 } from "@shared/schema";
@@ -60,13 +61,25 @@ const isPlatformOwner = (context: any) =>
   context.organizations.some((item: any) => item.role === "platform_owner");
 const ownOrg = (context: any, id: string) =>
   context.organizations.some((item: any) => item.organizationId === id);
-const ownsHotel = (context: any, id: string, organizationId: string) =>
+const ownsHotel = (
+  context: any,
+  id: string,
+  organizationId: string,
+  regionId?: string | null,
+) =>
   isPlatformOwner(context) ||
   context.organizations.some(
     (item: any) =>
       item.organizationId === organizationId &&
       item.role === "above_property_admin",
   ) ||
+  (Boolean(regionId) &&
+    context.organizations.some(
+      (item: any) =>
+        item.organizationId === organizationId &&
+        item.role === "regional_admin",
+    ) &&
+    context.regionMemberships.some((item: any) => item.regionId === regionId)) ||
   context.hotelMemberships.some((item: any) => item.hotelId === id);
 const reference = (type: string) =>
   `${type === "live_chat" ? "CHAT" : "TKT"}-${new Date().toISOString().slice(2, 10).replace(/-/g, "")}-${crypto.randomBytes(3).toString("hex").toUpperCase()}`;
@@ -663,6 +676,7 @@ export function registerHotelOperationsPhase2Routes(
           .object({
             organizationId: z.string().uuid(),
             hotelId: z.string().uuid().nullable().optional(),
+            regionIds: z.array(z.string().uuid()).max(25).default([]),
             email: z.string().email(),
             role: z.enum(HOTEL_OPS_ROLES).refine((v) => v !== "platform_owner"),
             moduleKeys: z.array(z.enum(HOTEL_OPS_MODULES)).default([]),
@@ -679,8 +693,9 @@ export function registerHotelOperationsPhase2Routes(
           return res.status(404).json({ error: "organization_not_found" });
         if (!input.hotelId)
           return res.status(400).json({ error: "hotel_required_for_role" });
+        let selectedHotel: typeof hotelOpsHotels.$inferSelect | undefined;
         if (input.hotelId) {
-          const hotel = (
+          selectedHotel = (
             await db
               .select()
               .from(hotelOpsHotels)
@@ -692,11 +707,33 @@ export function registerHotelOperationsPhase2Routes(
               )
               .limit(1)
           )[0];
-          if (!hotel)
+          if (!selectedHotel)
             return res
               .status(400)
-              .json({ error: "hotel_organization_mismatch" });
+                .json({ error: "hotel_organization_mismatch" });
         }
+        const selectedRegions = input.regionIds.length
+          ? await db
+              .select()
+              .from(hotelOpsRegions)
+              .where(
+                and(
+                  eq(hotelOpsRegions.organizationId, org.id),
+                  eq(hotelOpsRegions.status, "active"),
+                  inArray(hotelOpsRegions.id, input.regionIds),
+                ),
+              )
+          : [];
+        if (
+          input.role === "regional_admin" &&
+          (selectedRegions.length !== new Set(input.regionIds).size ||
+            input.regionIds.length === 0 ||
+            !selectedHotel?.regionId ||
+            !input.regionIds.includes(selectedHotel.regionId))
+        )
+          return res.status(400).json({ error: "invalid_regional_scope" });
+        if (input.role !== "regional_admin" && input.regionIds.length)
+          return res.status(400).json({ error: "regions_not_valid_for_role" });
         const token = randomToken(),
           expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000);
         const [invitation] = await db
@@ -707,6 +744,7 @@ export function registerHotelOperationsPhase2Routes(
             email: normalizeEmail(input.email),
             role: input.role,
             moduleKeys: input.moduleKeys,
+            regionIds: input.regionIds,
             tokenHash: hashToken(token),
             expiresAt,
             invitedByAccountId: req.hotelOps.account.id,
@@ -719,7 +757,7 @@ export function registerHotelOperationsPhase2Routes(
           const acceptance = await sendPortalEmail(
             input.email,
             "You're invited to INNTRIX",
-            `You have been invited to join ${org.name} in INNTRIX. This secure invitation expires in 72 hours.`,
+            `You have been invited to join ${org.name} in INNTRIX${selectedRegions.length ? ` for ${selectedRegions.map((region) => region.name).join(", ")}` : ""}. This secure invitation expires in 72 hours.`,
             link,
           );
           emailAccepted = true;
@@ -974,7 +1012,12 @@ export function registerHotelOperationsPhase2Routes(
           )[0];
           if (
             !hotel ||
-            !ownsHotel(req.hotelOps, input.hotelId, input.organizationId)
+            !ownsHotel(
+              req.hotelOps,
+              input.hotelId,
+              input.organizationId,
+              hotel.regionId,
+            )
           )
             return res.status(403).json({ error: "hotel_access_denied" });
         }

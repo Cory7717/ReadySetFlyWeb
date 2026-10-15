@@ -6830,6 +6830,65 @@ export const hotelOpsOrganizationMemberships = pgTable(
   ],
 );
 
+export const hotelOpsRegions = pgTable(
+  "hotel_ops_regions",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    organizationId: varchar("organization_id")
+      .notNull()
+      .references(() => hotelOpsOrganizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    code: varchar("code", { length: 40 }),
+    status: text("status").notNull().default("active"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("uniq_hotel_ops_region_name").on(
+      table.organizationId,
+      table.name,
+    ),
+    uniqueIndex("uniq_hotel_ops_region_code").on(
+      table.organizationId,
+      table.code,
+    ).where(sql`${table.code} IS NOT NULL`),
+    index("idx_hotel_ops_regions_org_status").on(
+      table.organizationId,
+      table.status,
+    ),
+  ],
+);
+
+export const hotelOpsRegionMemberships = pgTable(
+  "hotel_ops_region_memberships",
+  {
+    id: varchar("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()`),
+    regionId: varchar("region_id")
+      .notNull()
+      .references(() => hotelOpsRegions.id, { onDelete: "cascade" }),
+    accountId: varchar("account_id")
+      .notNull()
+      .references(() => hotelOpsAccounts.id, { onDelete: "cascade" }),
+    status: text("status").notNull().default("active"),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+    updatedAt: timestamp("updated_at").notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("uniq_hotel_ops_region_membership").on(
+      table.regionId,
+      table.accountId,
+    ),
+    index("idx_hotel_ops_region_membership_account").on(
+      table.accountId,
+      table.status,
+    ),
+  ],
+);
+
 export const hotelOpsHotels = pgTable(
   "hotel_ops_hotels",
   {
@@ -6839,6 +6898,9 @@ export const hotelOpsHotels = pgTable(
     organizationId: varchar("organization_id")
       .notNull()
       .references(() => hotelOpsOrganizations.id, { onDelete: "cascade" }),
+    regionId: varchar("region_id").references(() => hotelOpsRegions.id, {
+      onDelete: "set null",
+    }),
     propertyCode: varchar("property_code", { length: 40 }).notNull(),
     name: text("name").notNull(),
     brand: text("brand"),
@@ -6892,6 +6954,7 @@ export const hotelOpsHotels = pgTable(
       table.organizationId,
       table.status,
     ),
+    index("idx_hotel_ops_hotels_region").on(table.regionId, table.status),
   ],
 );
 
@@ -6966,6 +7029,9 @@ export const hotelOpsInvitations = pgTable(
     email: varchar("email", { length: 320 }).notNull(),
     role: text("role").notNull(),
     moduleKeys: jsonb("module_keys")
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    regionIds: jsonb("region_ids")
       .notNull()
       .default(sql`'[]'::jsonb`),
     tokenHash: varchar("token_hash", { length: 64 }).notNull().unique(),

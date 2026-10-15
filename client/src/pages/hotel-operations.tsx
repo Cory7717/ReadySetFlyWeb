@@ -74,6 +74,13 @@ type HotelRecord = {
   timeZone: string;
   roomCount?: number | null;
   status: string;
+  regionId?: string | null;
+};
+type RegionRecord = {
+  id: string;
+  name: string;
+  code?: string | null;
+  status: string;
 };
 type Dashboard = {
   organization: { id: string; name: string; isDemo: boolean };
@@ -81,6 +88,7 @@ type Dashboard = {
   canUseAllProperties: boolean;
   selectedHotelId: string | null;
   hotels: HotelRecord[];
+  regions: RegionRecord[];
   permissions: Array<{
     hotelId: string;
     moduleKey: string;
@@ -174,6 +182,7 @@ type NavigationItem = {
   requiresPortfolioAdmin?: boolean;
   requiresTeamAdmin?: boolean;
   requiresPlatformOwner?: boolean;
+  requiresRegionalOrPortfolio?: boolean;
 };
 type NavigationGroup = {
   id: string;
@@ -364,7 +373,7 @@ const AUTHENTICATED_NAVIGATION: NavigationGroup[] = [
         icon: ShieldCheck,
         availability: "available",
         tab: "audit",
-        requiresPortfolioAdmin: true,
+        requiresRegionalOrPortfolio: true,
       },
       { id: "report-automation", label: "Report Automation", icon: FileSpreadsheet, availability: "planned" },
       { id: "subscription-billing", label: "Subscription & Billing", icon: Banknote, availability: "planned" },
@@ -416,6 +425,7 @@ const PORTAL_PAGE_BRANDING: Record<
 const ROLE_NAMES: Record<string, string> = {
   platform_owner: "Platform Owner",
   above_property_admin: "Above Property Admin",
+  regional_admin: "Regional Administrator / RVP",
   property_admin: "Property Admin / GM",
   property_manager: "Property Manager",
   property_employee: "Property Employee",
@@ -1167,14 +1177,181 @@ function HotelForm({
   );
 }
 
+function RegionManagement({
+  organizationId,
+  hotels,
+  onChanged,
+}: {
+  organizationId: string;
+  hotels: HotelRecord[];
+  onChanged: () => void;
+}) {
+  const [data, setData] = useState<any>({ regions: [], unassignedHotels: [] });
+  const [name, setName] = useState("");
+  const [code, setCode] = useState("");
+  const [edits, setEdits] = useState<Record<string, string>>({});
+  const [error, setError] = useState("");
+  const load = () =>
+    portalFetch(`/regions?organizationId=${encodeURIComponent(organizationId)}`)
+      .then((result) => {
+        setData(result);
+        setError("");
+      })
+      .catch((reason) => setError(reason.message));
+  useEffect(() => {
+    void load();
+  }, [organizationId]);
+  async function createRegion(event: FormEvent) {
+    event.preventDefault();
+    try {
+      await portalFetch("/regions", {
+        method: "POST",
+        body: JSON.stringify({ organizationId, name, code: code || null }),
+      });
+      setName("");
+      setCode("");
+      await load();
+      onChanged();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to create region");
+    }
+  }
+  async function updateRegion(region: any, values: Record<string, unknown>) {
+    try {
+      await portalFetch(`/regions/${encodeURIComponent(region.id)}`, {
+        method: "PATCH",
+        body: JSON.stringify({ organizationId, ...values }),
+      });
+      await load();
+      onChanged();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to update region");
+    }
+  }
+  async function assignHotel(hotelId: string, regionId: string | null) {
+    try {
+      await portalFetch(`/hotels/${encodeURIComponent(hotelId)}/region`, {
+        method: "PATCH",
+        body: JSON.stringify({ organizationId, regionId }),
+      });
+      await load();
+      onChanged();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "Unable to assign hotel");
+    }
+  }
+  return (
+    <section className="rounded-2xl border border-[#d9d1c2] bg-white p-5">
+      <h3 className="font-semibold">Regional portfolio structure</h3>
+      <p className="mt-1 text-sm text-[#687671]">
+        Regions belong to this organization. Moving a hotel updates RVP access
+        immediately without changing the hotel’s historical records.
+      </p>
+      <form onSubmit={createRegion} className="mt-4 grid gap-3 sm:grid-cols-[1fr_180px_auto]">
+        <input
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          required
+          minLength={2}
+          placeholder="Region name"
+          className="rounded-md border border-[#d8d1c4] px-3 py-2"
+        />
+        <input
+          value={code}
+          onChange={(event) => setCode(event.target.value)}
+          placeholder="Code (optional)"
+          className="rounded-md border border-[#d8d1c4] px-3 py-2"
+        />
+        <Button className="bg-[#184f46]">Create region</Button>
+      </form>
+      {error && <p className="mt-3 text-sm text-red-700">{error}</p>}
+      <div className="mt-5 grid gap-3">
+        {data.regions.map((region: any) => (
+          <div key={region.id} className="rounded-xl border border-[#ddd7cb] p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <b>{region.name}</b>
+                <div className="text-xs text-[#6b7974]">
+                  {region.code || "No code"} · {region.hotels.length} properties ·{" "}
+                  {region.status}
+                </div>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  void updateRegion(region, {
+                    status: region.status === "active" ? "inactive" : "active",
+                  })
+                }
+              >
+                {region.status === "active" ? "Deactivate" : "Activate"}
+              </Button>
+            </div>
+            <div className="mt-3 flex gap-2">
+              <input
+                aria-label={`Rename ${region.name}`}
+                value={edits[region.id] ?? region.name}
+                onChange={(event) =>
+                  setEdits({ ...edits, [region.id]: event.target.value })
+                }
+                className="min-w-0 flex-1 rounded-md border px-3 py-2 text-sm"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() =>
+                  void updateRegion(region, {
+                    name: edits[region.id] ?? region.name,
+                  })
+                }
+              >
+                Save name
+              </Button>
+            </div>
+            <div className="mt-3 text-sm text-[#687671]">
+              RVPs: {region.administrators.map((admin: any) => admin.displayName).join(", ") || "None assigned"}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-5">
+        <h4 className="text-sm font-semibold">Hotel region assignments</h4>
+        <div className="mt-2 grid gap-2">
+          {hotels.map((hotel) => (
+            <label key={hotel.id} className="grid gap-2 rounded-lg bg-[#f6f3ec] p-3 text-sm sm:grid-cols-[1fr_220px] sm:items-center">
+              <span><b>{hotel.name}</b> · {hotel.propertyCode}</span>
+              <select
+                aria-label={`Region for ${hotel.name}`}
+                value={hotel.regionId || ""}
+                onChange={(event) => void assignHotel(hotel.id, event.target.value || null)}
+                className="rounded-md border bg-white px-3 py-2"
+              >
+                <option value="">Unassigned</option>
+                {data.regions.filter((region: any) => region.status === "active").map((region: any) => (
+                  <option key={region.id} value={region.id}>{region.name}</option>
+                ))}
+              </select>
+            </label>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function InviteForm({
   organizationId,
   hotels,
+  regions,
   actorRole,
   onChanged,
 }: {
   organizationId: string;
   hotels: HotelRecord[];
+  regions: RegionRecord[];
   actorRole: string;
   onChanged?: () => void;
 }) {
@@ -1189,11 +1366,19 @@ function InviteForm({
         : actorRole === "platform_owner"
           ? [
               ["above_property_admin", "Above Property Administrator"],
+              ["regional_admin", "Regional Administrator / RVP"],
               ["property_admin", "Property Admin / GM"],
               ["property_manager", "Property Manager"],
               ["property_employee", "Property Employee"],
             ]
-          : [
+          : actorRole === "above_property_admin"
+            ? [
+                ["regional_admin", "Regional Administrator / RVP"],
+                ["property_admin", "Property Admin / GM"],
+                ["property_manager", "Property Manager"],
+                ["property_employee", "Property Employee"],
+              ]
+            : [
               ["property_admin", "Property Admin / GM"],
               ["property_manager", "Property Manager"],
               ["property_employee", "Property Employee"],
@@ -1203,12 +1388,30 @@ function InviteForm({
     role: roleOptions[0][0],
     hotelId: hotels[0]?.id || "",
     moduleKeys: [] as string[],
+    regionIds: [] as string[],
   });
   const [message, setMessage] = useState("");
+  const selectableHotels =
+    form.role === "regional_admin"
+      ? hotels.filter(
+          (hotel) => hotel.regionId && form.regionIds.includes(hotel.regionId),
+        )
+      : hotels;
   useEffect(() => {
-    if (!form.hotelId && hotels[0])
-      setForm((value) => ({ ...value, hotelId: hotels[0].id }));
+    if (!hotels.some((hotel) => hotel.id === form.hotelId))
+      setForm((value) => ({
+        ...value,
+        hotelId: hotels[0]?.id || "",
+        regionIds: [],
+      }));
   }, [hotels, form.hotelId]);
+  useEffect(() => {
+    setForm((value) => ({
+      ...value,
+      hotelId: hotels[0]?.id || "",
+      regionIds: [],
+    }));
+  }, [organizationId]);
   async function submit(event: FormEvent) {
     event.preventDefault();
     setMessage("");
@@ -1261,7 +1464,15 @@ function InviteForm({
         <select
           className="h-10 rounded-md border border-[#d8d1c4] bg-white px-3"
           value={form.role}
-          onChange={(e) => setForm({ ...form, role: e.target.value })}
+          onChange={(e) =>
+            setForm({
+              ...form,
+              role: e.target.value,
+              regionIds:
+                e.target.value === "regional_admin" ? form.regionIds : [],
+              hotelId: "",
+            })
+          }
         >
           {roleOptions.map(([value, label]) => (
             <option value={value} key={value}>
@@ -1270,19 +1481,64 @@ function InviteForm({
           ))}
         </select>
       </label>
+      {form.role === "regional_admin" && (
+        <fieldset className="md:col-span-3">
+          <legend className="mb-2 text-sm font-semibold">
+            Authorized regions
+          </legend>
+          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {regions.filter((region) => region.status === "active").map((region) => (
+              <label
+                key={region.id}
+                className="flex items-center gap-2 rounded-lg border border-[#ddd7cb] p-2 text-sm"
+              >
+                <input
+                  type="checkbox"
+                  checked={form.regionIds.includes(region.id)}
+                  onChange={(event) => {
+                    const regionIds = event.target.checked
+                      ? [...form.regionIds, region.id]
+                      : form.regionIds.filter((id) => id !== region.id);
+                    setForm({
+                      ...form,
+                      regionIds,
+                      hotelId: hotels.some(
+                        (hotel) =>
+                          hotel.id === form.hotelId &&
+                          hotel.regionId &&
+                          regionIds.includes(hotel.regionId),
+                      )
+                        ? form.hotelId
+                        : "",
+                    });
+                  }}
+                />
+                {region.name}
+              </label>
+            ))}
+          </div>
+          {regions.length === 0 && (
+            <p className="mt-2 text-sm text-amber-800">
+              Create and assign a region before inviting an RVP.
+            </p>
+          )}
+        </fieldset>
+      )}
       <label className="grid gap-1.5 text-sm font-medium">
         <span>
-          {form.role === "above_property_admin" ? "Initial property" : "Hotel"}
+          {["above_property_admin", "regional_admin"].includes(form.role)
+            ? "Initial property"
+            : "Hotel"}
         </span>
         <select
           className="h-10 rounded-md border border-[#d8d1c4] bg-white px-3"
           value={form.hotelId}
           onChange={(e) => setForm({ ...form, hotelId: e.target.value })}
           required
-          disabled={hotels.length === 0}
+          disabled={selectableHotels.length === 0}
         >
           <option value="">Select hotel</option>
-          {hotels.map((hotel) => (
+          {selectableHotels.map((hotel) => (
             <option value={hotel.id} key={hotel.id}>
               {hotel.name}
             </option>
@@ -1330,7 +1586,13 @@ function InviteForm({
         </p>
       )}
       <div className="md:col-span-3">
-        <Button className="bg-[#184f46]" disabled={hotels.length === 0}>
+        <Button
+          className="bg-[#184f46]"
+          disabled={
+            hotels.length === 0 ||
+            (form.role === "regional_admin" && selectableHotels.length === 0)
+          }
+        >
           <UserPlus size={16} /> Send invitation
         </Button>
       </div>
@@ -1341,17 +1603,20 @@ function InviteForm({
 function TeamPanel({
   organizationId,
   hotels,
+  regions,
   actorRole,
 }: {
   organizationId: string;
   hotels: HotelRecord[];
+  regions: RegionRecord[];
   actorRole: string;
 }) {
   const [data, setData] = useState<{
     portfolioMembers: any[];
+    regionalMembers: any[];
     members: any[];
     invitations: any[];
-  }>({ portfolioMembers: [], members: [], invitations: [] });
+  }>({ portfolioMembers: [], regionalMembers: [], members: [], invitations: [] });
   const [error, setError] = useState("");
   const load = () =>
     portalFetch(`/team?organizationId=${encodeURIComponent(organizationId)}`)
@@ -1404,6 +1669,28 @@ function TeamPanel({
       );
     }
   }
+  async function toggleRegionalAssignment(member: any, region: RegionRecord) {
+    const assigned = member.regions.some((item: any) => item.id === region.id);
+    try {
+      await portalFetch(
+        `/regions/${encodeURIComponent(region.id)}/members/${encodeURIComponent(member.id)}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            organizationId,
+            status: assigned ? "inactive" : "active",
+          }),
+        },
+      );
+      await load();
+    } catch (reason) {
+      setError(
+        reason instanceof Error
+          ? reason.message
+          : "Unable to change regional access",
+      );
+    }
+  }
   return (
     <div className="space-y-5">
       {error && (
@@ -1412,6 +1699,7 @@ function TeamPanel({
       <InviteForm
         organizationId={organizationId}
         hotels={hotels}
+        regions={regions}
         actorRole={actorRole}
         onChanged={load}
       />
@@ -1442,6 +1730,39 @@ function TeamPanel({
                 )}
             </div>
           ))}
+          {data.regionalMembers.map((member) => (
+            <div
+              key={`region-${member.id}`}
+              className="rounded-lg bg-[#f6f3ec] p-3 text-sm"
+            >
+              <b>{member.displayName}</b>
+              <div className="text-[#6b7974]">
+                {member.email} · {ROLE_NAMES[member.role]} ·{" "}
+                {member.regions.map((region: any) => region.name).join(", ") ||
+                  "No active regions"}
+              </div>
+              {["platform_owner", "above_property_admin"].includes(actorRole) && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {regions.filter((region) => region.status === "active").map((region) => {
+                    const assigned = member.regions.some(
+                      (item: any) => item.id === region.id,
+                    );
+                    return (
+                      <Button
+                        key={region.id}
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => void toggleRegionalAssignment(member, region)}
+                      >
+                        {assigned ? `Remove ${region.name}` : `Add ${region.name}`}
+                      </Button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          ))}
           {data.members.map((member) => (
             <div
               key={`${member.id}-${member.hotelId}`}
@@ -1466,7 +1787,7 @@ function TeamPanel({
               </Button>
             </div>
           ))}
-          {data.portfolioMembers.length + data.members.length === 0 && (
+          {data.portfolioMembers.length + data.regionalMembers.length + data.members.length === 0 && (
             <p className="text-sm text-[#6b7974]">
               No team members have accepted invitations yet.
             </p>
@@ -1569,6 +1890,9 @@ function DashboardView({
   const [hotelId, setHotelId] = useState(
     initialDashboardParams.get("hotelId") || "all",
   );
+  const [regionId, setRegionId] = useState(
+    initialDashboardParams.get("regionId") || "all",
+  );
   const [tab, setTab] = useState<PortalTab>("overview");
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
@@ -1624,9 +1948,20 @@ function DashboardView({
     [
       "platform_owner",
       "above_property_admin",
+      "regional_admin",
       "property_admin",
       "property_manager",
     ].includes(dashboard.role);
+  const canRegionalAudit =
+    dashboard &&
+    ["platform_owner", "above_property_admin", "regional_admin"].includes(
+      dashboard.role,
+    );
+  const contextHotels = dashboard
+    ? regionId === "all"
+      ? dashboard.hotels
+      : dashboard.hotels.filter((hotel) => hotel.regionId === regionId)
+    : [];
   const activeHotel = dashboard?.hotels.find((hotel) => hotel.id === hotelId);
   const visibleModules = dashboard
     ? dashboard.canUseAllProperties
@@ -1647,6 +1982,7 @@ function DashboardView({
     if (!dashboard) return false;
     if (item.requiresPlatformOwner && !isPlatformOwner) return false;
     if (item.requiresPortfolioAdmin && !canPortfolioAdmin) return false;
+    if (item.requiresRegionalOrPortfolio && !canRegionalAudit) return false;
     if (item.requiresTeamAdmin && !canTeamAdmin) return false;
     if (!item.moduleKey || dashboard.canUseAllProperties) return true;
     return dashboard.permissions.some(
@@ -1727,6 +2063,7 @@ function DashboardView({
                 onChange={(event) => {
                   setOrganizationId(event.target.value);
                   setHotelId("all");
+                  setRegionId("all");
                 }}
                 className="mt-2 w-full rounded-lg border border-white/20 bg-white/10 px-2 py-2 text-sm"
               >
@@ -1931,6 +2268,25 @@ function DashboardView({
                       : `${dashboard.organization.name} · All authorized properties`}
                   </p>
                 </div>
+                <div className="flex flex-wrap gap-3">
+                {dashboard.regions.length > 0 && (
+                  <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-[#61716c]">
+                    <span>Region context</span>
+                    <select
+                      className="min-w-52 rounded-lg border border-[#d3ccbf] bg-white px-3 py-2 text-sm normal-case tracking-normal"
+                      value={regionId}
+                      onChange={(event) => {
+                        setRegionId(event.target.value);
+                        setHotelId("all");
+                      }}
+                    >
+                      <option value="all">All authorized regions</option>
+                      {dashboard.regions.map((region) => (
+                        <option key={region.id} value={region.id}>{region.name}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
                 <label className="grid gap-1 text-xs font-semibold uppercase tracking-wide text-[#61716c]">
                   <span>Property context</span>
                   <select
@@ -1941,13 +2297,14 @@ function DashboardView({
                     {dashboard.canUseAllProperties && (
                       <option value="all">All authorized properties</option>
                     )}
-                    {dashboard.hotels.map((hotel) => (
+                    {contextHotels.map((hotel) => (
                       <option value={hotel.id} key={hotel.id}>
                         {hotel.name} · {hotel.propertyCode}
                       </option>
                     ))}
                   </select>
                 </label>
+                </div>
               </div>
               {tab === "overview" && (
                 <>
@@ -2162,10 +2519,17 @@ function DashboardView({
                     </div>
                   )}
                   {canPortfolioAdmin && (
-                    <HotelForm
-                      organizationId={organizationId}
-                      onCreated={() => void load()}
-                    />
+                    <>
+                      <RegionManagement
+                        organizationId={organizationId}
+                        hotels={dashboard.hotels}
+                        onChanged={() => void load()}
+                      />
+                      <HotelForm
+                        organizationId={organizationId}
+                        onCreated={() => void load()}
+                      />
+                    </>
                   )}
                 </div>
               )}
@@ -2174,6 +2538,7 @@ function DashboardView({
                   <TeamPanel
                     organizationId={organizationId}
                     hotels={dashboard.hotels}
+                    regions={dashboard.regions}
                     actorRole={dashboard.role}
                   />
                 ) : (
@@ -2182,7 +2547,7 @@ function DashboardView({
                     or portfolio administrator.
                   </div>
                 ))}
-              {tab === "audit" && canPortfolioAdmin && (
+              {tab === "audit" && canRegionalAudit && (
                 <AuditPanel organizationId={organizationId} />
               )}
             </>
@@ -2272,7 +2637,7 @@ function TokenPage({
           <p className="mt-2 text-sm text-[#66746f]">
             {mode === "support"
               ? `Join the platform support team as ${meta.role === "support_administrator" ? "Support Administrator" : "Support Specialist"}.`
-              : `Join ${meta.organizationName}${meta.hotelName ? ` at ${meta.hotelName}` : ""} as ${ROLE_NAMES[meta.role] || meta.role}.`}
+              : `Join ${meta.organizationName}${meta.regionNames?.length ? ` for ${meta.regionNames.join(", ")}` : ""}${meta.hotelName ? ` at ${meta.hotelName}` : ""} as ${ROLE_NAMES[meta.role] || meta.role}.`}
           </p>
         )}
         <div className="mt-6 grid gap-4">

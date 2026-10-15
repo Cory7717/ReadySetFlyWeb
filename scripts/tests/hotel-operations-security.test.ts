@@ -7,6 +7,10 @@ import { readFileSync } from "node:fs";
 test("hotel operations roles cannot escalate privilege", () => {
   assert.equal(canInviteHotelOpsRole("platform_owner", "above_property_admin"), true);
   assert.equal(canInviteHotelOpsRole("above_property_admin", "platform_owner"), false);
+  assert.equal(canInviteHotelOpsRole("above_property_admin", "regional_admin"), true);
+  assert.equal(canInviteHotelOpsRole("regional_admin", "property_admin"), true);
+  assert.equal(canInviteHotelOpsRole("regional_admin", "regional_admin"), false);
+  assert.equal(canInviteHotelOpsRole("regional_admin", "above_property_admin"), false);
   assert.equal(canInviteHotelOpsRole("property_admin", "above_property_admin"), false);
   assert.equal(canInviteHotelOpsRole("property_manager", "property_employee"), true);
   assert.equal(canInviteHotelOpsRole("property_manager", "property_manager"), false);
@@ -19,6 +23,8 @@ test("property-scoped roles cannot access another hotel", () => {
   assert.equal(canAccessHotelOpsProperty("property_employee", [], "hotel-a"), false);
   assert.equal(canAccessHotelOpsProperty("above_property_admin", [], "hotel-b"), true);
   assert.equal(canAccessHotelOpsProperty("platform_owner", [], "hotel-b"), true);
+  assert.equal(canAccessHotelOpsProperty("regional_admin", ["hotel-a"], "hotel-a"), true);
+  assert.equal(canAccessHotelOpsProperty("regional_admin", ["hotel-a"], "hotel-b"), false);
 });
 
 test("post-login redirects remain inside the hotel operations portal", () => {
@@ -91,15 +97,93 @@ test("hotel operations onboarding is explicitly organization and property scoped
 
   assert.match(routes, /function selectedOrg\(context: HotelOpsContext/);
   assert.match(routes, /organizationId: z\.string\(\)\.uuid\(\),\s*email:/);
-  assert.match(routes, /"above_property_admin",\s*"property_admin"/);
+  assert.match(routes, /"above_property_admin",\s*"regional_admin",\s*"property_admin"/);
   assert.match(routes, /invitation\.role !== "above_property_admin"/);
   assert.match(routes, /invitation_property_scope_required/);
   assert.match(routes, /returnTo: `\/hoteloperations\/dashboard\?\$\{returnParams\.toString\(\)\}`/);
   assert.match(phase2, /role: "platform_owner"/);
   assert.match(phase2, /hotel_required_for_role/);
-  assert.match(portal, /organizationId,\s*hotels,\s*actorRole/);
+  assert.match(portal, /organizationId,\s*hotels,\s*regions,\s*actorRole/);
   assert.match(portal, /Create at least one hotel and property code/);
   assert.match(portal, /initial property context/);
   assert.match(portal, /\[organizationId\]/);
   assert.match(portal, /result\?\.returnTo \|\| "\/hoteloperations\/dashboard"/);
+});
+
+test("regional portfolio scope is additive and backend enforced", () => {
+  const migration = readFileSync(
+    "migrations/0158_add_hotel_operations_regions.sql",
+    "utf8",
+  );
+  const schema = readFileSync("shared/schema.ts", "utf8");
+  const policy = readFileSync("server/hotelOperationsPolicy.ts", "utf8");
+  const routes = readFileSync("server/routes/hotelOperations.ts", "utf8");
+  const phase2 = readFileSync("server/routes/hotelOperationsPhase2.ts", "utf8");
+  const portal = readFileSync("client/src/pages/hotel-operations.tsx", "utf8");
+
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS hotel_ops_regions/);
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS hotel_ops_region_memberships/);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS region_id/);
+  assert.match(migration, /ADD COLUMN IF NOT EXISTS region_ids jsonb/);
+  assert.match(schema, /export const hotelOpsRegions/);
+  assert.match(schema, /export const hotelOpsRegionMemberships/);
+  assert.match(policy, /"regional_admin"/);
+  assert.match(routes, /async function authorizedRegions/);
+  assert.match(routes, /membership\.role === "regional_admin"/);
+  assert.match(routes, /initial_hotel_must_match_region/);
+  assert.match(routes, /invitation_region_scope_changed/);
+  assert.match(routes, /region_hotel_mismatch/);
+  assert.match(routes, /regional_invitation_denied/);
+  assert.match(routes, /hotel_region_reassigned/);
+  assert.match(routes, /regional_access_updated/);
+  assert.match(phase2, /context\.regionMemberships/);
+  assert.match(portal, /Regional Administrator \/ RVP/);
+  assert.match(portal, /Regional portfolio structure/);
+  assert.match(portal, /All authorized regions/);
+});
+
+test("regional access isolates a representative 100-property portfolio", () => {
+  const organizationAHotels = Array.from({ length: 100 }, (_, index) =>
+    `org-a-hotel-${index + 1}`,
+  );
+  const rvpAHotels = organizationAHotels.slice(0, 10);
+  const rvpBHotels = organizationAHotels.slice(10, 20);
+  const organizationBHotel = "org-b-hotel-1";
+
+  assert.equal(
+    canAccessHotelOpsProperty(
+      "above_property_admin",
+      organizationAHotels,
+      organizationAHotels[99],
+    ),
+    true,
+  );
+  assert.equal(
+    canAccessHotelOpsProperty("regional_admin", rvpAHotels, rvpAHotels[4]),
+    true,
+  );
+  assert.equal(
+    canAccessHotelOpsProperty("regional_admin", rvpAHotels, rvpBHotels[0]),
+    false,
+  );
+  assert.equal(
+    canAccessHotelOpsProperty("regional_admin", rvpAHotels, organizationBHotel),
+    false,
+  );
+
+  const movedHotel = rvpAHotels[0];
+  const rvpAAfterMove = rvpAHotels.filter((id) => id !== movedHotel);
+  const rvpBAfterMove = [...rvpBHotels, movedHotel];
+  assert.equal(
+    canAccessHotelOpsProperty("regional_admin", rvpAAfterMove, movedHotel),
+    false,
+  );
+  assert.equal(
+    canAccessHotelOpsProperty("regional_admin", rvpBAfterMove, movedHotel),
+    true,
+  );
+  assert.equal(
+    canAccessHotelOpsProperty("property_admin", [movedHotel], movedHotel),
+    true,
+  );
 });

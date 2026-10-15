@@ -17,6 +17,8 @@ import {
   hotelOpsOrganizationMemberships,
   hotelOpsOrganizations,
   hotelOpsPasswordResets,
+  hotelOpsRegionMemberships,
+  hotelOpsRegions,
   hotelOpsReportingConfigurations,
   hotelOpsSessions,
   hotelOpsSupportSpecialists,
@@ -98,6 +100,7 @@ type HotelOpsContext = {
     }
   >;
   hotelMemberships: Array<typeof hotelOpsHotelMemberships.$inferSelect>;
+  regionMemberships: Array<typeof hotelOpsRegionMemberships.$inferSelect>;
   session: typeof hotelOpsSessions.$inferSelect;
   supportRole: string | null;
 };
@@ -198,6 +201,15 @@ const requirePortalSession: RequestHandler = async (req: any, res, next) => {
           eq(hotelOpsHotelMemberships.status, "active"),
         ),
       );
+    const regionMemberships = await db
+      .select()
+      .from(hotelOpsRegionMemberships)
+      .where(
+        and(
+          eq(hotelOpsRegionMemberships.accountId, portalSession.accountId),
+          eq(hotelOpsRegionMemberships.status, "active"),
+        ),
+      );
     const supportAccess = await db
       .select()
       .from(hotelOpsSupportSpecialists)
@@ -217,6 +229,7 @@ const requirePortalSession: RequestHandler = async (req: any, res, next) => {
         organization: row.organization,
       })),
       hotelMemberships,
+      regionMemberships,
       session: portalSession,
       supportRole: supportAccess[0]?.supportRole || null,
     } satisfies HotelOpsContext;
@@ -262,6 +275,44 @@ function canSeeAllHotels(role: string) {
   return role === "platform_owner" || role === "above_property_admin";
 }
 
+function canUseAuthorizedPortfolioView(role: string) {
+  return canSeeAllHotels(role) || role === "regional_admin";
+}
+
+function organizationRoleRank(role: string) {
+  return {
+    platform_owner: 4,
+    above_property_admin: 3,
+    regional_admin: 2,
+    property_admin: 1,
+    property_manager: 1,
+    property_employee: 1,
+  }[role] || 0;
+}
+
+async function authorizedRegions(
+  context: HotelOpsContext,
+  organizationId: string,
+) {
+  const membership = context.organizations.find(
+    (item) => item.organizationId === organizationId,
+  );
+  if (!membership) return [];
+  const regions = await db
+    .select()
+    .from(hotelOpsRegions)
+    .where(eq(hotelOpsRegions.organizationId, organizationId))
+    .orderBy(asc(hotelOpsRegions.name));
+  if (canSeeAllHotels(membership.role)) return regions;
+  if (membership.role !== "regional_admin") return [];
+  const allowed = new Set(
+    context.regionMemberships.map((item) => item.regionId),
+  );
+  return regions.filter(
+    (region) => region.status === "active" && allowed.has(region.id),
+  );
+}
+
 async function authorizedHotels(
   context: HotelOpsContext,
   organizationId: string,
@@ -276,6 +327,16 @@ async function authorizedHotels(
     .where(eq(hotelOpsHotels.organizationId, organizationId))
     .orderBy(asc(hotelOpsHotels.name));
   if (canSeeAllHotels(membership.role)) return all;
+  if (membership.role === "regional_admin") {
+    const regionIds = new Set(
+      (await authorizedRegions(context, organizationId)).map(
+        (region) => region.id,
+      ),
+    );
+    return all.filter(
+      (hotel) => hotel.regionId && regionIds.has(hotel.regionId),
+    );
+  }
   const allowedIds = context.hotelMemberships.map((item) => item.hotelId);
   return all.filter((hotel) =>
     canAccessHotelOpsProperty(membership.role, allowedIds, hotel.id),
@@ -372,6 +433,7 @@ const inviteSchema = z.object({
   email: z.string().email(),
   role: z.enum(HOTEL_OPS_ROLES),
   hotelId: z.string().uuid().optional().nullable(),
+  regionIds: z.array(z.string().uuid()).max(25).default([]),
   moduleKeys: z.array(z.enum(HOTEL_OPS_MODULES)).default([]),
 });
 
@@ -582,9 +644,11 @@ export function registerHotelOperationsRoutes(app: Express) {
     if (!membership)
       return res.status(403).json({ error: "organization_access_denied" });
     const hotels = await authorizedHotels(context, selectedOrganizationId);
+    const regions = await authorizedRegions(context, selectedOrganizationId);
     const rawRequestedHotelId = String(req.query.hotelId || "");
     const requestedHotelId =
-      rawRequestedHotelId === "all" && !canSeeAllHotels(membership.role)
+      rawRequestedHotelId === "all" &&
+      !canUseAuthorizedPortfolioView(membership.role)
         ? hotels[0]?.id || ""
         : rawRequestedHotelId;
     if (
@@ -593,10 +657,20 @@ export function registerHotelOperationsRoutes(app: Express) {
       !hotels.some((hotel) => hotel.id === requestedHotelId)
     )
       return res.status(403).json({ error: "hotel_access_denied" });
-    const permissions = await db
-      .select()
-      .from(hotelOpsModulePermissions)
-      .where(eq(hotelOpsModulePermissions.accountId, context.account.id));
+    const permissions = hotels.length
+      ? await db
+          .select()
+          .from(hotelOpsModulePermissions)
+          .where(
+            and(
+              eq(hotelOpsModulePermissions.accountId, context.account.id),
+              inArray(
+                hotelOpsModulePermissions.hotelId,
+                hotels.map((hotel) => hotel.id),
+              ),
+            ),
+          )
+      : [];
     const portfolioMemberships = hotels.length
       ? await db
           .select()
@@ -629,11 +703,14 @@ export function registerHotelOperationsRoutes(app: Express) {
         isDemo: membership.organization.isDemo,
       },
       role: effectiveRole,
-      canUseAllProperties: canSeeAllHotels(membership.role),
+      canUseAllProperties: canUseAuthorizedPortfolioView(membership.role),
       selectedHotelId:
         requestedHotelId ||
-        (canSeeAllHotels(membership.role) ? "all" : hotels[0]?.id || null),
+        (canUseAuthorizedPortfolioView(membership.role)
+          ? "all"
+          : hotels[0]?.id || null),
       hotels,
+      regions,
       permissions,
       portfolio: {
         propertyCount: hotels.length,
@@ -648,6 +725,301 @@ export function registerHotelOperationsRoutes(app: Express) {
       },
     });
   });
+
+  router.get("/regions", requirePortalSession, async (req: any, res) => {
+    const context = req.hotelOps as HotelOpsContext;
+    const org = selectedOrg(context, req.query.organizationId);
+    if (!org)
+      return res.status(403).json({ error: "organization_access_denied" });
+    const regions = await authorizedRegions(context, org.organizationId);
+    const hotels = await authorizedHotels(context, org.organizationId);
+    const memberships = regions.length
+      ? await db
+          .select({
+            membership: hotelOpsRegionMemberships,
+            account: hotelOpsAccounts,
+          })
+          .from(hotelOpsRegionMemberships)
+          .innerJoin(
+            hotelOpsAccounts,
+            eq(hotelOpsAccounts.id, hotelOpsRegionMemberships.accountId),
+          )
+          .where(
+            inArray(
+              hotelOpsRegionMemberships.regionId,
+              regions.map((region) => region.id),
+            ),
+          )
+      : [];
+    res.json({
+      regions: regions.map((region) => ({
+        ...region,
+        hotels: hotels.filter((hotel) => hotel.regionId === region.id),
+        administrators: memberships
+          .filter(
+            (row) =>
+              row.membership.regionId === region.id &&
+              row.membership.status === "active",
+          )
+          .map((row) => ({
+            id: row.account.id,
+            displayName: row.account.displayName,
+            email: row.account.email,
+          })),
+      })),
+      unassignedHotels: hotels.filter((hotel) => !hotel.regionId),
+    });
+  });
+
+  router.post(
+    "/regions",
+    requirePortalSession,
+    requireCsrf,
+    async (req: any, res, next) => {
+      try {
+        const context = req.hotelOps as HotelOpsContext;
+        const input = z
+          .object({
+            organizationId: z.string().uuid(),
+            name: z.string().trim().min(2).max(120),
+            code: z.string().trim().max(40).optional().nullable(),
+          })
+          .parse(req.body);
+        const org = selectedOrg(context, input.organizationId);
+        if (!org || !canSeeAllHotels(org.role))
+          return res.status(403).json({ error: "region_create_denied" });
+        const [region] = await db
+          .insert(hotelOpsRegions)
+          .values({
+            organizationId: org.organizationId,
+            name: input.name,
+            code: input.code ? normalizePropertyCode(input.code) : null,
+          })
+          .returning();
+        await audit({
+          organizationId: org.organizationId,
+          actorAccountId: context.account.id,
+          action: "region_created",
+          targetType: "region",
+          targetId: region.id,
+          metadata: { name: region.name, code: region.code },
+        });
+        res.status(201).json({ region });
+      } catch (error) {
+        if (error instanceof z.ZodError)
+          return res.status(400).json({ error: "invalid_region" });
+        next(error);
+      }
+    },
+  );
+
+  router.patch(
+    "/regions/:id",
+    requirePortalSession,
+    requireCsrf,
+    async (req: any, res, next) => {
+      try {
+        const context = req.hotelOps as HotelOpsContext;
+        const input = z
+          .object({
+            organizationId: z.string().uuid(),
+            name: z.string().trim().min(2).max(120).optional(),
+            code: z.string().trim().max(40).optional().nullable(),
+            status: z.enum(["active", "inactive"]).optional(),
+          })
+          .parse(req.body);
+        const org = selectedOrg(context, input.organizationId);
+        if (!org || !canSeeAllHotels(org.role))
+          return res.status(403).json({ error: "region_update_denied" });
+        const [region] = await db
+          .update(hotelOpsRegions)
+          .set({
+            ...(input.name === undefined ? {} : { name: input.name }),
+            ...(input.code === undefined
+              ? {}
+              : {
+                  code: input.code ? normalizePropertyCode(input.code) : null,
+                }),
+            ...(input.status === undefined ? {} : { status: input.status }),
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(hotelOpsRegions.id, req.params.id),
+              eq(hotelOpsRegions.organizationId, org.organizationId),
+            ),
+          )
+          .returning();
+        if (!region)
+          return res.status(404).json({ error: "region_not_found" });
+        await audit({
+          organizationId: org.organizationId,
+          actorAccountId: context.account.id,
+          action: "region_updated",
+          targetType: "region",
+          targetId: region.id,
+          metadata: { changedFields: Object.keys(input) },
+        });
+        res.json({ region });
+      } catch (error) {
+        if (error instanceof z.ZodError)
+          return res.status(400).json({ error: "invalid_region" });
+        next(error);
+      }
+    },
+  );
+
+  router.patch(
+    "/hotels/:id/region",
+    requirePortalSession,
+    requireCsrf,
+    async (req: any, res, next) => {
+      try {
+        const context = req.hotelOps as HotelOpsContext;
+        const input = z
+          .object({
+            organizationId: z.string().uuid(),
+            regionId: z.string().uuid().nullable(),
+          })
+          .parse(req.body);
+        const org = selectedOrg(context, input.organizationId);
+        if (!org || !canSeeAllHotels(org.role))
+          return res.status(403).json({ error: "region_assignment_denied" });
+        const hotel = (
+          await db
+            .select()
+            .from(hotelOpsHotels)
+            .where(
+              and(
+                eq(hotelOpsHotels.id, req.params.id),
+                eq(hotelOpsHotels.organizationId, org.organizationId),
+              ),
+            )
+            .limit(1)
+        )[0];
+        if (!hotel) return res.status(404).json({ error: "hotel_not_found" });
+        if (input.regionId) {
+          const region = (
+            await db
+              .select()
+              .from(hotelOpsRegions)
+              .where(
+                and(
+                  eq(hotelOpsRegions.id, input.regionId),
+                  eq(hotelOpsRegions.organizationId, org.organizationId),
+                  eq(hotelOpsRegions.status, "active"),
+                ),
+              )
+              .limit(1)
+          )[0];
+          if (!region)
+            return res.status(400).json({ error: "region_hotel_mismatch" });
+        }
+        const previousRegionId = hotel.regionId;
+        const [updated] = await db
+          .update(hotelOpsHotels)
+          .set({ regionId: input.regionId, updatedAt: new Date() })
+          .where(eq(hotelOpsHotels.id, hotel.id))
+          .returning();
+        await audit({
+          organizationId: org.organizationId,
+          hotelId: hotel.id,
+          actorAccountId: context.account.id,
+          action: "hotel_region_reassigned",
+          targetType: "hotel",
+          targetId: hotel.id,
+          metadata: { previousRegionId, regionId: input.regionId },
+        });
+        res.json({ hotel: updated });
+      } catch (error) {
+        if (error instanceof z.ZodError)
+          return res.status(400).json({ error: "invalid_region_assignment" });
+        next(error);
+      }
+    },
+  );
+
+  router.patch(
+    "/regions/:id/members/:accountId",
+    requirePortalSession,
+    requireCsrf,
+    async (req: any, res, next) => {
+      try {
+        const context = req.hotelOps as HotelOpsContext;
+        const input = z
+          .object({
+            organizationId: z.string().uuid(),
+            status: z.enum(["active", "inactive"]),
+          })
+          .parse(req.body);
+        const org = selectedOrg(context, input.organizationId);
+        if (!org || !canSeeAllHotels(org.role))
+          return res.status(403).json({ error: "region_membership_denied" });
+        const region = (
+          await db
+            .select()
+            .from(hotelOpsRegions)
+            .where(
+              and(
+                eq(hotelOpsRegions.id, req.params.id),
+                eq(hotelOpsRegions.organizationId, org.organizationId),
+              ),
+            )
+            .limit(1)
+        )[0];
+        const target = (
+          await db
+            .select()
+            .from(hotelOpsOrganizationMemberships)
+            .where(
+              and(
+                eq(
+                  hotelOpsOrganizationMemberships.organizationId,
+                  org.organizationId,
+                ),
+                eq(
+                  hotelOpsOrganizationMemberships.accountId,
+                  req.params.accountId,
+                ),
+                eq(hotelOpsOrganizationMemberships.role, "regional_admin"),
+              ),
+            )
+            .limit(1)
+        )[0];
+        if (!region || !target)
+          return res.status(404).json({ error: "regional_assignment_not_found" });
+        if (input.status === "active" && region.status !== "active")
+          return res.status(409).json({ error: "region_inactive" });
+        await db
+          .insert(hotelOpsRegionMemberships)
+          .values({
+            regionId: region.id,
+            accountId: req.params.accountId,
+            status: input.status,
+          })
+          .onConflictDoUpdate({
+            target: [
+              hotelOpsRegionMemberships.regionId,
+              hotelOpsRegionMemberships.accountId,
+            ],
+            set: { status: input.status, updatedAt: new Date() },
+          });
+        await audit({
+          organizationId: org.organizationId,
+          actorAccountId: context.account.id,
+          action: "regional_access_updated",
+          targetType: "account",
+          targetId: req.params.accountId,
+          metadata: { regionId: region.id, status: input.status },
+        });
+        res.json({ ok: true });
+      } catch (error) {
+        if (error instanceof z.ZodError)
+          return res.status(400).json({ error: "invalid_region_membership" });
+        next(error);
+      }
+    },
+  );
 
   router.post(
     "/hotels",
@@ -849,11 +1221,30 @@ export function registerHotelOperationsRoutes(app: Express) {
     if (!rows[0])
       return res.status(404).json({ error: "invitation_invalid_or_expired" });
     const row = rows[0];
+    const regionIds = Array.isArray(row.invitation.regionIds)
+      ? (row.invitation.regionIds as string[])
+      : [];
+    const regions = regionIds.length
+      ? await db
+          .select({ id: hotelOpsRegions.id, name: hotelOpsRegions.name })
+          .from(hotelOpsRegions)
+          .where(
+            and(
+              eq(
+                hotelOpsRegions.organizationId,
+                row.invitation.organizationId,
+              ),
+              inArray(hotelOpsRegions.id, regionIds),
+            ),
+          )
+      : [];
     res.json({
       email: row.invitation.email,
       role: row.invitation.role,
       organizationName: row.organization.name,
       hotelName: row.hotel?.name || null,
+      regionIds,
+      regionNames: regions.map((region) => region.name),
       expiresAt: row.invitation.expiresAt,
     });
   });
@@ -881,9 +1272,12 @@ export function registerHotelOperationsRoutes(app: Express) {
           !canInviteHotelOpsRole(actorRole as HotelOpsRole, input.role)
         )
           return res.status(403).json({ error: "role_escalation_denied" });
+        if (input.role === "regional_admin" && !canSeeAllHotels(actorRole))
+          return res.status(403).json({ error: "regional_invitation_denied" });
         if (
           [
             "above_property_admin",
+            "regional_admin",
             "property_admin",
             "property_manager",
             "property_employee",
@@ -898,6 +1292,34 @@ export function registerHotelOperationsRoutes(app: Express) {
           : null;
         if (input.hotelId && !selectedHotel)
           return res.status(403).json({ error: "hotel_access_denied" });
+        const selectedRegions = input.regionIds.length
+          ? await db
+              .select()
+              .from(hotelOpsRegions)
+              .where(
+                and(
+                  eq(hotelOpsRegions.organizationId, org.organizationId),
+                  eq(hotelOpsRegions.status, "active"),
+                  inArray(hotelOpsRegions.id, input.regionIds),
+                ),
+              )
+          : [];
+        if (
+          input.role === "regional_admin" &&
+          (input.regionIds.length === 0 ||
+            selectedRegions.length !== new Set(input.regionIds).size)
+        )
+          return res.status(400).json({ error: "valid_regions_required" });
+        if (
+          input.role === "regional_admin" &&
+          (!selectedHotel?.regionId ||
+            !input.regionIds.includes(selectedHotel.regionId))
+        )
+          return res
+            .status(400)
+            .json({ error: "initial_hotel_must_match_region" });
+        if (input.role !== "regional_admin" && input.regionIds.length)
+          return res.status(400).json({ error: "regions_not_valid_for_role" });
         const token = randomToken();
         const expiresAt = new Date(Date.now() + INVITE_TTL_MS);
         const [invitation] = await db
@@ -908,6 +1330,7 @@ export function registerHotelOperationsRoutes(app: Express) {
             email: normalizeEmail(input.email),
             role: input.role,
             moduleKeys: input.moduleKeys,
+            regionIds: input.regionIds,
             tokenHash: hashToken(token),
             expiresAt,
             invitedByAccountId: context.account.id,
@@ -920,7 +1343,7 @@ export function registerHotelOperationsRoutes(app: Express) {
           const acceptance = await sendPortalEmail(
             input.email,
             "You're invited to INNTRIX",
-            `You have been invited to join ${org.organization.name} in INNTRIX${selectedHotel ? `, with ${selectedHotel.name} as your initial property context` : ""}. This secure invitation expires in 72 hours.`,
+            `You have been invited to join ${org.organization.name} in INNTRIX${selectedRegions.length ? ` for ${selectedRegions.map((region) => region.name).join(", ")}` : ""}${selectedHotel ? `, with ${selectedHotel.name} as your initial property context` : ""}. This secure invitation expires in 72 hours.`,
             link,
           );
           emailAccepted = true;
@@ -992,6 +1415,7 @@ export function registerHotelOperationsRoutes(app: Express) {
       return res.status(403).json({ error: "organization_access_denied" });
     const mayManageTeam =
       canSeeAllHotels(org.role) ||
+      org.role === "regional_admin" ||
       context.hotelMemberships.some(
         (item) =>
           item.role === "property_admin" || item.role === "property_manager",
@@ -1033,7 +1457,23 @@ export function registerHotelOperationsRoutes(app: Express) {
           ),
           eq(hotelOpsOrganizationMemberships.status, "active"),
         ),
-      );
+       );
+    const regionMemberships = await db
+      .select({
+        membership: hotelOpsRegionMemberships,
+        region: hotelOpsRegions,
+      })
+      .from(hotelOpsRegionMemberships)
+      .innerJoin(
+        hotelOpsRegions,
+        eq(hotelOpsRegions.id, hotelOpsRegionMemberships.regionId),
+      )
+      .where(eq(hotelOpsRegions.organizationId, org.organizationId));
+    const visibleRegionIds = new Set(
+      (await authorizedRegions(context, org.organizationId)).map(
+        (region) => region.id,
+      ),
+    );
     const permissions = hotels.length
       ? await db
           .select()
@@ -1069,7 +1509,27 @@ export function registerHotelOperationsRoutes(app: Express) {
           displayName: row.account.displayName,
           email: row.account.email,
           role: row.membership.role,
-        })),
+        }))
+        .filter(() => canSeeAllHotels(org.role)),
+      regionalMembers: organizationMembers
+        .filter((row) => row.membership.role === "regional_admin")
+        .map((row) => ({
+          id: row.account.id,
+          displayName: row.account.displayName,
+          email: row.account.email,
+          role: row.membership.role,
+          regions: regionMemberships
+            .filter(
+              (item) =>
+                item.membership.accountId === row.account.id &&
+                item.membership.status === "active" &&
+                visibleRegionIds.has(item.region.id),
+            )
+            .map((item) => ({ id: item.region.id, name: item.region.name })),
+        }))
+        .filter(
+          (row) => canSeeAllHotels(org.role) || row.regions.length > 0,
+        ),
       members: memberships
         .filter((row) => hotelIds.has(row.membership.hotelId))
         .map((row) => ({
@@ -1096,6 +1556,7 @@ export function registerHotelOperationsRoutes(app: Express) {
           email: invite.email,
           role: invite.role,
           hotelId: invite.hotelId,
+          regionIds: Array.isArray(invite.regionIds) ? invite.regionIds : [],
           expiresAt: invite.expiresAt,
         })),
     });
@@ -1124,6 +1585,14 @@ export function registerHotelOperationsRoutes(app: Express) {
         .limit(1);
       const invitation = rows[0];
       if (!invitation)
+        return res.status(404).json({ error: "pending_invitation_not_found" });
+      if (
+        !canSeeAllHotels(org.role) &&
+        (!invitation.hotelId ||
+          !(await authorizedHotels(context, org.organizationId)).some(
+            (hotel) => hotel.id === invitation.hotelId,
+          ))
+      )
         return res.status(404).json({ error: "pending_invitation_not_found" });
       const actorHotelRole = invitation.hotelId
         ? context.hotelMemberships.find(
@@ -1370,6 +1839,7 @@ export function registerHotelOperationsRoutes(app: Express) {
         if (
           [
             "above_property_admin",
+            "regional_admin",
             "property_admin",
             "property_manager",
             "property_employee",
@@ -1379,6 +1849,112 @@ export function registerHotelOperationsRoutes(app: Express) {
           return res
             .status(409)
             .json({ error: "invitation_property_scope_required" });
+        const invitationRegionIds = Array.isArray(invitation.regionIds)
+          ? (invitation.regionIds as string[])
+          : [];
+        const invitedHotel = invitation.hotelId
+          ? (
+              await db
+                .select()
+                .from(hotelOpsHotels)
+                .where(
+                  and(
+                    eq(hotelOpsHotels.id, invitation.hotelId),
+                    eq(
+                      hotelOpsHotels.organizationId,
+                      invitation.organizationId,
+                    ),
+                  ),
+                )
+                .limit(1)
+            )[0]
+          : null;
+        if (!invitedHotel)
+          return res
+            .status(409)
+            .json({ error: "invitation_property_scope_changed" });
+        if (invitation.role === "regional_admin") {
+          const validRegions = invitationRegionIds.length
+            ? await db
+                .select()
+                .from(hotelOpsRegions)
+                .where(
+                  and(
+                    eq(
+                      hotelOpsRegions.organizationId,
+                      invitation.organizationId,
+                    ),
+                    eq(hotelOpsRegions.status, "active"),
+                    inArray(hotelOpsRegions.id, invitationRegionIds),
+                  ),
+                )
+            : [];
+          if (
+            validRegions.length !== new Set(invitationRegionIds).size ||
+            !invitedHotel?.regionId ||
+            !invitationRegionIds.includes(invitedHotel.regionId)
+          )
+            return res
+              .status(409)
+              .json({ error: "invitation_region_scope_changed" });
+        }
+        if (invitation.invitedByAccountId) {
+          const inviterMembership = (
+            await db
+              .select()
+              .from(hotelOpsOrganizationMemberships)
+              .where(
+                and(
+                  eq(
+                    hotelOpsOrganizationMemberships.organizationId,
+                    invitation.organizationId,
+                  ),
+                  eq(
+                    hotelOpsOrganizationMemberships.accountId,
+                    invitation.invitedByAccountId,
+                  ),
+                ),
+              )
+              .limit(1)
+          )[0];
+          if (inviterMembership?.role === "regional_admin") {
+            const currentRegionalAccess =
+              inviterMembership.status === "active" && invitedHotel.regionId
+              ? (
+                  await db
+                    .select({ membership: hotelOpsRegionMemberships })
+                    .from(hotelOpsRegionMemberships)
+                    .innerJoin(
+                      hotelOpsRegions,
+                      eq(hotelOpsRegions.id, hotelOpsRegionMemberships.regionId),
+                    )
+                    .where(
+                      and(
+                        eq(
+                          hotelOpsRegionMemberships.accountId,
+                          invitation.invitedByAccountId,
+                        ),
+                        eq(
+                          hotelOpsRegionMemberships.regionId,
+                          invitedHotel.regionId,
+                        ),
+                        eq(hotelOpsRegionMemberships.status, "active"),
+                        eq(hotelOpsRegions.status, "active"),
+                        eq(
+                          hotelOpsRegions.organizationId,
+                          invitation.organizationId,
+                        ),
+                      ),
+                    )
+                    .limit(1)
+                )[0]
+              : null;
+            if (!currentRegionalAccess)
+              return res
+                .status(409)
+                .json({ error: "invitation_inviter_scope_changed" });
+          }
+        }
         const passwordHash = await bcrypt.hash(input.password, 12);
         const account = await db.transaction(async (tx) => {
           const [claimed] = await tx
@@ -1420,17 +1996,48 @@ export function registerHotelOperationsRoutes(app: Express) {
           }
           // Property-specific authority lives on the hotel membership. Preserve an
           // existing organization role so a second invitation cannot demote it.
-          await tx
-            .insert(hotelOpsOrganizationMemberships)
-            .values({
+          const existingOrganizationMembership = (
+            await tx
+              .select()
+              .from(hotelOpsOrganizationMemberships)
+              .where(
+                and(
+                  eq(
+                    hotelOpsOrganizationMemberships.organizationId,
+                    invitation.organizationId,
+                  ),
+                  eq(hotelOpsOrganizationMemberships.accountId, account.id),
+                ),
+              )
+              .limit(1)
+          )[0];
+          if (!existingOrganizationMembership)
+            await tx.insert(hotelOpsOrganizationMemberships).values({
               organizationId: invitation.organizationId,
               accountId: account.id,
               role: invitation.role,
-            })
-            .onConflictDoNothing();
+            });
+          else if (
+            organizationRoleRank(invitation.role) >
+            organizationRoleRank(existingOrganizationMembership.role)
+          )
+            await tx
+              .update(hotelOpsOrganizationMemberships)
+              .set({
+                role: invitation.role,
+                status: "active",
+                updatedAt: new Date(),
+              })
+              .where(
+                eq(
+                  hotelOpsOrganizationMemberships.id,
+                  existingOrganizationMembership.id,
+                ),
+              );
           if (
             invitation.hotelId &&
-            invitation.role !== "above_property_admin"
+            invitation.role !== "above_property_admin" &&
+            invitation.role !== "regional_admin"
           )
             await tx
               .insert(hotelOpsHotelMemberships)
@@ -1452,7 +2059,8 @@ export function registerHotelOperationsRoutes(app: Express) {
               });
           if (
             invitation.hotelId &&
-            invitation.role !== "above_property_admin"
+            invitation.role !== "above_property_admin" &&
+            invitation.role !== "regional_admin"
           )
             for (const moduleKey of Array.isArray(invitation.moduleKeys)
               ? (invitation.moduleKeys as string[])
@@ -1466,7 +2074,44 @@ export function registerHotelOperationsRoutes(app: Express) {
                   canView: true,
                   canManage: invitation.role !== "property_employee",
                 })
-                .onConflictDoNothing();
+                  .onConflictDoNothing();
+          if (invitation.role === "regional_admin")
+            {
+              const organizationRegions = await tx
+                .select({ id: hotelOpsRegions.id })
+                .from(hotelOpsRegions)
+                .where(
+                  eq(
+                    hotelOpsRegions.organizationId,
+                    invitation.organizationId,
+                  ),
+                );
+              if (organizationRegions.length)
+                await tx
+                  .update(hotelOpsRegionMemberships)
+                  .set({ status: "inactive", updatedAt: new Date() })
+                  .where(
+                    and(
+                      eq(hotelOpsRegionMemberships.accountId, account.id),
+                      inArray(
+                        hotelOpsRegionMemberships.regionId,
+                        organizationRegions.map((region) => region.id),
+                      ),
+                    ),
+                  );
+            }
+          if (invitation.role === "regional_admin")
+            for (const regionId of invitationRegionIds)
+              await tx
+                .insert(hotelOpsRegionMemberships)
+                .values({ regionId, accountId: account.id })
+                .onConflictDoUpdate({
+                  target: [
+                    hotelOpsRegionMemberships.regionId,
+                    hotelOpsRegionMemberships.accountId,
+                  ],
+                  set: { status: "active", updatedAt: new Date() },
+                });
           await tx
             .update(hotelOpsInvitations)
             .set({ acceptedByAccountId: account.id })
@@ -1489,6 +2134,8 @@ export function registerHotelOperationsRoutes(app: Express) {
           organizationId: invitation.organizationId,
         });
         if (invitation.hotelId) returnParams.set("hotelId", invitation.hotelId);
+        if (invitation.role === "regional_admin" && invitationRegionIds[0])
+          returnParams.set("regionId", invitationRegionIds[0]);
         res.json({
           ok: true,
           returnTo: `/hoteloperations/dashboard?${returnParams.toString()}`,
@@ -1614,14 +2261,32 @@ export function registerHotelOperationsRoutes(app: Express) {
   router.get("/audit", requirePortalSession, async (req: any, res) => {
     const context = req.hotelOps as HotelOpsContext;
     const org = selectedOrg(context, req.query.organizationId);
-    if (!org || !canSeeAllHotels(org.role))
+    if (!org || (!canSeeAllHotels(org.role) && org.role !== "regional_admin"))
       return res.status(403).json({ error: "audit_access_denied" });
-    const events = await db
-      .select()
-      .from(hotelOpsAuditEvents)
-      .where(eq(hotelOpsAuditEvents.organizationId, org.organizationId))
-      .orderBy(desc(hotelOpsAuditEvents.createdAt))
-      .limit(100);
+    const visibleHotels = await authorizedHotels(context, org.organizationId);
+    const events = canSeeAllHotels(org.role)
+      ? await db
+          .select()
+          .from(hotelOpsAuditEvents)
+          .where(eq(hotelOpsAuditEvents.organizationId, org.organizationId))
+          .orderBy(desc(hotelOpsAuditEvents.createdAt))
+          .limit(100)
+      : visibleHotels.length
+        ? await db
+            .select()
+            .from(hotelOpsAuditEvents)
+            .where(
+              and(
+                eq(hotelOpsAuditEvents.organizationId, org.organizationId),
+                inArray(
+                  hotelOpsAuditEvents.hotelId,
+                  visibleHotels.map((hotel) => hotel.id),
+                ),
+              ),
+            )
+            .orderBy(desc(hotelOpsAuditEvents.createdAt))
+            .limit(100)
+        : [];
     res.json({ events });
   });
 

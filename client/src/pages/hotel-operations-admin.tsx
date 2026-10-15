@@ -164,13 +164,13 @@ export default function HotelOperationsAdminPage() {
             <div>
               <b>
                 {isOwner
-                  ? "Platform Administration"
+                  ? "INNTRIX | PLATFORM ADMINISTRATION"
                   : isSupportAdmin
-                    ? "Support Administration"
-                    : "Support Specialist Console"}
+                    ? "INNTRIX | PLATFORM SUPPORT"
+                    : "INNTRIX | SUPPORT CONSOLE"}
               </b>
               <div className="text-xs uppercase tracking-[.18em] text-[#987438]">
-                Hotel Operations
+                Hospitality Operations Intelligence
               </div>
             </div>
           </div>
@@ -179,7 +179,7 @@ export default function HotelOperationsAdminPage() {
               variant="outline"
               onClick={() => navigate("/hoteloperations/dashboard")}
             >
-              Hotel dashboard
+              INNTRIX dashboard
             </Button>
             <Button variant="outline" onClick={logout}>
               <LogOut size={15} /> Sign out

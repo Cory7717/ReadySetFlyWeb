@@ -100,7 +100,7 @@ type Dashboard = {
 const MODULES = [
   [
     "operations_reporting",
-    "Operations Reporting",
+    "Daily Operations Reporting",
     "Portfolio-ready shell",
     "Requires Multi-Property Adaptation / Reporting Integration",
   ],
@@ -118,38 +118,43 @@ const MODULES = [
   ],
   [
     "staff_scheduling",
-    "Staff Scheduling",
+    "Employee Scheduling",
     "Property labor planning",
     "Requires Multi-Property Adaptation",
   ],
   [
     "incident_reporting",
-    "Incident Reporting",
+    "Incident Management",
     "Controlled property documentation",
     "Preview Only",
   ],
   [
     "restaurant_operations",
-    "Restaurant / Bistro Operations",
+    "Employee Tip Management",
     "Outlet controls and gratuities",
     "Requires Multi-Property Adaptation",
   ],
   [
     "meeting_group_calendar",
-    "Meeting & Group Calendar",
+    "Group & Meeting Management",
     "Events, BEOs and group resumes",
     "Requires Multi-Property Adaptation",
   ],
   [
     "budget_financial",
-    "Budget & Financial",
+    "Budget & Financial Intelligence",
     "Budget and ownership review",
     "Preview Only",
   ],
-  ["bank_deposits", "Bank Deposits", "Deposit reconciliation", "Preview Only"],
+  [
+    "bank_deposits",
+    "Bank Deposits / Financial Controls",
+    "Deposit reconciliation",
+    "Preview Only",
+  ],
   [
     "comptroller",
-    "Comptroller",
+    "Financial Performance Analysis",
     "Financial oversight workspace",
     "Preview Only",
   ],
@@ -382,6 +387,32 @@ const AUTHENTICATED_NAVIGATION: NavigationGroup[] = [
   },
 ];
 
+const PORTAL_PAGE_BRANDING: Record<
+  PortalTab,
+  { module: string; title: string }
+> = {
+  overview: {
+    module: "INNTRIX | OPERATIONS",
+    title: "Property Command Center",
+  },
+  property: {
+    module: "INNTRIX | OPERATIONS",
+    title: "Property Overview",
+  },
+  hotels: {
+    module: "INNTRIX | ADMINISTRATION",
+    title: "Property Settings",
+  },
+  team: {
+    module: "INNTRIX | ADMINISTRATION",
+    title: "User & Department Management",
+  },
+  audit: {
+    module: "INNTRIX | ADMINISTRATION",
+    title: "Audit History",
+  },
+};
+
 const ROLE_NAMES: Record<string, string> = {
   platform_owner: "Platform Owner",
   above_property_admin: "Above Property Admin",
@@ -421,19 +452,19 @@ async function portalFetch(path: string, init: RequestInit = {}) {
 
 function Brand({ compact = false }: { compact?: boolean }) {
   return (
-    <div className="flex items-center gap-3">
+    <div className="flex items-center gap-3" aria-label="INNTRIX, Hospitality Operations Intelligence">
       <div className="grid h-10 w-10 place-items-center rounded-xl bg-[#184f46] text-white">
         <Building2 size={21} />
       </div>
-      <div>
-        <div className="font-semibold tracking-tight text-[#153d37]">
-          Hotel Operations
+      <div className="min-w-0">
+        <div className="font-bold tracking-[.14em] text-[#153d37]">
+          INNTRIX
         </div>
-        {!compact && (
-          <div className="text-xs uppercase tracking-[.2em] text-[#997744]">
-            Enterprise Management
-          </div>
-        )}
+        <div
+          className={`${compact ? "hidden text-[8px] tracking-[.11em] sm:block" : "text-[10px] tracking-[.16em]"} whitespace-nowrap font-semibold uppercase text-[#997744]`}
+        >
+          Hospitality Operations Intelligence
+        </div>
       </div>
     </div>
   );
@@ -541,7 +572,7 @@ const CAPABILITY_GROUPS: Array<{
       },
       {
         icon: ClipboardCheck,
-        title: "Hotel Operations Management",
+        title: "Operational Management",
         status: "Available",
         copy: "Centralize management workflows, operational accountability, controlled property access, and organization-level oversight.",
       },
@@ -945,7 +976,7 @@ function Landing({ onSignedIn }: { onSignedIn: () => void }) {
 
       <section className="mx-auto grid max-w-7xl gap-12 px-5 py-20 md:px-8 md:py-28 lg:grid-cols-[1fr_.8fr] lg:items-center">
         <div>
-          <p className="text-sm font-bold uppercase tracking-[.2em] text-[#936d34]">Smarter operations. Stronger performance.</p>
+          <p className="text-sm font-bold uppercase tracking-[.2em] text-[#936d34]">Smarter Operations. Stronger Performance.</p>
           <h2 className="mt-3 max-w-2xl text-3xl font-semibold tracking-tight md:text-5xl">Give every operating decision better context.</h2>
           <p className="mt-5 max-w-2xl text-lg leading-8 text-[#5d6c67]">Bring property teams and ownership closer to the same operational truth—with access that remains controlled by organization and property.</p>
           <ul className="mt-7 grid gap-3 text-[#40534e] sm:grid-cols-2">
@@ -973,7 +1004,10 @@ function Landing({ onSignedIn }: { onSignedIn: () => void }) {
       <footer className="bg-[#102e29] px-5 py-8 text-white md:px-8">
         <div className="mx-auto flex max-w-7xl flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
           <PublicBrand light />
-          <p className="text-sm text-white/55">Operational intelligence for independent hotel teams and portfolios.</p>
+          <div className="text-right text-sm text-white/55">
+            <p>Smarter Operations. Stronger Performance.</p>
+            <p className="mt-1 text-xs text-white/40">An independent Ready Set Fly product.</p>
+          </div>
         </div>
       </footer>
       <PublicSalesInquiryWidget />
@@ -1607,9 +1641,28 @@ function DashboardView({
     }
     setMobileNavigationOpen(false);
   }
-  function renderNavigation(compact = false) {
+  function renderNavigation(compact = false, includeBrand = false) {
     return (
       <>
+        {includeBrand &&
+          (compact ? (
+            <div
+              title="INNTRIX — Smarter Operations. Stronger Performance."
+              aria-label="INNTRIX"
+              className="mb-3 grid h-11 w-full place-items-center rounded-xl border border-[#d7d0c4] bg-white text-xs font-black tracking-[.12em] text-[#184f46]"
+            >
+              IX
+            </div>
+          ) : (
+            <div className="mb-3 rounded-2xl border border-[#d7d0c4] bg-white px-4 py-3">
+              <div className="text-sm font-black tracking-[.16em] text-[#184f46]">
+                INNTRIX
+              </div>
+              <div className="mt-1 text-[10px] font-semibold uppercase tracking-[.12em] text-[#8a6b35]">
+                Smarter Operations. Stronger Performance.
+              </div>
+            </div>
+          ))}
         <div
           className={`rounded-2xl bg-[#153f38] text-white ${compact ? "p-3" : "p-4"}`}
         >
@@ -1779,7 +1832,7 @@ function DashboardView({
           <button type="button" aria-label="Close navigation" onClick={() => setMobileNavigationOpen(false)} className="absolute inset-0 bg-[#0d2722]/55" />
           <aside role="dialog" aria-modal="true" aria-label="INNTRIX navigation" className="absolute inset-y-0 left-0 w-[min(340px,calc(100vw-2rem))] overflow-y-auto bg-[#f4f2ec] p-4 shadow-2xl">
             <div className="mb-4 flex items-center justify-between">
-              <Brand compact />
+              <Brand />
               <button type="button" aria-label="Close navigation" onClick={() => setMobileNavigationOpen(false)} className="grid h-10 w-10 place-items-center rounded-xl border border-[#d9d4c8] bg-white"><X size={19} /></button>
             </div>
             {renderNavigation(false)}
@@ -1804,7 +1857,7 @@ function DashboardView({
               {sidebarCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
             </button>
           </div>
-          {renderNavigation(sidebarCollapsed)}
+          {renderNavigation(sidebarCollapsed, true)}
         </aside>
         <main>
           {error && (
@@ -1821,20 +1874,15 @@ function DashboardView({
               <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
                 <div>
                   <div className="text-sm font-semibold uppercase tracking-widest text-[#9b783b]">
-                    {ROLE_NAMES[dashboard.role] || dashboard.role}
+                    {PORTAL_PAGE_BRANDING[tab].module}
                   </div>
                   <h1 className="mt-1 text-3xl font-semibold tracking-tight">
-                    {tab === "overview"
-                      ? "Property Command Center"
-                      : tab === "property"
-                        ? "Property Overview"
-                      : tab === "hotels"
-                        ? "Property Settings"
-                        : tab === "audit"
-                          ? "Audit history"
-                          : "User & Department Management"}
+                    {PORTAL_PAGE_BRANDING[tab].title}
                   </h1>
-                  <p className="mt-1 text-sm text-[#687671]">
+                  <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-[#687671]">
+                    <span className="rounded-full bg-[#e8eee9] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#31594f]">
+                      {ROLE_NAMES[dashboard.role] || dashboard.role}
+                    </span>
                     {activeHotel
                       ? `${activeHotel.name} · ${activeHotel.propertyCode}`
                       : `${dashboard.organization.name} · All authorized properties`}

@@ -6,18 +6,29 @@ import {
 } from "react";
 import { useLocation } from "wouter";
 import {
+  ArrowRight,
+  BarChart3,
   Building2,
+  CalendarRange,
+  CheckCircle2,
   ChevronRight,
+  ClipboardCheck,
   Eye,
   EyeOff,
+  Gauge,
   Hotel,
   LayoutDashboard,
   LockKeyhole,
   LogOut,
+  PackageSearch,
   ShieldCheck,
+  Sparkles,
+  TrendingDown,
   UserPlus,
+  Users,
 } from "lucide-react";
 import { apiUrl } from "@/lib/api";
+import { calculateLaborRoi } from "@/lib/inntrix-roi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -182,6 +193,30 @@ function Brand({ compact = false }: { compact?: boolean }) {
   );
 }
 
+function PublicBrand({ light = false }: { light?: boolean }) {
+  return (
+    <div className="flex items-center gap-3" aria-label="INNTRIX">
+      <div
+        className={`grid h-10 w-10 place-items-center rounded-xl ${light ? "bg-white text-[#174d45]" : "bg-[#174d45] text-white"}`}
+      >
+        <Building2 size={20} aria-hidden="true" />
+      </div>
+      <div>
+        <div
+          className={`text-lg font-bold tracking-[.16em] ${light ? "text-white" : "text-[#153d37]"}`}
+        >
+          INNTRIX
+        </div>
+        <div
+          className={`text-[10px] font-semibold uppercase tracking-[.17em] ${light ? "text-white/65" : "text-[#8a6b35]"}`}
+        >
+          Hospitality Operations Intelligence
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Field({
   label,
   ...props
@@ -246,6 +281,37 @@ function Landing({ onSignedIn }: { onSignedIn: () => void }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [resetSent, setResetSent] = useState(false);
+  const [currentHours, setCurrentHours] = useState(675);
+  const [targetHours, setTargetHours] = useState(600);
+  const [hourlyCost, setHourlyCost] = useState(20);
+  const [monthlySubscription, setMonthlySubscription] = useState(199);
+
+  const {
+    currentWeeklyHours: current,
+    targetWeeklyHours: target,
+    weeklyHoursSaved,
+    annualizedHoursSaved: annualHoursSaved,
+    estimatedAnnualLaborSavings: annualLaborSavings,
+    estimatedAnnualSubscriptionExpense: annualSubscription,
+    estimatedAnnualNetBenefit: annualNetBenefit,
+  } = calculateLaborRoi({
+    currentWeeklyHours: currentHours,
+    targetWeeklyHours: targetHours,
+    hourlyLaborCost: hourlyCost,
+    monthlySubscription,
+  });
+  const laborScale = Math.max(current, target, 1);
+  const currency = new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  });
+
+  const updateNumber = (
+    setter: (value: number) => void,
+    value: string,
+  ) => setter(value === "" ? 0 : Math.max(0, Number(value) || 0));
+
   async function login(event: FormEvent) {
     event.preventDefault();
     setError("");
@@ -273,107 +339,192 @@ function Landing({ onSignedIn }: { onSignedIn: () => void }) {
     setResetSent(true);
   }
   return (
-    <main className="min-h-screen bg-[#f6f2e9] text-[#172e2a]">
-      <header className="border-b border-[#ded6c7] bg-white/90">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
-          <Brand />
-          <div className="flex gap-2">
-            <span className="rounded-full bg-[#efe4cc] px-3 py-1 text-xs font-semibold text-[#765b27]">
-              Enterprise pre-demo
-            </span>
-            <span className="rounded-full border border-[#c7b995] px-3 py-1 text-xs font-semibold text-[#6f5a2c]">
-              Invitation only
-            </span>
-          </div>
+    <main className="min-h-screen overflow-hidden bg-[#f7f4ec] text-[#172e2a]">
+      <header className="sticky top-0 z-40 border-b border-[#ded6c7]/80 bg-[#f7f4ec]/95 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4 md:px-8">
+          <a href="#top" className="rounded-lg focus:outline-none focus:ring-2 focus:ring-[#b58a43]">
+            <PublicBrand />
+          </a>
+          <nav className="flex items-center gap-2" aria-label="Primary navigation">
+            <a href="#capabilities" className="hidden px-3 py-2 text-sm font-medium text-[#52645f] hover:text-[#174d45] md:block">
+              Platform
+            </a>
+            <a href="#roi" className="hidden px-3 py-2 text-sm font-medium text-[#52645f] hover:text-[#174d45] md:block">
+              ROI calculator
+            </a>
+            <a href="#login" className="rounded-lg px-3 py-2 text-sm font-semibold text-[#174d45] hover:bg-[#e5ece8]">
+              Login
+            </a>
+            <a href="#login" className="rounded-lg bg-[#174d45] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#103c35]">
+              Get started
+            </a>
+          </nav>
         </div>
       </header>
-      <section className="mx-auto grid max-w-6xl gap-14 px-6 py-16 lg:grid-cols-[1.15fr_.85fr] lg:items-center">
-        <div>
-          <div className="mb-5 inline-flex items-center gap-2 rounded-full bg-[#e1ebe7] px-3 py-1 text-sm font-medium text-[#184f46]">
-            <ShieldCheck size={15} /> Portfolio operations, one secure view
+
+      <section id="top" className="relative isolate bg-[#123b35] text-white">
+        <div className="absolute inset-0 -z-10 overflow-hidden" aria-hidden="true">
+          <div className="absolute -right-32 -top-52 h-[36rem] w-[36rem] rounded-full bg-[#bf9651]/20 blur-3xl" />
+          <div className="absolute -bottom-64 left-1/4 h-[32rem] w-[32rem] rounded-full bg-[#2b766a]/35 blur-3xl" />
+          <div className="absolute inset-0 opacity-[.055]" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,.8) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.8) 1px, transparent 1px)", backgroundSize: "48px 48px" }} />
+        </div>
+        <div className="mx-auto grid max-w-7xl gap-12 px-5 py-20 md:px-8 md:py-28 lg:grid-cols-[1.1fr_.9fr] lg:items-center">
+          <div>
+            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-4 py-2 text-sm font-medium text-[#f0d8a9]">
+              <Sparkles size={15} aria-hidden="true" /> Hospitality Operations Intelligence
+            </div>
+            <h1 className="max-w-4xl text-4xl font-semibold leading-[1.08] tracking-tight md:text-6xl lg:text-7xl">
+              Run a smarter hotel. Control costs. Improve performance.
+            </h1>
+            <p className="mt-7 max-w-2xl text-lg leading-8 text-white/75 md:text-xl">
+              INNTRIX brings operational planning, labor intelligence, and management visibility into one platform designed for hotel operators.
+            </p>
+            <div className="mt-9 flex flex-wrap gap-3">
+              <a href="#roi" className="inline-flex items-center gap-2 rounded-xl bg-[#c79a4f] px-5 py-3 font-semibold text-[#102d29] shadow-lg shadow-black/10 hover:bg-[#dab36f]">
+                Estimate your opportunity <ArrowRight size={17} />
+              </a>
+              <a href="#capabilities" className="rounded-xl border border-white/25 px-5 py-3 font-semibold text-white hover:bg-white/10">
+                Explore the platform
+              </a>
+            </div>
           </div>
-          <h1 className="max-w-3xl text-4xl font-semibold leading-tight tracking-tight md:text-6xl">
-            A cleaner operating system for every hotel in your portfolio.
-          </h1>
-          <p className="mt-6 max-w-2xl text-lg leading-8 text-[#566762]">
-            Centralize property access, operational oversight, reporting
-            readiness, and accountable team administration without blending
-            hotel data across properties.
-          </p>
-          <div className="mt-9 grid gap-3 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2">
             {[
-              ["Property-aware", "Every user sees only assigned hotels."],
-              ["Role-controlled", "Access follows operational responsibility."],
-              [
-                "Integration-ready",
-                "Reporting formats stay property-specific.",
-              ],
-            ].map(([title, copy]) => (
-              <div
-                key={title}
-                className="rounded-2xl border border-[#ddd4c4] bg-white/70 p-4"
-              >
-                <div className="font-semibold">{title}</div>
-                <div className="mt-1 text-sm text-[#65736f]">{copy}</div>
+              [TrendingDown, "Cost visibility", "Surface preventable labor inefficiencies before they become recurring expenses."],
+              [Gauge, "Demand-led planning", "Connect staffing decisions to operational demand and expected workload."],
+              [BarChart3, "Actionable insight", "Give property and above-property leaders a clearer operating picture."],
+              [Users, "Stronger accountability", "Keep priorities, ownership, and follow-through visible across the team."],
+            ].map(([Icon, title, copy]) => (
+              <div key={String(title)} className="rounded-2xl border border-white/15 bg-white/[.08] p-5 backdrop-blur-sm">
+                <Icon className="text-[#e0b66e]" size={23} aria-hidden="true" />
+                <h2 className="mt-4 font-semibold">{String(title)}</h2>
+                <p className="mt-2 text-sm leading-6 text-white/65">{String(copy)}</p>
               </div>
             ))}
           </div>
         </div>
-        <form
-          onSubmit={login}
-          className="rounded-3xl border border-[#d9d0bf] bg-white p-7 shadow-xl shadow-[#42534b]/10"
-        >
-          <div className="mb-6 flex items-center gap-3">
-            <LockKeyhole className="text-[#a77d35]" />
-            <div>
-              <h2 className="text-xl font-semibold">Portal sign in</h2>
-              <p className="text-sm text-[#6b7874]">
-                Use the account created from your invitation.
-              </p>
+      </section>
+
+      <section id="capabilities" className="mx-auto max-w-7xl px-5 py-20 md:px-8 md:py-28">
+        <div className="max-w-3xl">
+          <p className="text-sm font-bold uppercase tracking-[.2em] text-[#9a7136]">One operational view</p>
+          <h2 className="mt-3 text-3xl font-semibold tracking-tight md:text-5xl">Intelligence that helps operators act.</h2>
+          <p className="mt-5 text-lg leading-8 text-[#5d6b67]">Focus the team on the work, labor, and decisions that shape property performance—without losing portfolio-level visibility.</p>
+        </div>
+        <div className="mt-12 grid gap-5 md:grid-cols-2">
+          {[
+            { icon: CalendarRange, title: "Labor & Scheduling Intelligence", status: "Available", copy: "Demand-driven housekeeping staffing recommendations, labor efficiency review, schedule optimization, and forecast-based operational planning.", available: true },
+            { icon: ClipboardCheck, title: "Hotel Operations Management", status: "Available", copy: "Centralized daily management workflows, operational accountability, task tracking, and property or organization oversight.", available: true },
+            { icon: PackageSearch, title: "Inventory Intelligence", status: "Planned", copy: "Maintenance tools and equipment, housekeeping supply par levels, and Front Desk Market inventory and loss tracking.", available: false },
+            { icon: Sparkles, title: "Guest Experience Intelligence", status: "Planned", copy: "AI-assisted forensic GSS investigations, room-level issue heat maps, and corrective-action recommendations and tracking.", available: false },
+          ].map(({ icon: Icon, title, status, copy, available }) => (
+            <article key={title} className={`rounded-3xl border p-6 md:p-8 ${available ? "border-[#d8d2c5] bg-white shadow-sm" : "border-dashed border-[#d0c5af] bg-[#f1ede3]/70"}`}>
+              <div className="flex items-start justify-between gap-4">
+                <div className={`grid h-12 w-12 place-items-center rounded-2xl ${available ? "bg-[#deebe6] text-[#174d45]" : "bg-[#e8e0d1] text-[#806333]"}`}><Icon size={23} aria-hidden="true" /></div>
+                <span className={`rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wider ${available ? "bg-[#e1eee9] text-[#175347]" : "bg-[#e9dfcc] text-[#795d2d]"}`}>{status}</span>
+              </div>
+              <h3 className="mt-6 text-xl font-semibold">{title}</h3>
+              <p className="mt-3 leading-7 text-[#65726e]">{copy}</p>
+            </article>
+          ))}
+        </div>
+      </section>
+
+      <section id="roi" className="bg-[#e8eee9] px-5 py-20 md:px-8 md:py-28">
+        <div className="mx-auto max-w-7xl">
+          <div className="max-w-3xl">
+            <p className="text-sm font-bold uppercase tracking-[.2em] text-[#8b672f]">Interactive labor ROI calculator</p>
+            <h2 className="mt-3 text-3xl font-semibold tracking-tight md:text-5xl">Put your labor opportunity into perspective.</h2>
+            <p className="mt-5 text-lg leading-8 text-[#5b6965]">Adjust the assumptions to model the financial effect of moving from current labor usage toward an operational target.</p>
+          </div>
+          <div className="mt-12 grid overflow-hidden rounded-[2rem] border border-[#cdd7d1] bg-white shadow-xl shadow-[#2f5148]/10 lg:grid-cols-[.82fr_1.18fr]">
+            <div className="border-b border-[#d9e0dc] bg-[#faf9f5] p-6 md:p-9 lg:border-b-0 lg:border-r">
+              <h3 className="text-lg font-semibold">Your assumptions</h3>
+              <div className="mt-6 grid gap-5">
+                {[
+                  ["Current average weekly labor hours", currentHours, setCurrentHours, "hours"],
+                  ["Target average weekly labor hours", targetHours, setTargetHours, "hours"],
+                  ["Fully burdened hourly labor cost", hourlyCost, setHourlyCost, "$ / hour"],
+                  ["Estimated monthly INNTRIX subscription", monthlySubscription, setMonthlySubscription, "$ / month"],
+                ].map(([label, value, setter, suffix], index) => (
+                  <label key={String(label)} className="grid gap-2 text-sm font-semibold text-[#304b45]">
+                    <span>{String(label)}</span>
+                    <span className="relative">
+                      <Input type="number" min="0" step={index > 1 ? "0.01" : "1"} value={Number(value)} onChange={(event) => updateNumber(setter as (value: number) => void, event.target.value)} className="h-12 border-[#cdd7d1] bg-white pr-24 text-base" />
+                      <span className="pointer-events-none absolute inset-y-0 right-3 flex items-center text-xs font-medium text-[#74817d]">{String(suffix)}</span>
+                    </span>
+                    {index === 3 && <span className="font-normal text-[#7b8783]">Illustrative placeholder—not published pricing.</span>}
+                  </label>
+                ))}
+              </div>
+              <div className="mt-8 border-t border-[#ddd8cd] pt-6">
+                <div className="mb-3 flex justify-between text-xs font-semibold"><span>Current labor</span><span>{current.toLocaleString()} hrs</span></div>
+                <div className="h-3 overflow-hidden rounded-full bg-[#e3ded2]"><div className="h-full rounded-full bg-[#806a48] transition-all" style={{ width: `${(current / laborScale) * 100}%` }} /></div>
+                <div className="mb-3 mt-5 flex justify-between text-xs font-semibold"><span>Target labor</span><span>{target.toLocaleString()} hrs</span></div>
+                <div className="h-3 overflow-hidden rounded-full bg-[#e3ded2]"><div className="h-full rounded-full bg-[#2d7165] transition-all" style={{ width: `${(target / laborScale) * 100}%` }} /></div>
+              </div>
+            </div>
+            <div className="bg-[#143f38] p-6 text-white md:p-9">
+              <div className="flex items-center gap-2 text-sm font-semibold text-[#e7c488]"><BarChart3 size={18} /> Illustrative annual impact</div>
+              <div className="mt-6 rounded-2xl bg-white/10 p-6">
+                <p className="text-sm text-white/65">Potential annual labor savings</p>
+                <p className="mt-2 text-4xl font-semibold tracking-tight md:text-5xl">{currency.format(annualLaborSavings)}</p>
+              </div>
+              <div className="mt-4 grid gap-4 sm:grid-cols-3">
+                {[
+                  ["Weekly hours saved", weeklyHoursSaved.toLocaleString()],
+                  ["Annual hours saved", annualHoursSaved.toLocaleString()],
+                  ["Annual net benefit", currency.format(annualNetBenefit)],
+                ].map(([label, value]) => (
+                  <div key={label} className="rounded-2xl border border-white/10 bg-white/[.06] p-4">
+                    <p className="text-xs leading-5 text-white/60">{label}</p>
+                    <p className="mt-2 text-xl font-semibold">{value}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-7 flex items-start gap-3 rounded-2xl border border-[#d4b16f]/25 bg-[#d4b16f]/10 p-4">
+                <CheckCircle2 className="mt-0.5 shrink-0 text-[#e5c17e]" size={18} />
+                <div><p className="text-sm font-semibold">Subscription assumption: {currency.format(annualSubscription)} annually</p><p className="mt-1 text-xs leading-5 text-white/60">Based on the monthly placeholder entered at left.</p></div>
+              </div>
+              <p className="mt-6 text-xs leading-5 text-white/55">Illustrative estimates only. Actual results depend on staffing requirements, occupancy, service standards, payroll costs, and management decisions. INNTRIX does not guarantee savings, and software alone does not create the modeled labor reduction.</p>
             </div>
           </div>
-          <div className="grid gap-4">
-            <Field
-              label="Work email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              autoComplete="email"
-            />
-            <PasswordField
-              label="Password"
-              value={password}
-              onChange={setPassword}
-              autoComplete="current-password"
-            />
-            {error && (
-              <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">
-                {error}
-              </p>
-            )}
-            {resetSent && (
-              <p className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">
-                If that account exists, a reset link has been sent.
-              </p>
-            )}
-            <Button className="bg-[#184f46] hover:bg-[#123d36]">
-              Sign in securely <ChevronRight size={16} />
-            </Button>
-            <button
-              type="button"
-              onClick={reset}
-              className="text-sm text-[#5d6c68] underline underline-offset-4"
-            >
-              Forgot password?
-            </button>
+        </div>
+      </section>
+
+      <section className="mx-auto grid max-w-7xl gap-12 px-5 py-20 md:px-8 md:py-28 lg:grid-cols-[1fr_.8fr] lg:items-center">
+        <div>
+          <p className="text-sm font-bold uppercase tracking-[.2em] text-[#936d34]">Smarter operations. Stronger performance.</p>
+          <h2 className="mt-3 max-w-2xl text-3xl font-semibold tracking-tight md:text-5xl">Give every operating decision better context.</h2>
+          <p className="mt-5 max-w-2xl text-lg leading-8 text-[#5d6c67]">Bring property teams and ownership closer to the same operational truth—with access that remains controlled by organization and property.</p>
+          <ul className="mt-7 grid gap-3 text-[#40534e] sm:grid-cols-2">
+            {["Identify cost-control opportunities", "Improve operational visibility", "Strengthen management accountability", "Plan staffing around demand"].map((item) => <li key={item} className="flex items-center gap-2"><CheckCircle2 size={17} className="text-[#2a7164]" /> {item}</li>)}
+          </ul>
+        </div>
+
+        <form id="login" onSubmit={login} className="scroll-mt-28 rounded-3xl border border-[#d9d0bf] bg-white p-7 shadow-xl shadow-[#42534b]/10 md:p-9">
+          <div className="mb-6 flex items-center gap-3">
+            <div className="grid h-11 w-11 place-items-center rounded-xl bg-[#e5ede9] text-[#174d45]"><LockKeyhole size={21} /></div>
+            <div><h2 className="text-xl font-semibold">INNTRIX portal sign in</h2><p className="text-sm text-[#6b7874]">Use the account created from your invitation.</p></div>
           </div>
-          <p className="mt-6 border-t pt-5 text-xs leading-5 text-[#7a8581]">
-            There is no public registration. Access is provisioned by an
-            authorized portfolio or property administrator.
-          </p>
+          <div className="grid gap-4">
+            <Field label="Work email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required autoComplete="email" />
+            <PasswordField label="Password" value={password} onChange={setPassword} autoComplete="current-password" />
+            {error && <p className="rounded-lg bg-red-50 p-3 text-sm text-red-700">{error}</p>}
+            {resetSent && <p className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800">If that account exists, a reset link has been sent.</p>}
+            <Button className="h-11 bg-[#184f46] hover:bg-[#123d36]">Sign in securely <ChevronRight size={16} /></Button>
+            <button type="button" onClick={reset} className="text-sm text-[#5d6c68] underline underline-offset-4">Forgot password?</button>
+          </div>
+          <p className="mt-6 border-t pt-5 text-xs leading-5 text-[#7a8581]">INNTRIX is currently invitation-only. Get Started brings invited hotel teams to this secure sign-in; access is provisioned by an authorized portfolio or property administrator.</p>
         </form>
       </section>
+
+      <footer className="bg-[#102e29] px-5 py-8 text-white md:px-8">
+        <div className="mx-auto flex max-w-7xl flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+          <PublicBrand light />
+          <p className="text-sm text-white/55">Operational intelligence for independent hotel teams and portfolios.</p>
+        </div>
+      </footer>
     </main>
   );
 }

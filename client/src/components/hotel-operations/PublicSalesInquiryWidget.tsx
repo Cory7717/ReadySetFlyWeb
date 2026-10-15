@@ -153,23 +153,23 @@ export default function PublicSalesInquiryWidget() {
               <form onSubmit={submit} className="grid gap-4">
                 <div className="grid gap-1.5">
                   <Label htmlFor="sales-full-name">Full name</Label>
-                  <Input id="sales-full-name" value={form.fullName} onChange={(event) => update("fullName", event.target.value)} autoComplete="name" minLength={2} maxLength={120} required />
+                  <Input id="sales-full-name" value={form.fullName} onChange={(event) => update("fullName", event.target.value)} autoComplete="name" minLength={2} maxLength={120} required className="border-[#cfd7d3] bg-white text-[#17332e] placeholder:text-[#7b8782]" />
                 </div>
                 <div className="grid gap-1.5">
                   <Label htmlFor="sales-email">Business email</Label>
-                  <Input id="sales-email" type="email" value={form.email} onChange={(event) => update("email", event.target.value)} autoComplete="email" maxLength={320} required />
+                  <Input id="sales-email" type="email" value={form.email} onChange={(event) => update("email", event.target.value)} autoComplete="email" maxLength={320} required className="border-[#cfd7d3] bg-white text-[#17332e] placeholder:text-[#7b8782]" />
                 </div>
                 <div className="grid gap-1.5">
                   <Label htmlFor="sales-company">Hotel or management company</Label>
-                  <Input id="sales-company" value={form.companyName} onChange={(event) => update("companyName", event.target.value)} autoComplete="organization" minLength={2} maxLength={200} required />
+                  <Input id="sales-company" value={form.companyName} onChange={(event) => update("companyName", event.target.value)} autoComplete="organization" minLength={2} maxLength={200} required className="border-[#cfd7d3] bg-white text-[#17332e] placeholder:text-[#7b8782]" />
                 </div>
                 <div className="grid gap-1.5">
                   <Label htmlFor="sales-properties">Number of properties <span className="font-normal text-[#77837f]">(optional)</span></Label>
-                  <Input id="sales-properties" type="number" min={1} max={10000} step={1} value={form.propertyCount} onChange={(event) => update("propertyCount", event.target.value)} inputMode="numeric" />
+                  <Input id="sales-properties" type="number" min={1} max={10000} step={1} value={form.propertyCount} onChange={(event) => update("propertyCount", event.target.value)} inputMode="numeric" className="border-[#cfd7d3] bg-white text-[#17332e] placeholder:text-[#7b8782]" />
                 </div>
                 <div className="grid gap-1.5">
                   <Label htmlFor="sales-message">How can we help?</Label>
-                  <textarea id="sales-message" value={form.message} onChange={(event) => update("message", event.target.value)} minLength={10} maxLength={4000} rows={5} required className="resize-none rounded-lg border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" />
+                  <textarea id="sales-message" value={form.message} onChange={(event) => update("message", event.target.value)} minLength={10} maxLength={4000} rows={5} required className="resize-none rounded-lg border border-[#cfd7d3] bg-white px-3 py-2 text-sm text-[#17332e] outline-none placeholder:text-[#7b8782] focus-visible:ring-2 focus-visible:ring-[#277466]" />
                 </div>
                 <label className="absolute -left-[10000px]" aria-hidden="true">
                   Website

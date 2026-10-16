@@ -127,6 +127,48 @@ async function settings() {
   );
 }
 
+async function invitationConflict(organizationId: string, emailInput: string) {
+  const email = normalizeEmail(emailInput);
+  const account = (
+    await db
+      .select({ id: hotelOpsAccounts.id })
+      .from(hotelOpsAccounts)
+      .where(eq(hotelOpsAccounts.email, email))
+      .limit(1)
+  )[0];
+  if (account) {
+    const membership = (
+      await db
+        .select({ id: hotelOpsOrganizationMemberships.id })
+        .from(hotelOpsOrganizationMemberships)
+        .where(
+          and(
+            eq(hotelOpsOrganizationMemberships.organizationId, organizationId),
+            eq(hotelOpsOrganizationMemberships.accountId, account.id),
+          ),
+        )
+        .limit(1)
+    )[0];
+    if (membership) return "recipient_already_in_organization";
+  }
+  const pending = (
+    await db
+      .select({ id: hotelOpsInvitations.id })
+      .from(hotelOpsInvitations)
+      .where(
+        and(
+          eq(hotelOpsInvitations.organizationId, organizationId),
+          eq(hotelOpsInvitations.email, email),
+          isNull(hotelOpsInvitations.acceptedAt),
+          isNull(hotelOpsInvitations.revokedAt),
+          gt(hotelOpsInvitations.expiresAt, new Date()),
+        ),
+      )
+      .limit(1)
+  )[0];
+  return pending ? "pending_invitation_exists" : null;
+}
+
 export function registerHotelOperationsPhase2Routes(
   router: any,
   deps: Dependencies,
@@ -487,6 +529,35 @@ export function registerHotelOperationsPhase2Routes(
       });
     },
   );
+  router.get(
+    "/admin/organizations/:id/onboarding",
+    requirePortalSession,
+    owner,
+    async (req: any, res: any) => {
+      const organization = (
+        await db
+          .select()
+          .from(hotelOpsOrganizations)
+          .where(eq(hotelOpsOrganizations.id, req.params.id))
+          .limit(1)
+      )[0];
+      if (!organization)
+        return res.status(404).json({ error: "organization_not_found" });
+      const [regions, hotels] = await Promise.all([
+        db
+          .select()
+          .from(hotelOpsRegions)
+          .where(eq(hotelOpsRegions.organizationId, organization.id))
+          .orderBy(asc(hotelOpsRegions.name)),
+        db
+          .select()
+          .from(hotelOpsHotels)
+          .where(eq(hotelOpsHotels.organizationId, organization.id))
+          .orderBy(asc(hotelOpsHotels.name)),
+      ]);
+      res.json({ organization, regions, hotels });
+    },
+  );
   router.post(
     "/admin/organizations",
     requirePortalSession,
@@ -734,6 +805,12 @@ export function registerHotelOperationsPhase2Routes(
           return res.status(400).json({ error: "invalid_regional_scope" });
         if (input.role !== "regional_admin" && input.regionIds.length)
           return res.status(400).json({ error: "regions_not_valid_for_role" });
+        if (org.status !== "active")
+          return res.status(409).json({ error: "organization_inactive" });
+        if (selectedHotel?.status !== "active")
+          return res.status(409).json({ error: "property_inactive" });
+        const conflict = await invitationConflict(org.id, input.email);
+        if (conflict) return res.status(409).json({ error: conflict });
         const token = randomToken(),
           expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000);
         const [invitation] = await db
@@ -757,7 +834,7 @@ export function registerHotelOperationsPhase2Routes(
           const acceptance = await sendPortalEmail(
             input.email,
             "You're invited to INNTRIX",
-            `You have been invited to join ${org.name} in INNTRIX${selectedRegions.length ? ` for ${selectedRegions.map((region) => region.name).join(", ")}` : ""}. This secure invitation expires in 72 hours.`,
+            `You have been invited to join ${org.name} (INNTRIX Organization ${org.organizationNumber}) as ${input.role === "regional_admin" ? "a Regional Administrator" : input.role.replaceAll("_", " ")}${selectedRegions.length ? ` for ${selectedRegions.map((region) => region.name).join(", ")}` : ""}. This secure invitation expires in 72 hours.`,
             link,
           );
           emailAccepted = true;
@@ -780,6 +857,18 @@ export function registerHotelOperationsPhase2Routes(
             }),
           );
         }
+        if (
+          emailAccepted &&
+          input.role === "property_admin" &&
+          selectedHotel &&
+          ["registered", "pending_regional_setup"].includes(
+            selectedHotel.onboardingStatus,
+          )
+        )
+          await db
+            .update(hotelOpsHotels)
+            .set({ onboardingStatus: "gm_invited", updatedAt: new Date() })
+            .where(eq(hotelOpsHotels.id, selectedHotel.id));
         await audit({
           organizationId: org.id,
           hotelId: input.hotelId,
@@ -870,6 +959,15 @@ export function registerHotelOperationsPhase2Routes(
       )[0];
       if (!existing)
         return res.status(404).json({ error: "invitation_not_found" });
+      const invitationRegionIds = Array.isArray(existing.invitation.regionIds)
+        ? (existing.invitation.regionIds as string[])
+        : [];
+      const invitationRegions = invitationRegionIds.length
+        ? await db
+            .select({ name: hotelOpsRegions.name })
+            .from(hotelOpsRegions)
+            .where(inArray(hotelOpsRegions.id, invitationRegionIds))
+        : [];
       const token = randomToken(),
         expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000);
       await db
@@ -883,7 +981,7 @@ export function registerHotelOperationsPhase2Routes(
         const acceptance = await sendPortalEmail(
           existing.invitation.email,
           "Your renewed INNTRIX invitation",
-          `Your invitation to ${existing.organization.name} in INNTRIX has been renewed and expires in 72 hours.`,
+          `Your invitation to ${existing.organization.name} (INNTRIX Organization ${existing.organization.organizationNumber}) as ${existing.invitation.role === "regional_admin" ? "a Regional Administrator" : existing.invitation.role.replaceAll("_", " ")}${invitationRegions.length ? ` for ${invitationRegions.map((region) => region.name).join(", ")}` : ""} has been renewed and expires in 72 hours.`,
           link,
         );
         emailAccepted = true;

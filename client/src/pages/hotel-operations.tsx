@@ -58,6 +58,7 @@ type PortalSession = {
   organizations: Array<{
     id: string;
     name: string;
+    organizationNumber: string;
     role: string;
     isDemo: boolean;
   }>;
@@ -66,11 +67,18 @@ type PortalSession = {
 };
 type HotelRecord = {
   id: string;
+  propertyIdentifier: string;
   propertyCode: string;
+  innCode?: string | null;
+  accountingCode?: string | null;
+  onboardingStatus: string;
   name: string;
   brand?: string | null;
+  streetAddress?: string | null;
   city: string;
   state: string;
+  postalCode?: string | null;
+  phone?: string | null;
   timeZone: string;
   roomCount?: number | null;
   status: string;
@@ -83,7 +91,7 @@ type RegionRecord = {
   status: string;
 };
 type Dashboard = {
-  organization: { id: string; name: string; isDemo: boolean };
+  organization: { id: string; name: string; organizationNumber: string; isDemo: boolean };
   role: string;
   canUseAllProperties: boolean;
   selectedHotelId: string | null;
@@ -357,7 +365,7 @@ const AUTHENTICATED_NAVIGATION: NavigationGroup[] = [
         icon: Settings,
         availability: "available",
         tab: "hotels",
-        requiresPortfolioAdmin: true,
+        requiresRegionalOrPortfolio: true,
       },
       {
         id: "user-management",
@@ -1027,13 +1035,18 @@ function Landing({ onSignedIn }: { onSignedIn: () => void }) {
 
 function HotelForm({
   organizationId,
+  regions,
   onCreated,
 }: {
   organizationId: string;
+  regions: RegionRecord[];
   onCreated: () => void;
 }) {
   const [form, setForm] = useState({
     propertyCode: "",
+    innCode: "",
+    accountingCode: "",
+    regionId: "",
     name: "",
     brand: "",
     propertyType: "branded",
@@ -1088,6 +1101,7 @@ function HotelForm({
           .map((value) => value.trim())
           .filter(Boolean);
       });
+      body.regionId = form.regionId || null;
       await portalFetch(
         `/hotels?organizationId=${encodeURIComponent(organizationId)}`,
         {
@@ -1101,7 +1115,9 @@ function HotelForm({
     }
   }
   const labels: Record<string, string> = {
-    propertyCode: "Property code",
+    propertyCode: "Management property code",
+    innCode: "Brand / PMS Inn Code (optional)",
+    accountingCode: "Accounting code (optional)",
     name: "Hotel name",
     brand: "Brand / flag",
     propertyType: "Hotel type (branded, independent, boutique)",
@@ -1136,10 +1152,10 @@ function HotelForm({
       className="grid gap-4 rounded-2xl border border-[#d9d1c2] bg-white p-5 md:grid-cols-2"
     >
       <div className="md:col-span-2">
-        <h3 className="font-semibold">Add a hotel</h3>
+        <h3 className="font-semibold">Register a property</h3>
         <p className="text-sm text-[#687671]">
-          Complete the property profile. Reporting mappings remain unconfigured
-          until source formats are reviewed and validated.
+          Corporate registration adds the property to the authorized portfolio.
+          INNTRIX assigns its permanent property identifier automatically.
         </p>
       </div>
       {Object.entries(labels).map(([key, label]) => (
@@ -1169,10 +1185,117 @@ function HotelForm({
           ].includes(key)}
         />
       ))}
+      <label className="grid gap-1.5 text-sm font-medium">
+        <span>Assigned region</span>
+        <select
+          className="h-10 rounded-md border border-[#d8d1c4] bg-white px-3"
+          value={form.regionId}
+          onChange={(event) => setForm({ ...form, regionId: event.target.value })}
+        >
+          <option value="">Unassigned / register only</option>
+          {regions
+            .filter((region) => region.status === "active")
+            .map((region) => (
+              <option key={region.id} value={region.id}>
+                {region.name}
+              </option>
+            ))}
+        </select>
+      </label>
       {error && <p className="md:col-span-2 text-sm text-red-700">{error}</p>}
       <div className="md:col-span-2">
-        <Button className="bg-[#184f46]">Create hotel</Button>
+        <Button className="bg-[#184f46]">Register property</Button>
       </div>
+    </form>
+  );
+}
+
+function RegionalPropertyOnboarding({
+  organizationId,
+  hotels,
+  onChanged,
+}: {
+  organizationId: string;
+  hotels: HotelRecord[];
+  onChanged: () => void;
+}) {
+  const [hotelId, setHotelId] = useState(hotels[0]?.id || "");
+  const hotel = hotels.find((item) => item.id === hotelId) || hotels[0];
+  const [form, setForm] = useState<any>({});
+  const [message, setMessage] = useState("");
+  useEffect(() => {
+    if (!hotel) return;
+    setHotelId(hotel.id);
+    setForm({
+      name: hotel.name || "",
+      brand: hotel.brand || "",
+      streetAddress: hotel.streetAddress || "",
+      city: hotel.city || "",
+      state: hotel.state || "",
+      postalCode: hotel.postalCode || "",
+      phone: hotel.phone || "",
+      timeZone: hotel.timeZone || "America/Chicago",
+      roomCount: hotel.roomCount == null ? "" : String(hotel.roomCount),
+    });
+  }, [hotelId, hotel?.id]);
+  if (!hotel) return null;
+  async function submit(event: FormEvent) {
+    event.preventDefault();
+    setMessage("");
+    try {
+      await portalFetch(
+        `/hotels/${encodeURIComponent(hotel.id)}?organizationId=${encodeURIComponent(organizationId)}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({
+            ...form,
+            roomCount: form.roomCount ? Number(form.roomCount) : null,
+          }),
+        },
+      );
+      setMessage("Property onboarding information saved.");
+      onChanged();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to save onboarding information");
+    }
+  }
+  const fields = [
+    ["name", "Property name"],
+    ["brand", "Brand / affiliation"],
+    ["streetAddress", "Street address"],
+    ["city", "City"],
+    ["state", "State / province"],
+    ["postalCode", "Postal code"],
+    ["phone", "Property phone"],
+    ["timeZone", "IANA time zone"],
+    ["roomCount", "Room count"],
+  ];
+  return (
+    <form onSubmit={submit} className="grid gap-4 rounded-2xl border border-[#d9d1c2] bg-white p-5 md:grid-cols-2">
+      <div className="md:col-span-2">
+        <h3 className="font-semibold">Regional property onboarding</h3>
+        <p className="text-sm text-[#687671]">
+          Complete setup information only for properties corporate has already registered in your regions.
+        </p>
+      </div>
+      <label className="grid gap-1.5 text-sm font-medium md:col-span-2">
+        Registered property
+        <select className="h-10 rounded-md border bg-white px-3" value={hotel.id} onChange={(event) => setHotelId(event.target.value)}>
+          {hotels.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.propertyIdentifier}</option>)}
+        </select>
+      </label>
+      {fields.map(([key, label]) => (
+        <Field
+          key={key}
+          label={label}
+          type={key === "roomCount" ? "number" : "text"}
+          value={form[key] || ""}
+          onChange={(event) => setForm({ ...form, [key]: event.target.value })}
+          required={["name", "city", "state", "timeZone"].includes(key)}
+        />
+      ))}
+      {message && <p role="status" className="text-sm text-[#5f6e69] md:col-span-2">{message}</p>}
+      <div className="md:col-span-2"><Button className="bg-[#184f46]">Save onboarding information</Button></div>
     </form>
   );
 }
@@ -1444,12 +1567,13 @@ function InviteForm({
     >
       <div className="md:col-span-3">
         <h3 className="font-semibold">
-          Invite a property leader or team member
+          {form.role === "regional_admin"
+            ? "Invite Regional Administrator"
+            : "Invite a property leader or team member"}
         </h3>
         <p className="text-sm text-[#687671]">
-          Invitations are single-use and expire in 72 hours. Above Property
-          access covers this organization; the selected hotel establishes the
-          initial property context.
+          Invitations are single-use and expire in 72 hours. Organization and
+          property scope are derived from your authorized INNTRIX context.
         </p>
       </div>
       <Field
@@ -1509,7 +1633,11 @@ function InviteForm({
                           regionIds.includes(hotel.regionId),
                       )
                         ? form.hotelId
-                        : "",
+                        : hotels.find(
+                            (hotel) =>
+                              hotel.regionId &&
+                              regionIds.includes(hotel.regionId),
+                          )?.id || "",
                     });
                   }}
                 />
@@ -1524,34 +1652,41 @@ function InviteForm({
           )}
         </fieldset>
       )}
-      <label className="grid gap-1.5 text-sm font-medium">
-        <span>
-          {["above_property_admin", "regional_admin"].includes(form.role)
-            ? "Initial property"
-            : "Hotel"}
-        </span>
-        <select
-          className="h-10 rounded-md border border-[#d8d1c4] bg-white px-3"
-          value={form.hotelId}
-          onChange={(e) => setForm({ ...form, hotelId: e.target.value })}
-          required
-          disabled={selectableHotels.length === 0}
-        >
-          <option value="">Select hotel</option>
-          {selectableHotels.map((hotel) => (
-            <option value={hotel.id} key={hotel.id}>
-              {hotel.name}
-            </option>
-          ))}
-        </select>
-      </label>
+      {form.role === "regional_admin" ? (
+        <div className="rounded-xl border border-[#ddd7cb] bg-[#f7f4ed] p-3 text-sm md:col-span-3">
+          <b>Invitation review</b>
+          <div className="mt-1 text-[#60706b]">
+            {form.regionIds.length
+              ? `${form.regionIds.length} region${form.regionIds.length === 1 ? "" : "s"} selected · Initial context: ${selectableHotels.find((hotel) => hotel.id === form.hotelId)?.name || "No registered hotel is available in the selected regions"}`
+              : "Select one or more regions. INNTRIX will derive a valid initial hotel from that regional scope."}
+          </div>
+        </div>
+      ) : (
+        <label className="grid gap-1.5 text-sm font-medium">
+          <span>{form.role === "above_property_admin" ? "Initial property" : "Hotel"}</span>
+          <select
+            className="h-10 rounded-md border border-[#d8d1c4] bg-white px-3"
+            value={form.hotelId}
+            onChange={(e) => setForm({ ...form, hotelId: e.target.value })}
+            required
+            disabled={selectableHotels.length === 0}
+          >
+            <option value="">Select hotel</option>
+            {selectableHotels.map((hotel) => (
+              <option value={hotel.id} key={hotel.id}>
+                {hotel.name}
+              </option>
+            ))}
+          </select>
+        </label>
+      )}
       {hotels.length === 0 && (
         <p className="md:col-span-3 rounded-lg bg-amber-50 p-3 text-sm text-amber-900">
           Create at least one hotel and property code for this organization
           before sending an invitation.
         </p>
       )}
-      {form.role !== "above_property_admin" && (
+      {!['above_property_admin', 'regional_admin'].includes(form.role) && (
         <fieldset className="md:col-span-3">
           <legend className="mb-2 text-sm font-semibold">
             Assigned modules
@@ -1940,6 +2075,21 @@ function DashboardView({
       setError(e instanceof Error ? e.message : "Unable to update hotel");
     }
   }
+  async function markHotelOperational(hotel: HotelRecord) {
+    setError("");
+    try {
+      await portalFetch(
+        `/hotels/${encodeURIComponent(hotel.id)}?organizationId=${encodeURIComponent(organizationId)}`,
+        {
+          method: "PATCH",
+          body: JSON.stringify({ onboardingStatus: "operational" }),
+        },
+      );
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Unable to complete onboarding");
+    }
+  }
   const canPortfolioAdmin =
     dashboard &&
     ["platform_owner", "above_property_admin"].includes(dashboard.role);
@@ -2077,6 +2227,11 @@ function DashboardView({
                   </option>
                 ))}
               </select>
+              {dashboard?.organization.organizationNumber && (
+                <div className="mt-2 text-xs text-[#b8d0c8]">
+                  INNTRIX Organization {dashboard.organization.organizationNumber}
+                </div>
+              )}
               {dashboard?.organization.isDemo && (
                 <div className="mt-3 rounded-md bg-amber-300/20 px-2 py-1 text-xs text-amber-100">
                   Demo organization · fictional data only
@@ -2444,7 +2599,7 @@ function DashboardView({
                           <div>
                             <h2 className="font-semibold">{hotel.name}</h2>
                             <p className="mt-1 text-sm text-[#687671]">
-                              {hotel.propertyCode} · {hotel.city}, {hotel.state}
+                              {hotel.propertyIdentifier} · {hotel.city}, {hotel.state}
                             </p>
                           </div>
                           <span className={`rounded-full px-2 py-1 text-[10px] font-bold uppercase ${hotel.status === "active" ? "bg-emerald-50 text-emerald-700" : "bg-[#eee9df] text-[#766b58]"}`}>
@@ -2459,6 +2614,10 @@ function DashboardView({
                           <div>
                             <dt className="text-xs uppercase tracking-wide text-[#78847f]">Rooms</dt>
                             <dd className="mt-1 font-medium">{hotel.roomCount || "Pending"}</dd>
+                          </div>
+                          <div className="col-span-2">
+                            <dt className="text-xs uppercase tracking-wide text-[#78847f]">Onboarding</dt>
+                            <dd className="mt-1 font-medium capitalize">{hotel.onboardingStatus.replaceAll("_", " ")}</dd>
                           </div>
                         </dl>
                         {hotel.id !== dashboard.selectedHotelId && (
@@ -2498,25 +2657,45 @@ function DashboardView({
                           <div>
                             <div className="font-semibold">{hotel.name}</div>
                             <div className="text-sm text-[#6c7975]">
-                              {hotel.propertyCode} · {hotel.city}, {hotel.state}{" "}
-                              · {hotel.status}
+                              {hotel.propertyIdentifier} · {hotel.propertyCode} · {hotel.city}, {hotel.state}{" "}
+                              · {hotel.onboardingStatus.replaceAll("_", " ")}
                             </div>
                           </div>
-                          {canPortfolioAdmin && (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={() => void toggleHotelStatus(hotel)}
-                            >
-                              {hotel.status === "active"
-                                ? "Deactivate"
-                                : "Activate"}
-                            </Button>
-                          )}
+                          <div className="flex flex-wrap gap-2">
+                            {hotel.onboardingStatus === "gm_accepted" &&
+                              canRegionalAudit && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => void markHotelOperational(hotel)}
+                                >
+                                  Mark operational
+                                </Button>
+                              )}
+                            {canPortfolioAdmin && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => void toggleHotelStatus(hotel)}
+                              >
+                                {hotel.status === "active"
+                                  ? "Deactivate"
+                                  : "Activate"}
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       ))}
                     </div>
+                  )}
+                  {dashboard.role === "regional_admin" && (
+                    <RegionalPropertyOnboarding
+                      organizationId={organizationId}
+                      hotels={dashboard.hotels}
+                      onChanged={() => void load()}
+                    />
                   )}
                   {canPortfolioAdmin && (
                     <>
@@ -2527,6 +2706,7 @@ function DashboardView({
                       />
                       <HotelForm
                         organizationId={organizationId}
+                        regions={dashboard.regions}
                         onCreated={() => void load()}
                       />
                     </>
@@ -2637,7 +2817,7 @@ function TokenPage({
           <p className="mt-2 text-sm text-[#66746f]">
             {mode === "support"
               ? `Join the platform support team as ${meta.role === "support_administrator" ? "Support Administrator" : "Support Specialist"}.`
-              : `Join ${meta.organizationName}${meta.regionNames?.length ? ` for ${meta.regionNames.join(", ")}` : ""}${meta.hotelName ? ` at ${meta.hotelName}` : ""} as ${ROLE_NAMES[meta.role] || meta.role}.`}
+              : `Join ${meta.organizationName}${meta.organizationNumber ? ` (INNTRIX Organization ${meta.organizationNumber})` : ""}${meta.regionNames?.length ? ` for ${meta.regionNames.join(", ")}` : ""}${meta.hotelName ? ` at ${meta.hotelName}` : ""} as ${ROLE_NAMES[meta.role] || meta.role}.`}
           </p>
         )}
         <div className="mt-6 grid gap-4">

@@ -2,7 +2,7 @@ import crypto from "crypto";
 import bcrypt from "bcrypt";
 import type { Express, RequestHandler } from "express";
 import { Router } from "express";
-import { and, asc, desc, eq, gt, inArray, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, gt, inArray, isNull, ne } from "drizzle-orm";
 import { z } from "zod";
 import { db } from "../db";
 import { createSoftAuthRateLimiter } from "../middleware/rateLimit";
@@ -49,6 +49,33 @@ const normalizePropertyCode = (value: string) =>
     .trim()
     .toUpperCase()
     .replace(/[^A-Z0-9_-]/g, "");
+const normalizeExternalCode = (value?: string | null) => {
+  const normalized = String(value || "").trim().toUpperCase();
+  return normalized || null;
+};
+async function externalHotelCodeConflict(
+  organizationId: string,
+  field: "innCode" | "accountingCode",
+  value: string | null,
+  excludeHotelId?: string,
+) {
+  if (!value) return false;
+  const column = hotelOpsHotels[field];
+  const conditions = [
+    eq(hotelOpsHotels.organizationId, organizationId),
+    eq(column, value),
+  ];
+  if (excludeHotelId) conditions.push(ne(hotelOpsHotels.id, excludeHotelId));
+  return Boolean(
+    (
+      await db
+        .select({ id: hotelOpsHotels.id })
+        .from(hotelOpsHotels)
+        .where(and(...conditions))
+        .limit(1)
+    )[0],
+  );
+}
 const normalizeSlug = (value: string) =>
   value
     .trim()
@@ -357,6 +384,8 @@ const loginSchema = z.object({
 });
 const hotelBaseSchema = z.object({
   propertyCode: z.string().trim().min(2).max(40),
+  innCode: z.string().trim().max(80).optional().nullable(),
+  accountingCode: z.string().trim().max(80).optional().nullable(),
   name: z.string().trim().min(2).max(180),
   brand: z.string().trim().max(100).optional().nullable(),
   propertyType: z
@@ -424,9 +453,22 @@ const validateRoomCounts = (
       message: "Active room count cannot exceed total room count.",
     });
 };
-const hotelSchema = hotelBaseSchema.superRefine(validateRoomCounts);
+const hotelSchema = hotelBaseSchema
+  .extend({ regionId: z.string().uuid().optional().nullable() })
+  .superRefine(validateRoomCounts);
 const hotelUpdateSchema = hotelBaseSchema
   .partial()
+  .extend({
+    onboardingStatus: z
+      .enum([
+        "registered",
+        "pending_regional_setup",
+        "gm_invited",
+        "gm_accepted",
+        "operational",
+      ])
+      .optional(),
+  })
   .superRefine(validateRoomCounts);
 const inviteSchema = z.object({
   organizationId: z.string().uuid(),
@@ -475,6 +517,51 @@ async function sendPortalEmail(
     messageId:
       typeof result?.messageId === "string" ? result.messageId : null,
   };
+}
+
+async function invitationConflict(
+  organizationId: string,
+  emailInput: string,
+) {
+  const email = normalizeEmail(emailInput);
+  const account = (
+    await db
+      .select({ id: hotelOpsAccounts.id })
+      .from(hotelOpsAccounts)
+      .where(eq(hotelOpsAccounts.email, email))
+      .limit(1)
+  )[0];
+  if (account) {
+    const membership = (
+      await db
+        .select({ id: hotelOpsOrganizationMemberships.id })
+        .from(hotelOpsOrganizationMemberships)
+        .where(
+          and(
+            eq(hotelOpsOrganizationMemberships.organizationId, organizationId),
+            eq(hotelOpsOrganizationMemberships.accountId, account.id),
+          ),
+        )
+        .limit(1)
+    )[0];
+    if (membership) return "recipient_already_in_organization";
+  }
+  const pending = (
+    await db
+      .select({ id: hotelOpsInvitations.id })
+      .from(hotelOpsInvitations)
+      .where(
+        and(
+          eq(hotelOpsInvitations.organizationId, organizationId),
+          eq(hotelOpsInvitations.email, email),
+          isNull(hotelOpsInvitations.acceptedAt),
+          isNull(hotelOpsInvitations.revokedAt),
+          gt(hotelOpsInvitations.expiresAt, new Date()),
+        ),
+      )
+      .limit(1)
+  )[0];
+  return pending ? "pending_invitation_exists" : null;
 }
 
 export function registerHotelOperationsRoutes(app: Express) {
@@ -610,6 +697,7 @@ export function registerHotelOperationsRoutes(app: Express) {
       organizations: context.organizations.map((item) => ({
         id: item.organization.id,
         name: item.organization.name,
+        organizationNumber: item.organization.organizationNumber,
         role: item.role,
         isDemo: item.organization.isDemo,
       })),
@@ -700,6 +788,7 @@ export function registerHotelOperationsRoutes(app: Express) {
       organization: {
         id: membership.organization.id,
         name: membership.organization.name,
+        organizationNumber: membership.organization.organizationNumber,
         isDemo: membership.organization.isDemo,
       },
       role: effectiveRole,
@@ -918,7 +1007,14 @@ export function registerHotelOperationsRoutes(app: Express) {
         const previousRegionId = hotel.regionId;
         const [updated] = await db
           .update(hotelOpsHotels)
-          .set({ regionId: input.regionId, updatedAt: new Date() })
+          .set({
+            regionId: input.regionId,
+            onboardingStatus:
+              input.regionId && hotel.onboardingStatus === "registered"
+                ? "pending_regional_setup"
+                : hotel.onboardingStatus,
+            updatedAt: new Date(),
+          })
           .where(eq(hotelOpsHotels.id, hotel.id))
           .returning();
         await audit({
@@ -1047,11 +1143,51 @@ export function registerHotelOperationsRoutes(app: Express) {
           .limit(1);
         if (existing[0])
           return res.status(409).json({ error: "duplicate_property_code" });
+        if (input.regionId) {
+          const region = (
+            await db
+              .select({ id: hotelOpsRegions.id })
+              .from(hotelOpsRegions)
+              .where(
+                and(
+                  eq(hotelOpsRegions.id, input.regionId),
+                  eq(hotelOpsRegions.organizationId, org.organizationId),
+                  eq(hotelOpsRegions.status, "active"),
+                ),
+              )
+              .limit(1)
+          )[0];
+          if (!region)
+            return res.status(400).json({ error: "region_hotel_mismatch" });
+        }
+        const innCode = normalizeExternalCode(input.innCode);
+        const accountingCode = normalizeExternalCode(input.accountingCode);
+        if (
+          await externalHotelCodeConflict(
+            org.organizationId,
+            "innCode",
+            innCode,
+          )
+        )
+          return res.status(409).json({ error: "duplicate_inn_code" });
+        if (
+          await externalHotelCodeConflict(
+            org.organizationId,
+            "accountingCode",
+            accountingCode,
+          )
+        )
+          return res.status(409).json({ error: "duplicate_accounting_code" });
         const [hotel] = await db
           .insert(hotelOpsHotels)
           .values({
             ...input,
             propertyCode,
+            innCode,
+            accountingCode,
+            onboardingStatus: input.regionId
+              ? "pending_regional_setup"
+              : "registered",
             organizationId: org.organizationId,
             createdByAccountId: context.account.id,
           })
@@ -1153,16 +1289,83 @@ export function registerHotelOperationsRoutes(app: Express) {
       try {
         const context = req.hotelOps as HotelOpsContext;
         const org = selectedOrg(context, req.query.organizationId);
-        if (!org || !canSeeAllHotels(org.role))
+        if (
+          !org ||
+          (!canSeeAllHotels(org.role) && org.role !== "regional_admin")
+        )
           return res.status(403).json({ error: "hotel_update_denied" });
         const allowed = (
           await authorizedHotels(context, org.organizationId)
         ).find((hotel) => hotel.id === req.params.id);
         if (!allowed) return res.status(404).json({ error: "hotel_not_found" });
         const input = hotelUpdateSchema.parse(req.body);
+        if (org.role === "regional_admin") {
+          const permittedOnboardingFields = new Set([
+            "name",
+            "brand",
+            "propertyType",
+            "streetAddress",
+            "city",
+            "state",
+            "postalCode",
+            "country",
+            "phone",
+            "timeZone",
+            "roomCount",
+            "activeRoomCount",
+            "meetingRoomCount",
+            "foodBeverageOutletCount",
+            "pmsProvider",
+            "reportingPlatform",
+            "accountingSystem",
+            "laborSchedulingSystem",
+            "brandReportingEcosystem",
+            "businessDayCutoff",
+            "currency",
+            "departments",
+            "onboardingStatus",
+          ]);
+          const restricted = Object.keys(input).filter(
+            (field) => !permittedOnboardingFields.has(field),
+          );
+          if (restricted.length)
+            return res.status(403).json({ error: "property_registration_fields_denied" });
+        }
+        if (input.onboardingStatus) {
+          const allowedTransition =
+            input.onboardingStatus === allowed.onboardingStatus ||
+            (input.onboardingStatus === "operational" &&
+              allowed.onboardingStatus === "gm_accepted");
+          if (!allowedTransition)
+            return res.status(409).json({ error: "invalid_onboarding_transition" });
+        }
+        if (
+          "innCode" in input &&
+          (await externalHotelCodeConflict(
+            org.organizationId,
+            "innCode",
+            normalizeExternalCode(input.innCode),
+            allowed.id,
+          ))
+        )
+          return res.status(409).json({ error: "duplicate_inn_code" });
+        if (
+          "accountingCode" in input &&
+          (await externalHotelCodeConflict(
+            org.organizationId,
+            "accountingCode",
+            normalizeExternalCode(input.accountingCode),
+            allowed.id,
+          ))
+        )
+          return res.status(409).json({ error: "duplicate_accounting_code" });
         const values: any = { ...input, updatedAt: new Date() };
         if (input.propertyCode)
           values.propertyCode = normalizePropertyCode(input.propertyCode);
+        if ("innCode" in input)
+          values.innCode = normalizeExternalCode(input.innCode);
+        if ("accountingCode" in input)
+          values.accountingCode = normalizeExternalCode(input.accountingCode);
         const [hotel] = await db
           .update(hotelOpsHotels)
           .set(values)
@@ -1242,6 +1445,7 @@ export function registerHotelOperationsRoutes(app: Express) {
       email: row.invitation.email,
       role: row.invitation.role,
       organizationName: row.organization.name,
+      organizationNumber: row.organization.organizationNumber,
       hotelName: row.hotel?.name || null,
       regionIds,
       regionNames: regions.map((region) => region.name),
@@ -1320,6 +1524,11 @@ export function registerHotelOperationsRoutes(app: Express) {
             .json({ error: "initial_hotel_must_match_region" });
         if (input.role !== "regional_admin" && input.regionIds.length)
           return res.status(400).json({ error: "regions_not_valid_for_role" });
+        const conflict = await invitationConflict(
+          org.organizationId,
+          input.email,
+        );
+        if (conflict) return res.status(409).json({ error: conflict });
         const token = randomToken();
         const expiresAt = new Date(Date.now() + INVITE_TTL_MS);
         const [invitation] = await db
@@ -1343,7 +1552,7 @@ export function registerHotelOperationsRoutes(app: Express) {
           const acceptance = await sendPortalEmail(
             input.email,
             "You're invited to INNTRIX",
-            `You have been invited to join ${org.organization.name} in INNTRIX${selectedRegions.length ? ` for ${selectedRegions.map((region) => region.name).join(", ")}` : ""}${selectedHotel ? `, with ${selectedHotel.name} as your initial property context` : ""}. This secure invitation expires in 72 hours.`,
+            `You have been invited to join ${org.organization.name} (INNTRIX Organization ${org.organization.organizationNumber}) as ${input.role === "regional_admin" ? "a Regional Administrator" : input.role.replaceAll("_", " ")}${selectedRegions.length ? ` for ${selectedRegions.map((region) => region.name).join(", ")}` : ""}${selectedHotel ? `, with ${selectedHotel.name} as your initial property context` : ""}. This secure invitation expires in 72 hours.`,
             link,
           );
           emailAccepted = true;
@@ -1366,6 +1575,18 @@ export function registerHotelOperationsRoutes(app: Express) {
             }),
           );
         }
+        if (
+          emailAccepted &&
+          input.role === "property_admin" &&
+          selectedHotel &&
+          ["registered", "pending_regional_setup"].includes(
+            selectedHotel.onboardingStatus,
+          )
+        )
+          await db
+            .update(hotelOpsHotels)
+            .set({ onboardingStatus: "gm_invited", updatedAt: new Date() })
+            .where(eq(hotelOpsHotels.id, selectedHotel.id));
         await audit({
           organizationId: org.organizationId,
           hotelId: input.hotelId,
@@ -1836,6 +2057,15 @@ export function registerHotelOperationsRoutes(app: Express) {
           return res
             .status(404)
             .json({ error: "invitation_invalid_or_expired" });
+        const invitedOrganization = (
+          await db
+            .select({ status: hotelOpsOrganizations.status })
+            .from(hotelOpsOrganizations)
+            .where(eq(hotelOpsOrganizations.id, invitation.organizationId))
+            .limit(1)
+        )[0];
+        if (invitedOrganization?.status !== "active")
+          return res.status(409).json({ error: "invitation_organization_inactive" });
         if (
           [
             "above_property_admin",
@@ -1873,6 +2103,8 @@ export function registerHotelOperationsRoutes(app: Express) {
           return res
             .status(409)
             .json({ error: "invitation_property_scope_changed" });
+        if (invitedHotel.status !== "active")
+          return res.status(409).json({ error: "invitation_property_inactive" });
         if (invitation.role === "regional_admin") {
           const validRegions = invitationRegionIds.length
             ? await db
@@ -1899,7 +2131,7 @@ export function registerHotelOperationsRoutes(app: Express) {
               .json({ error: "invitation_region_scope_changed" });
         }
         if (invitation.invitedByAccountId) {
-          const inviterMembership = (
+          const organizationInviterMembership = (
             await db
               .select()
               .from(hotelOpsOrganizationMemberships)
@@ -1917,6 +2149,35 @@ export function registerHotelOperationsRoutes(app: Express) {
               )
               .limit(1)
           )[0];
+          const platformOwnerMembership = (
+            await db
+              .select()
+              .from(hotelOpsOrganizationMemberships)
+              .where(
+                and(
+                  eq(
+                    hotelOpsOrganizationMemberships.accountId,
+                    invitation.invitedByAccountId,
+                  ),
+                  eq(hotelOpsOrganizationMemberships.role, "platform_owner"),
+                  eq(hotelOpsOrganizationMemberships.status, "active"),
+                ),
+              )
+              .limit(1)
+          )[0];
+          const inviterMembership =
+            platformOwnerMembership || organizationInviterMembership;
+          if (
+            !inviterMembership ||
+            inviterMembership.status !== "active" ||
+            !canInviteHotelOpsRole(
+              inviterMembership.role as HotelOpsRole,
+              invitation.role as HotelOpsRole,
+            )
+          )
+            return res
+              .status(409)
+              .json({ error: "invitation_inviter_scope_changed" });
           if (inviterMembership?.role === "regional_admin") {
             const currentRegionalAccess =
               inviterMembership.status === "active" && invitedHotel.regionId
@@ -1950,6 +2211,32 @@ export function registerHotelOperationsRoutes(app: Express) {
                 )[0]
               : null;
             if (!currentRegionalAccess)
+              return res
+                .status(409)
+                .json({ error: "invitation_inviter_scope_changed" });
+          }
+          if (
+            ["property_admin", "property_manager"].includes(
+              inviterMembership.role,
+            )
+          ) {
+            const hotelAuthority = (
+              await db
+                .select({ id: hotelOpsHotelMemberships.id })
+                .from(hotelOpsHotelMemberships)
+                .where(
+                  and(
+                    eq(
+                      hotelOpsHotelMemberships.accountId,
+                      invitation.invitedByAccountId,
+                    ),
+                    eq(hotelOpsHotelMemberships.hotelId, invitedHotel.id),
+                    eq(hotelOpsHotelMemberships.status, "active"),
+                  ),
+                )
+                .limit(1)
+            )[0];
+            if (!hotelAuthority)
               return res
                 .status(409)
                 .json({ error: "invitation_inviter_scope_changed" });
@@ -2116,6 +2403,23 @@ export function registerHotelOperationsRoutes(app: Express) {
             .update(hotelOpsInvitations)
             .set({ acceptedByAccountId: account.id })
             .where(eq(hotelOpsInvitations.id, invitation.id));
+          if (
+            invitation.role === "property_admin" &&
+            invitation.hotelId
+          )
+            await tx
+              .update(hotelOpsHotels)
+              .set({ onboardingStatus: "gm_accepted", updatedAt: new Date() })
+              .where(
+                and(
+                  eq(hotelOpsHotels.id, invitation.hotelId),
+                  inArray(hotelOpsHotels.onboardingStatus, [
+                    "registered",
+                    "pending_regional_setup",
+                    "gm_invited",
+                  ]),
+                ),
+              );
           await tx
             .insert(hotelOpsAuditEvents)
             .values({

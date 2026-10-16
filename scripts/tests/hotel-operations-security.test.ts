@@ -105,7 +105,7 @@ test("hotel operations onboarding is explicitly organization and property scoped
   assert.match(phase2, /hotel_required_for_role/);
   assert.match(portal, /organizationId,\s*hotels,\s*regions,\s*actorRole/);
   assert.match(portal, /Create at least one hotel and property code/);
-  assert.match(portal, /initial property context/);
+  assert.match(portal, /initial hotel from that regional scope/);
   assert.match(portal, /\[organizationId\]/);
   assert.match(portal, /result\?\.returnTo \|\| "\/hoteloperations\/dashboard"/);
 });
@@ -186,4 +186,51 @@ test("regional access isolates a representative 100-property portfolio", () => {
     canAccessHotelOpsProperty("property_admin", [movedHotel], movedHotel),
     true,
   );
+});
+
+test("enterprise identifiers are additive, unique, and immutable", () => {
+  const migration = readFileSync(
+    "migrations/0159_add_hotel_ops_enterprise_identifiers.sql",
+    "utf8",
+  );
+  const schema = readFileSync("shared/schema.ts", "utf8");
+
+  assert.match(migration, /hotel_ops_organization_number_seq START WITH 10000/);
+  assert.match(migration, /lpad\(nextval\('hotel_ops_organization_number_seq'\)::text, 5, '0'\)/);
+  assert.match(migration, /WHERE organization_number IS NULL/);
+  assert.match(migration, /uniq_hotel_ops_organization_number/);
+  assert.match(migration, /'HTL-' \|\| lpad\(nextval\('hotel_ops_property_identifier_seq'\)::text, 6, '0'\)/);
+  assert.match(migration, /WHERE property_identifier IS NULL/);
+  assert.match(migration, /organization_number is immutable/);
+  assert.match(migration, /property_identifier is immutable/);
+  assert.match(migration, /SET onboarding_status = 'operational'\s+WHERE onboarding_status IS NULL/);
+  assert.match(schema, /organizationNumber: varchar\("organization_number"/);
+  assert.match(schema, /propertyIdentifier: varchar\("property_identifier"/);
+  assert.match(schema, /innCode: varchar\("inn_code"/);
+  assert.match(schema, /accountingCode: varchar\("accounting_code"/);
+});
+
+test("enterprise onboarding and quick regional invitations remain server scoped", () => {
+  const routes = readFileSync("server/routes/hotelOperations.ts", "utf8");
+  const phase2 = readFileSync("server/routes/hotelOperationsPhase2.ts", "utf8");
+  const portal = readFileSync("client/src/pages/hotel-operations.tsx", "utf8");
+  const admin = readFileSync("client/src/pages/hotel-operations-admin.tsx", "utf8");
+
+  assert.match(routes, /property_registration_fields_denied/);
+  assert.match(routes, /invalid_onboarding_transition/);
+  assert.match(routes, /invitation_organization_inactive/);
+  assert.match(routes, /invitation_property_inactive/);
+  assert.match(routes, /invitation_inviter_scope_changed/);
+  assert.match(routes, /recipient_already_in_organization/);
+  assert.match(routes, /pending_invitation_exists/);
+  assert.match(routes, /onboardingStatus: "gm_accepted"/);
+  assert.match(phase2, /\/admin\/organizations\/:id\/onboarding/);
+  assert.match(phase2, /platform_owner_required/);
+  assert.match(phase2, /INNTRIX Organization \$\{org\.organizationNumber\}/);
+  assert.match(portal, /Regional property onboarding/);
+  assert.match(portal, /Register a property/);
+  assert.match(portal, /Mark operational/);
+  assert.match(admin, /Search by company name or five-digit organization number/);
+  assert.match(admin, /Invite Regional Administrator/);
+  assert.match(admin, /role: "regional_admin"/);
 });

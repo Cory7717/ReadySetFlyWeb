@@ -262,7 +262,7 @@ export default function HotelOperationsAdminPage() {
                 <Row
                   key={x.hotel.id}
                   primary={x.hotel.name}
-                  secondary={`${x.organization.name} · ${x.hotel.propertyCode} · ${x.hotel.status}`}
+                  secondary={`${x.organization.name} · ${x.hotel.propertyIdentifier} · ${String(x.hotel.onboardingStatus).replaceAll("_", " ")} · ${x.hotel.status}`}
                 />
               ))}
             </Panel>
@@ -376,6 +376,11 @@ function Row({ primary, secondary }: any) {
 }
 function Organizations({ data, reload }: any) {
   const [name, setName] = useState("");
+  const [search, setSearch] = useState("");
+  const [detail, setDetail] = useState<any>(null);
+  const [email, setEmail] = useState("");
+  const [regionIds, setRegionIds] = useState<string[]>([]);
+  const [message, setMessage] = useState("");
   async function submit(e: FormEvent) {
     e.preventDefault();
     await api("/admin/organizations", {
@@ -385,6 +390,52 @@ function Organizations({ data, reload }: any) {
     setName("");
     await reload();
   }
+  async function openOrganization(id: string) {
+    setDetail(await api(`/admin/organizations/${id}/onboarding`));
+    setEmail("");
+    setRegionIds([]);
+    setMessage("");
+  }
+  async function inviteRegionalAdministrator(event: FormEvent) {
+    event.preventDefault();
+    setMessage("");
+    const eligibleHotels = (detail.hotels || []).filter(
+      (hotel: any) => hotel.regionId && regionIds.includes(hotel.regionId),
+    );
+    if (!eligibleHotels.length) {
+      setMessage("Assign at least one registered hotel to the selected regions first.");
+      return;
+    }
+    try {
+      const result = await api("/admin/invitations", {
+        method: "POST",
+        body: JSON.stringify({
+          organizationId: detail.organization.id,
+          email,
+          role: "regional_admin",
+          regionIds,
+          hotelId: eligibleHotels[0].id,
+          moduleKeys: [],
+        }),
+      });
+      setMessage(
+        result.invitation.emailStatus === "accepted"
+          ? "Regional Administrator invitation accepted by the email provider."
+          : "Invitation created, but the email provider did not accept it.",
+      );
+      setEmail("");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to send invitation");
+    }
+  }
+  const organizations = (data.organizations || []).filter((organization: any) => {
+    const query = search.trim().toLowerCase();
+    return (
+      !query ||
+      organization.name.toLowerCase().includes(query) ||
+      String(organization.organizationNumber || "").includes(query)
+    );
+  });
   return (
     <>
       <form
@@ -401,34 +452,113 @@ function Organizations({ data, reload }: any) {
         />
         <Button className="bg-[#184f46]">Create organization</Button>
       </form>
+      <div className="mt-4 rounded-2xl border bg-white p-4">
+        <label className="grid gap-1.5 text-sm font-medium">
+          Search by company name or five-digit organization number
+          <input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Example Hospitality or 10427"
+            className="rounded-lg border px-3 py-2"
+          />
+        </label>
+      </div>
       <Panel title="Organizations">
-        {(data.organizations || []).map((x: any) => (
+        {organizations.map((x: any) => (
           <div key={x.id} className="flex justify-between border-b py-3">
             <div>
               <b>{x.name}</b>
               <div className="text-sm text-[#687671]">
-                {x.hotelCount} hotels · {x.administratorCount} above-property
+                Organization {x.organizationNumber} · {x.hotelCount} hotels · {x.administratorCount} above-property
                 admins · {x.status}
               </div>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={async () => {
-                await api(`/admin/organizations/${x.id}`, {
-                  method: "PATCH",
-                  body: JSON.stringify({
-                    status: x.status === "active" ? "inactive" : "active",
-                  }),
-                });
-                await reload();
-              }}
-            >
-              {x.status === "active" ? "Deactivate" : "Activate"}
-            </Button>
+            <div className="flex gap-2">
+              <Button variant="outline" size="sm" onClick={() => void openOrganization(x.id)}>
+                Open
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  await api(`/admin/organizations/${x.id}`, {
+                    method: "PATCH",
+                    body: JSON.stringify({
+                      status: x.status === "active" ? "inactive" : "active",
+                    }),
+                  });
+                  await reload();
+                }}
+              >
+                {x.status === "active" ? "Deactivate" : "Activate"}
+              </Button>
+            </div>
           </div>
         ))}
       </Panel>
+      {detail && (
+        <Panel title={`${detail.organization.name} · Organization ${detail.organization.organizationNumber}`}>
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-[#f5f2eb] p-4 text-sm">
+            <span>
+              {detail.hotels.length} registered properties · {detail.regions.length} regions
+            </span>
+            <a
+              href={`/hoteloperations/dashboard?organizationId=${encodeURIComponent(detail.organization.id)}`}
+              className="font-semibold text-[#176253] underline underline-offset-4"
+            >
+              Open corporate workspace
+            </a>
+          </div>
+          <form onSubmit={inviteRegionalAdministrator} className="grid gap-4 rounded-xl border p-4">
+            <div>
+              <h3 className="font-semibold">Invite Regional Administrator</h3>
+              <p className="text-sm text-[#687671]">
+                The organization and initial property are derived automatically from this verified context.
+              </p>
+            </div>
+            <label className="grid gap-1.5 text-sm font-medium">
+              Business email
+              <input
+                type="email"
+                required
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                className="rounded-lg border px-3 py-2"
+              />
+            </label>
+            <fieldset>
+              <legend className="mb-2 text-sm font-semibold">Authorized regions</legend>
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {detail.regions
+                  .filter((region: any) => region.status === "active")
+                  .map((region: any) => (
+                    <label key={region.id} className="flex items-center gap-2 rounded-lg border p-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={regionIds.includes(region.id)}
+                        onChange={(event) =>
+                          setRegionIds(
+                            event.target.checked
+                              ? [...regionIds, region.id]
+                              : regionIds.filter((id) => id !== region.id),
+                          )
+                        }
+                      />
+                      {region.name}
+                    </label>
+                  ))}
+              </div>
+            </fieldset>
+            <div className="rounded-lg bg-[#f5f2eb] p-3 text-sm text-[#5f6e69]">
+              Review: Regional Administrator · {regionIds.length} selected region{regionIds.length === 1 ? "" : "s"} · Organization {detail.organization.organizationNumber}
+            </div>
+            {message && <p role="status" className="text-sm text-[#5f6e69]">{message}</p>}
+            <Button className="w-fit bg-[#184f46]" disabled={!email || regionIds.length === 0}>
+              Send Regional Administrator invitation
+            </Button>
+          </form>
+        </Panel>
+      )}
     </>
   );
 }

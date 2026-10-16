@@ -6778,6 +6778,10 @@ export const hotelOpsOrganizations = pgTable("hotel_ops_organizations", {
     .primaryKey()
     .default(sql`gen_random_uuid()`),
   name: text("name").notNull(),
+  organizationNumber: varchar("organization_number", { length: 12 })
+    .notNull()
+    .unique()
+    .default(sql`lpad(nextval('hotel_ops_organization_number_seq')::text, 5, '0')`),
   slug: varchar("slug", { length: 100 }).notNull().unique(),
   status: text("status").notNull().default("active"),
   isDemo: boolean("is_demo").notNull().default(false),
@@ -6901,7 +6905,18 @@ export const hotelOpsHotels = pgTable(
     regionId: varchar("region_id").references(() => hotelOpsRegions.id, {
       onDelete: "set null",
     }),
+    propertyIdentifier: varchar("property_identifier", { length: 24 })
+      .notNull()
+      .unique()
+      .default(
+        sql`('HTL-' || lpad(nextval('hotel_ops_property_identifier_seq')::text, 6, '0'))`,
+      ),
     propertyCode: varchar("property_code", { length: 40 }).notNull(),
+    innCode: varchar("inn_code", { length: 80 }),
+    accountingCode: varchar("accounting_code", { length: 80 }),
+    onboardingStatus: text("onboarding_status")
+      .notNull()
+      .default("registered"),
     name: text("name").notNull(),
     brand: text("brand"),
     propertyType: text("property_type"),
@@ -6950,11 +6965,21 @@ export const hotelOpsHotels = pgTable(
       table.organizationId,
       table.propertyCode,
     ),
+    uniqueIndex("uniq_hotel_ops_inn_code")
+      .on(table.organizationId, table.innCode)
+      .where(sql`${table.innCode} IS NOT NULL`),
+    uniqueIndex("uniq_hotel_ops_accounting_code")
+      .on(table.organizationId, table.accountingCode)
+      .where(sql`${table.accountingCode} IS NOT NULL`),
     index("idx_hotel_ops_hotels_org_status").on(
       table.organizationId,
       table.status,
     ),
     index("idx_hotel_ops_hotels_region").on(table.regionId, table.status),
+    index("idx_hotel_ops_hotel_onboarding").on(
+      table.organizationId,
+      table.onboardingStatus,
+    ),
   ],
 );
 

@@ -624,3 +624,10 @@
 .cw-award-plaque figcaption { padding:8px 6px 10px; color:#b9aa91; font-size:7px; line-height:1.6; text-align:center; letter-spacing:.06em; text-transform:uppercase; }
 @media (max-width:1060px) { .cw-award-feature { grid-template-columns:minmax(0,220px) minmax(0,1fr) 160px; gap:24px; padding:24px; } }
 @media (max-width:760px) { .cw-award-feature { grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:24px 20px; padding:24px 20px; } .cw-award-emblem { max-width:230px; } .cw-award-plaque { width:100%; max-width:180px; justify-self:center; grid-column:2; grid-row:1; } .cw-award-copy { grid-column:1 / -1; grid-row:2; } }
+
+.cw-project-title-row { display:grid; grid-template-columns:minmax(0,1fr) 125px; gap:14px; align-items:center; }
+.cw-project-title-row > div { min-width:0; }
+.cw-project-award-stamp { width:100%; margin-top:14px; }
+@media (min-width:761px) and (max-width:1060px) { .cw-project-title-row { grid-template-columns:minmax(0,1fr) 100px; gap:12px; } }
+@media (max-width:760px) { .cw-project-title-row { grid-template-columns:minmax(0,1fr) 105px; gap:12px; } }
+@media (max-width:360px) { .cw-project-title-row { grid-template-columns:minmax(0,1fr) 90px; gap:10px; } .cw-project-title-row h3 { font-size:30px; } }

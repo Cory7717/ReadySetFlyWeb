@@ -246,8 +246,17 @@ export default function CoryArmer() {
             <article className="cw-project-card" key={project.title}>
               <div>
                 <p className="cw-project-cue">{project.cue}</p>
-                <h3>{project.title}</h3>
-                <p className="cw-project-genre">{project.genre}</p>
+                <div className={project.title === "NOISE & FURY" ? "cw-project-title-row" : undefined}>
+                  <div>
+                    <h3>{project.title}</h3>
+                    <p className="cw-project-genre">{project.genre}</p>
+                  </div>
+                  {project.title === "NOISE & FURY" ? (
+                    <div className="cw-project-award-stamp">
+                      <div className="cw-award-emblem-crop"><img src="/downloads/noise-and-fury-golden-emblem.png" alt="Winner, Best TV Series Script, Authentic Global Film Awards 2026." width="1145" height="1374" loading="lazy" /></div>
+                    </div>
+                  ) : null}
+                </div>
                 <p className="cw-project-description">{project.description}</p>
               </div>
               <div className="cw-project-footer">

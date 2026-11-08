@@ -4,19 +4,20 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 import { trackEvent } from "@/lib/analytics";
 import { useToast } from "@/hooks/use-toast";
-import { BookOpen, ChevronDown, ExternalLink, Shield } from "lucide-react";
+import { Award, BookOpen, ChevronDown, ExternalLink, Shield, ZoomIn } from "lucide-react";
 import {
   NoiseAndFuryExcerptDialog,
   type NoiseAndFuryExcerptId,
 } from "@/components/noise-and-fury/NoiseAndFuryExcerptDialog";
 
-const CONCERT_POSTER_PATH = "/downloads/noise-and-fury-concert-poster.png";
+const CONCERT_POSTER_PATH = "/downloads/noise-and-fury-award-poster.png";
 const CORY_BIO_IMAGE_PATH = "/downloads/noise-and-fury-cory.jpg";
 const CESAR_BIO_IMAGE_PATH = "/downloads/noise-and-fury-cesar.jpg";
 const SCOTT_BIO_IMAGE_PATH = "/downloads/noise-and-fury-scott.jpg";
@@ -259,24 +260,50 @@ export default function NoiseAndFuryPage() {
           <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(3,3,3,0.38)_0%,transparent_28%,transparent_70%,rgba(3,3,3,0.74)_100%)]" />
         </div>
 
-        <div className="relative mx-auto flex max-w-7xl justify-center px-3 py-5 sm:px-8 sm:py-10 lg:py-12">
-          <div className="relative w-full max-w-[760px] overflow-hidden border border-[#b87b38]/35 bg-black shadow-[0_36px_110px_rgba(0,0,0,0.78)]">
-            <img
-              src={CONCERT_POSTER_PATH}
-              alt="Noise & Fury — Season One: Alice in Chains. Out of the noise came the music. Through the fury came the freedom."
-              className="block h-auto w-full"
-            />
-            <a
-              href="https://marcmovies.com/"
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label="Visit MARC Production Enterprises"
-              title="Visit MARC Production Enterprises"
-              className="absolute left-[42%] top-[0.5%] h-[8.5%] w-[16%] rounded-sm transition hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e7bc7c] focus-visible:ring-inset"
-            >
-              <span className="sr-only">Visit MARC Production Enterprises</span>
-            </a>
+        <div className="relative mx-auto grid max-w-6xl items-center gap-8 px-5 py-8 sm:px-8 md:grid-cols-[1fr_auto] md:gap-12 md:py-10">
+          <div className="max-w-xl">
+            <div className="mb-5 flex items-start gap-3 border-l-2 border-[#d3a869] pl-4 text-[#e7bc7c]">
+              <Award className="mt-0.5 h-6 w-6 shrink-0" aria-hidden="true" />
+              <div>
+                <p className="text-sm font-semibold">Winner &mdash; Best TV Series Script</p>
+                <p className="mt-1 text-xs tracking-wide text-[#d7c8b9]">Authentic Global Film Awards 2026</p>
+              </div>
+            </div>
+            <h1 className="font-display text-5xl font-bold uppercase leading-[0.95] tracking-[-0.04em] text-[#f5e7d0] sm:text-6xl lg:text-7xl">Noise &amp; Fury</h1>
+            <p className="mt-4 text-xs font-semibold uppercase tracking-[0.25em] text-[#e7bc7c] sm:text-sm">Season One: Alice in Chains</p>
+            <p className="mt-5 max-w-lg font-serif text-lg leading-7 text-[#e1d4c4] sm:text-xl sm:leading-8">
+              A character-driven rock drama about the brotherhood, creative fire, and enduring music of a generation. Eight completed hour-long teleplays. One complete season.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Button className="!bg-[#d3a869] !text-[#17120f] hover:!bg-[#e7bc7c]" onClick={() => scrollToSection("series-excerpts")}>
+                <BookOpen className="mr-2 h-4 w-4" /> Read the excerpts
+              </Button>
+              <Button variant="outline" className="!border-[#b58c56] !bg-[#17120f] !text-[#f2e9dc] hover:!bg-[#33261d] hover:!text-white" onClick={() => scrollToSection("project-contact")}>
+                Start a conversation
+              </Button>
+            </div>
           </div>
+          <Dialog>
+            <DialogTrigger asChild>
+              <button type="button" className="group mx-auto block w-fit rounded-sm text-[#d7c8b9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e7bc7c] focus-visible:ring-offset-4 focus-visible:ring-offset-black" aria-label="Enlarge the Noise & Fury award-winning poster">
+                <img
+                  src={CONCERT_POSTER_PATH}
+                  alt="Noise & Fury, Season One: Alice in Chains. Winner, Best TV Series Script, Authentic Global Film Awards 2026. MARC Production Enterprises."
+                  width={1105}
+                  height={1424}
+                  fetchPriority="high"
+                  className="block h-auto max-h-[340px] w-auto max-w-full border border-[#b87b38]/50 shadow-[0_16px_60px_rgba(0,0,0,0.65)] transition group-hover:border-[#e7bc7c] md:max-h-[440px] lg:max-h-[460px]"
+                />
+                <span className="mt-2 flex items-center justify-center gap-2 text-xs"><ZoomIn className="h-3.5 w-3.5" aria-hidden="true" /> View full artwork</span>
+              </button>
+            </DialogTrigger>
+            <DialogContent className="w-[calc(100%_-_2rem)] max-w-3xl gap-0 border-[#b87b38]/50 bg-[#090909] p-3 pt-10 text-[#f2e9dc] dark:border-[#b87b38]/50 dark:bg-[#090909] dark:text-[#f2e9dc]">
+              <DialogTitle className="sr-only">Noise &amp; Fury award-winning artwork</DialogTitle>
+              <DialogDescription className="sr-only">Complete Season One poster featuring the Best TV Series Script award from Authentic Global Film Awards 2026.</DialogDescription>
+              <img src={CONCERT_POSTER_PATH} alt="Full Noise & Fury Season One: Alice in Chains poster with the 2026 Best TV Series Script winner laurels and MARC Production Enterprises logo." className="mx-auto block max-h-[78dvh] w-auto max-w-full object-contain" />
+              <a href="https://marcmovies.com/" target="_blank" rel="noopener noreferrer" className="mt-3 text-center text-sm text-[#e7bc7c] underline underline-offset-4">Visit MARC Production Enterprises</a>
+            </DialogContent>
+          </Dialog>
         </div>
       </section>
 

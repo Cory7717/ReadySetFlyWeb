@@ -226,13 +226,7 @@ export default function NoiseAndFuryPage() {
         <div className="nf-container nf-hero-grid">
           <div className="nf-hero-copy">
             <p className="nf-eyebrow">An original prestige dramatic series</p>
-            <div className="nf-brand-lockup">
-              <h1 className="nf-brand-logo"><span className="sr-only">Noise &amp; Fury. Season One: Alice in Chains.</span><span className="nf-emblem-crop nf-emblem-title"><img src="/downloads/noise-and-fury-golden-emblem.png" alt="" width="1145" height="1374" fetchPriority="high" /></span></h1>
-              <figure className="nf-brand-award">
-                <span className="nf-emblem-crop nf-emblem-award"><img src="/downloads/noise-and-fury-golden-emblem.png" alt="Winner, Best TV Series Script, Authentic Global Film Awards 2026." width="1145" height="1374" /></span>
-                <figcaption><strong>Best TV Series Script</strong><span>Authentic Global Film Awards 2026</span></figcaption>
-              </figure>
-            </div>
+            <h1 className="nf-brand-logo"><span className="sr-only">Noise &amp; Fury. Season One: Alice in Chains.</span><span className="nf-emblem-crop nf-emblem-title"><img src="/downloads/noise-and-fury-golden-emblem.png" alt="" width="1145" height="1374" fetchPriority="high" /></span></h1>
             <p className="nf-hero-intro">The human story inside the sound.</p>
             <p className="nf-hero-description">Friendship, brotherhood, creativity, grief, and survival. A complete eight-episode season following the lives behind the music.</p>
             <div className="nf-actions">
@@ -259,6 +253,14 @@ export default function NoiseAndFuryPage() {
       </section>
 
       <main>
+        <section className="nf-overview nf-container" aria-labelledby="overview-title">
+          <div className="nf-overview-copy"><p className="nf-eyebrow">01 / The series</p><h2 id="overview-title">Four musicians.<br />A bond that changed everything.</h2>
+            <p className="nf-logline">In late-1980s Seattle, a group of young musicians find friendship, purpose, and belonging in one another as they create the sound that will become Alice in Chains. But as their music changes the course of rock history, sudden fame, addiction, and devastating loss test the bonds that brought them together, revealing the extraordinary human story behind a musical legacy that continues to influence generations.</p>
+            <p className="nf-credit">Created and written by <strong>Cory Armer &amp; Cesar R. Ramirez</strong></p>
+          </div>
+          <dl className="nf-facts"><div><dt>Format</dt><dd>8 &times; approximately one hour</dd></div><div><dt>Genre</dt><dd>Serialized prestige drama</dd></div><div><dt>World</dt><dd>Seattle &amp; the Pacific Northwest</dd></div><div><dt>Timeline</dt><dd>1987–present</dd></div><div><dt>Writing</dt><dd>Eight completed teleplays<br /><span>Complete Season One bible</span></dd></div></dl>
+        </section>
+
         <section id="award-recognition" className="nf-recognition" aria-labelledby="award-recognition-title">
           <div className="nf-container nf-recognition-grid">
             <figure className="nf-plaque-display">
@@ -276,18 +278,10 @@ export default function NoiseAndFuryPage() {
               <p className="nf-recognition-winner">2026 Winner</p>
               <h2 id="award-recognition-title">Best TV Series Script</h2>
               <p className="nf-recognition-festival">Authentic Global Film Awards</p>
-              <p className="nf-recognition-series">Noise &amp; Fury <span>Season One: Alice in Chains</span></p>
               <div className="nf-recognition-recipients"><span>Recognizing the writing of</span><strong>Cory Armer &amp; Cesar R. Ramirez</strong></div>
               <button className="nf-button nf-button-outline" onClick={() => scrollToSection("series-excerpts")}>Explore the award-winning writing <ArrowUpRight size={16} aria-hidden="true" /></button>
             </div>
           </div>
-        </section>
-        <section className="nf-overview nf-container" aria-labelledby="overview-title">
-          <div className="nf-overview-copy"><p className="nf-eyebrow">01 / The series</p><h2 id="overview-title">Four musicians.<br />A bond that changed everything.</h2>
-            <p className="nf-logline">In late-1980s Seattle, a group of young musicians find friendship, purpose, and belonging in one another as they create the sound that will become Alice in Chains. But as their music changes the course of rock history, sudden fame, addiction, and devastating loss test the bonds that brought them together, revealing the extraordinary human story behind a musical legacy that continues to influence generations.</p>
-            <p className="nf-credit">Created and written by <strong>Cory Armer &amp; Cesar R. Ramirez</strong></p>
-          </div>
-          <dl className="nf-facts"><div><dt>Format</dt><dd>8 &times; approximately one hour</dd></div><div><dt>Genre</dt><dd>Serialized prestige drama</dd></div><div><dt>World</dt><dd>Seattle &amp; the Pacific Northwest</dd></div><div><dt>Timeline</dt><dd>1987–present</dd></div><div><dt>Writing</dt><dd>Eight completed teleplays<br /><span>Complete Season One bible</span></dd></div></dl>
         </section>
 
         <section id="series-promise" className="nf-heart">

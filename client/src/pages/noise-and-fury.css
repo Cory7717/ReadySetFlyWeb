@@ -21,10 +21,19 @@
 .nf-hero-grid { display:grid; grid-template-columns:minmax(0,1fr) auto; align-items:center; gap:60px; padding-block:32px; }
 .nf-hero-copy { max-width:610px; }
 .nf-hero .nf-eyebrow { color:var(--nf-gold); margin-bottom:8px; }
-.nf-hero h1 { margin:0 0 6px; }
-.nf-hero h1 img { width:230px; height:auto; margin-left:-7px; mix-blend-mode:screen; }
-.nf-season-label { font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:.25em; color:#e2c69a; }
-.nf-season-label span { margin:0 8px; color:#8f754e; }
+.nf-brand-lockup { display:grid; grid-template-columns:minmax(0,210px) minmax(0,210px); align-items:center; gap:30px; margin-top:12px; }
+.nf-hero h1.nf-brand-logo { margin:0; min-width:0; }
+.nf-emblem-crop { position:relative; display:block; overflow:hidden; }
+/* Source pixel rectangles: title (170,0,830,990), award (200,990,750,384). */
+.nf-emblem-title { aspect-ratio:830 / 990; }
+.nf-emblem-award { aspect-ratio:750 / 384; }
+.nf-emblem-crop img { position:absolute; display:block; height:auto; max-width:none; }
+.nf-emblem-title img { width:137.951807%; left:-20.481928%; top:0; }
+.nf-emblem-award img { width:152.666667%; left:-26.666667%; top:-257.8125%; }
+.nf-brand-award { margin:0; min-width:0; }
+.nf-brand-award figcaption { text-align:center; margin-top:12px; line-height:1.65; color:#c7a26a; }
+.nf-brand-award figcaption strong { display:block; font-size:11px; font-weight:600; }
+.nf-brand-award figcaption span { display:block; font-size:9px; color:#c9c0b1; margin-top:3px; }
 .nf-hero-intro { font-family:Georgia,'Times New Roman',serif; font-size:clamp(25px,2.5vw,35px); letter-spacing:-.025em; line-height:1.2; margin:20px 0 12px; }
 .nf-hero-description { max-width:490px; color:#c9c0b1; line-height:1.8; font-size:14px; }
 .nf-actions { display:flex; flex-wrap:wrap; gap:12px; margin-top:22px; }
@@ -33,9 +42,6 @@
 .nf-page .nf-button-gold:hover { background:#dfbe89!important; }
 .nf-page .nf-button-outline { background:transparent!important; color:#eee4d2!important; border-color:#8e774f!important; }
 .nf-page .nf-button-outline:hover { background:#c7a26a1a!important; }
-.nf-award { display:flex; align-items:center; gap:12px; color:#d9b474; border-top:1px solid #c7a26a33; margin-top:24px; padding-top:18px; }
-.nf-award strong { display:block; font-size:12px; font-weight:600; }
-.nf-award span { display:block; font-size:10px; color:#bbb09e; margin-top:4px; letter-spacing:.04em; }
 .nf-poster { display:block; width:fit-content; background:none; color:#c6b59c; cursor:zoom-in; }
 .nf-poster img { display:block; width:auto; max-width:100%; height:440px; object-fit:contain; border:1px solid #b68b4c77; box-shadow:0 14px 45px #0009; }
 .nf-poster > span { display:flex; align-items:center; justify-content:center; gap:7px; font-size:10px; margin-top:12px; letter-spacing:.04em; }
@@ -138,11 +144,11 @@
 .nf-reader { font-family:Arial,sans-serif; }
 .nf-reader button[aria-label='Previous script page'] { background:transparent!important; background-image:none!important; color:#eee4d2!important; border-color:#c7a26a66!important; }
 .nf-reader button[aria-label='Next script page'] { background:#c7a26a!important; background-image:none!important; color:#151613!important; }
-@media (max-width:1000px) { .nf-container { width:calc(100% - 56px); } .nf-hero-grid { gap:30px; } .nf-hero h1 img { width:200px; } .nf-poster img { height:400px; } .nf-actions { gap:9px; } .nf-page .nf-button { font-size:10px; padding:11px 13px; } .nf-overview { gap:45px; } .nf-heart-grid { gap:40px; } .nf-team-grid { gap:24px; } .nf-portrait img { height:230px; } .nf-development { gap:45px; } .nf-contact-grid { gap:40px; } }
+@media (max-width:1000px) { .nf-container { width:calc(100% - 56px); } .nf-hero-grid { gap:30px; } .nf-brand-lockup { grid-template-columns:minmax(0,190px) minmax(0,190px); gap:20px; } .nf-poster img { height:400px; } .nf-actions { gap:9px; } .nf-page .nf-button { font-size:10px; padding:11px 13px; } .nf-overview { gap:45px; } .nf-heart-grid { gap:40px; } .nf-team-grid { gap:24px; } .nf-portrait img { height:230px; } .nf-development { gap:45px; } .nf-contact-grid { gap:40px; } }
 @media (max-width:700px) {
  .nf-container { width:calc(100% - 40px); }
  .nf-nav-inner { min-height:55px; gap:16px; } .nf-nav-brand { font-size:11px; } .nf-nav-links { gap:15px; font-size:10px; } .nf-nav-links a:first-child,.nf-nav-links a:nth-child(2) { display:none; }
- .nf-hero-grid { grid-template-columns:1fr; gap:28px; padding-block:28px; } .nf-hero h1 img { width:185px; } .nf-hero-intro { margin-top:18px; } .nf-hero-description { font-size:13px; } .nf-season-label { font-size:9px; letter-spacing:.2em; } .nf-award { margin-top:20px; padding-top:16px; } .nf-poster { margin:auto; } .nf-poster img { height:300px; } .nf-hero .nf-eyebrow { font-size:9px; }
+ .nf-hero-grid { grid-template-columns:1fr; gap:28px; padding-block:28px; } .nf-brand-lockup { grid-template-columns:minmax(0,180px) minmax(0,180px); gap:18px; } .nf-hero-intro { margin-top:18px; } .nf-hero-description { font-size:13px; } .nf-poster { margin:auto; } .nf-poster img { height:300px; } .nf-hero .nf-eyebrow { font-size:9px; }
  .nf-overview { grid-template-columns:1fr; gap:30px; padding-block:45px; } .nf-logline { font-size:17px; line-height:1.8; } .nf-facts { display:grid; grid-template-columns:1fr 1fr; column-gap:24px; } .nf-facts dd { font-size:12px; } .nf-facts > div:last-child { grid-column:1/-1; }
  .nf-heart { padding-top:42px; } .nf-heart-grid { grid-template-columns:1fr; gap:24px; } .nf-heart-grid p { font-size:13px; } .nf-heart blockquote { padding-block:23px 32px; font-size:22px; } .nf-waterfront, .nf-waterfront img { height:180px; }
  .nf-writing,.nf-season,.nf-team,.nf-development,.nf-contact { padding-block:45px; }

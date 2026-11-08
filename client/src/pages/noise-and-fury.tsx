@@ -12,7 +12,7 @@ import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 import { trackEvent } from "@/lib/analytics";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowDown, ArrowUpRight, Award, BookOpen, ChevronDown, ExternalLink, Shield, ZoomIn } from "lucide-react";
+import { ArrowDown, ArrowUpRight, BookOpen, ChevronDown, ExternalLink, Shield, ZoomIn } from "lucide-react";
 import {
   NoiseAndFuryExcerptDialog,
   type NoiseAndFuryExcerptId,
@@ -226,15 +226,20 @@ export default function NoiseAndFuryPage() {
         <div className="nf-container nf-hero-grid">
           <div className="nf-hero-copy">
             <p className="nf-eyebrow">An original prestige dramatic series</p>
-            <h1><span className="sr-only">Noise &amp; Fury</span><img src="/downloads/noise-and-fury-title.png" alt="" width="378" height="248" /></h1>
-            <p className="nf-season-label">Season One <span>/</span> Alice in Chains</p>
+            <div className="nf-brand-lockup">
+              <h1 className="nf-brand-logo"><span className="sr-only">Noise &amp; Fury. Season One: Alice in Chains.</span><span className="nf-emblem-crop nf-emblem-title"><img src="/downloads/noise-and-fury-golden-emblem.png" alt="" width="1145" height="1374" fetchPriority="high" /></span></h1>
+              <figure className="nf-brand-award">
+                <span className="nf-emblem-crop nf-emblem-award"><img src="/downloads/noise-and-fury-golden-emblem.png" alt="Winner, Best TV Series Script, Authentic Global Film Awards 2026." width="1145" height="1374" /></span>
+                <figcaption><strong>Best TV Series Script</strong><span>Authentic Global Film Awards 2026</span></figcaption>
+              </figure>
+            </div>
             <p className="nf-hero-intro">The human story inside the sound.</p>
             <p className="nf-hero-description">Friendship, brotherhood, creativity, grief, and survival. A complete eight-episode season following the lives behind the music.</p>
             <div className="nf-actions">
               <button className="nf-button nf-button-gold" onClick={() => scrollToSection("series-excerpts")}><BookOpen size={16} aria-hidden="true" /> Read selected scenes</button>
               <button className="nf-button nf-button-outline" onClick={() => scrollToSection("project-contact")}>Request project materials <ArrowUpRight size={16} aria-hidden="true" /></button>
             </div>
-            <div className="nf-award"><Award size={27} aria-hidden="true" /><div><strong>Winner &middot; Best TV Series Script</strong><span>Authentic Global Film Awards 2026</span></div></div>
+
           </div>
           <Dialog>
             <DialogTrigger asChild>

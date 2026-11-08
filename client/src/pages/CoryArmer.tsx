@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { ArrowDown, Download, Mail, MapPin, Send, Sparkles } from "lucide-react";
+import { ArrowDown, ArrowUpRight, Award, Download, Mail, MapPin, Send, Sparkles } from "lucide-react";
 import { trackEvent } from "@/lib/analytics";
 import "./CoryArmer.css";
 
@@ -13,11 +13,27 @@ function trackPortfolioAction(action: string, label: string, destination?: strin
 }
 
 const momentumItems = [
-  "Noise & Fury Season One complete: eight hour-long teleplays",
-  "Producer attached: Scott Rosenfelt - Home Alone, Teen Wolf, Mystic Pizza",
-  "Noise & Fury season bible and one-pager complete",
-  "Multiple completed television and feature packages",
-  "Founder of Ready Set Fly, a live aviation technology platform serving the general aviation community",
+  {
+    title: "Complete First Season",
+    description: "Noise & Fury: eight completed hour-long teleplays, supported by a complete season bible and one-page overview.",
+  },
+  {
+    title: "Producer Attached",
+    description: "Scott Rosenfelt, producer of Home Alone, Teen Wolf, and Mystic Pizza, is attached to Noise & Fury.",
+  },
+  {
+    title: "Major Streaming Interest",
+    description: "Noise & Fury has attracted interest from a major streaming network for a potential series pickup.",
+  },
+  {
+    title: "Original Film & Television Slate",
+    description: "Original television and feature projects, with completed scripts and supporting development materials across the slate.",
+  },
+  {
+    title: "Award-Winning Writing",
+    description: "Noise & Fury won Best TV Series Script at the 2026 Authentic Global Film Awards, recognizing Cory Armer and Cesar R. Ramirez.",
+    award: true,
+  },
 ];
 
 const projects = [
@@ -36,7 +52,7 @@ const projects = [
     cue: "Seattle music / brotherhood / legacy",
     description:
       "A character-driven dramatic series about four musicians whose bond creates something bigger than any one of them. Season One follows Alice in Chains from its original partnership through fame, painful change and the choice to carry the music forward without erasing the people who made it.",
-    badges: ["8 Teleplays Complete", "Season Bible Complete", "One-Pager Complete", "Producer Attached", "Private Creative Review"],
+    badges: ["Best TV Series Script Winner", "8 Teleplays Complete", "Season Bible Complete", "Producer Attached", "Major Streaming Interest"],
     href: "/noiseandfury",
   },
   {
@@ -171,16 +187,38 @@ export default function CoryArmer() {
         </div>
       </section>
 
-      <section className="cw-section cw-momentum">
+      <section className="cw-section cw-momentum" aria-labelledby="momentum-heading">
         <div className="cw-section-heading">
-          <p className="cw-kicker">Development / Packaging / Platform</p>
-          <h2>Current Industry Momentum</h2>
+          <p className="cw-kicker">Recognition / Development / Industry Interest</p>
+          <h2 id="momentum-heading">Current Industry Momentum</h2>
+        </div>
+        <div className="cw-award-feature" aria-labelledby="cw-award-heading">
+          <figure className="cw-award-emblem">
+            <div className="cw-award-emblem-crop"><img src="/downloads/noise-and-fury-golden-emblem.png" alt="Authentic Global Film Awards 2026 winner laurels, Best TV Series Script." width="1145" height="1374" loading="lazy" /></div>
+          </figure>
+          <div className="cw-award-copy">
+            <p className="cw-kicker">Noise &amp; Fury / 2026 Winner</p>
+            <h3 id="cw-award-heading">Best TV Series Script</h3>
+            <p>Authentic Global Film Awards</p>
+            <p className="cw-award-writers">Cory Armer &amp; Cesar R. Ramirez</p>
+            <a href="/noiseandfury#award-recognition" onClick={() => trackPortfolioAction("project", "Noise & Fury Award Recognition", "/noiseandfury#award-recognition")}>Explore Noise &amp; Fury <ArrowUpRight size={15} aria-hidden="true" /></a>
+          </div>
+          <figure className="cw-award-plaque">
+            <svg viewBox="70 300 800 1210" role="img" aria-labelledby="cw-plaque-title cw-plaque-description">
+              <title id="cw-plaque-title">Noise &amp; Fury award plaque</title>
+              <desc id="cw-plaque-description">The original 2026 Authentic Global Film Awards plaque for Best TV Series Script, engraved with Cory Armer and Cesar R. Ramirez.</desc>
+              <defs><clipPath id="cw-plaque-outline"><path d="M668 340 C421 365 216 557 137 811 C69 1023 109 1216 192 1365 L162 1368 L120 1437 L118 1467 L833 1459 L832 1435 L791 1380 L759 1376 C794 1180 798 947 766 737 L728 517 L684 355 Q678 339 668 340 Z" /></clipPath></defs>
+              <image href="/downloads/noise-and-fury-award-plaque-original.png" width="941" height="1672" clipPath="url(#cw-plaque-outline)" />
+            </svg>
+            <figcaption>Authentic Global Film Awards / 2026</figcaption>
+          </figure>
         </div>
         <div className="cw-momentum-grid">
           {momentumItems.map((item) => (
-            <article className="cw-momentum-card" key={item}>
-              <Sparkles aria-hidden="true" />
-              <p>{item}</p>
+            <article className={`cw-momentum-card${item.award ? " cw-momentum-card-award" : ""}`} key={item.title}>
+              {item.award ? <Award aria-hidden="true" /> : <Sparkles aria-hidden="true" />}
+              <h3>{item.title}</h3>
+              <p>{item.description}</p>
             </article>
           ))}
         </div>

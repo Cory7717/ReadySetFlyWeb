@@ -256,7 +256,7 @@ export default function NoiseAndFuryPage() {
       <main>
         <section className="nf-overview nf-container" aria-labelledby="overview-title">
           <div className="nf-overview-copy"><p className="nf-eyebrow">01 / The series</p><h2 id="overview-title">Four musicians.<br />A bond that changed everything.</h2>
-            <p className="nf-logline">In late-1980s Seattle, four young musicians forge the bond that makes Alice in Chains a defining voice of their generation. As success brings addiction, loss and painful changes to the band, the people who made the music must find a way to carry it forward without forgetting who they were together.</p>
+            <p className="nf-logline">In late-1980s Seattle, a group of young musicians find friendship, purpose, and belonging in one another as they create the sound that will become Alice in Chains. But as their music changes the course of rock history, sudden fame, addiction, and devastating loss test the bonds that brought them together, revealing the extraordinary human story behind a musical legacy that continues to influence generations.</p>
             <p className="nf-credit">Created and written by <strong>Cory Armer &amp; Cesar R. Ramirez</strong></p>
           </div>
           <dl className="nf-facts"><div><dt>Format</dt><dd>8 &times; approximately one hour</dd></div><div><dt>Genre</dt><dd>Serialized prestige drama</dd></div><div><dt>World</dt><dd>Seattle &amp; the Pacific Northwest</dd></div><div><dt>Timeline</dt><dd>1987–present</dd></div><div><dt>Writing</dt><dd>Eight completed teleplays<br /><span>Complete Season One bible</span></dd></div></dl>

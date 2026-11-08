@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { trackEvent } from "@/lib/analytics";
 
-export type NoiseAndFuryExcerptId = "first-jam" | "the-name";
+export type NoiseAndFuryExcerptId = "the-audition" | "rooster";
 
 type ScriptBlock =
   | { type: "scene"; text: string }
@@ -29,114 +29,14 @@ type Excerpt = {
   pages: ScriptBlock[][];
 };
 
+// Transcribed from the visible V7.3 print excerpt pages; original page breaks preserved.
 export const noiseAndFuryExcerpts: Record<NoiseAndFuryExcerptId, Excerpt> = {
-  "first-jam": {
-    id: "first-jam",
-    title: "The First Jam",
-    episode: "Episode 1: We Die Young",
-    scenes: "Scenes 14–15",
-    pages: [
-      [
-        { type: "scene", text: "SCENE 14" },
-        { type: "heading", text: "INT. THE MUSIC BANK — JERRY'S ROOM — LATER" },
-        { type: "action", text: "SEAN KINNEY, early 20s, wiry, quick-eyed, sits backward on the one chair with MELINDA, his girlfriend, perched on the arm beside him." },
-        { type: "action", text: "Jerry plays a rough demo through a battered cassette deck. Sean listens with his head tilted. When the tape stops, he breaks into a grin." },
-        { type: "character", text: "SEAN" },
-        { type: "dialogue", text: "Yeah. I can do something with that." },
-        { type: "character", text: "JERRY" },
-        { type: "dialogue", text: "Yeah?" },
-        { type: "character", text: "SEAN" },
-        { type: "dialogue", text: "Wasn't asking permission. Telling you." },
-        { type: "action", text: "Jerry laughs." },
-        { type: "character", text: "JERRY" },
-        { type: "dialogue", text: "We still need a bass player. Somebody who won't flake." },
-        { type: "action", text: "Melinda speaks up before Sean can." },
-        { type: "character", text: "MELINDA" },
-        { type: "dialogue", text: "My brother plays bass." },
-        { type: "character", text: "SEAN" },
-        { type: "parenthetical", text: "(to Jerry)" },
-        { type: "dialogue", text: "Her brother's Mike Starr." },
-        { type: "action", text: "Jerry looks at her." },
-        { type: "character", text: "JERRY" },
-        { type: "dialogue", text: "I know Mike. Played a whole summer together in Gypsy Rose." },
-        { type: "character", text: "SEAN" },
-        { type: "dialogue", text: "Small city." },
-        { type: "character", text: "JERRY" },
-        { type: "dialogue", text: "Smallest." },
-        { type: "action", text: "Jerry reaches over and stops the cassette deck." },
-        { type: "character", text: "JERRY (CONT'D)" },
-        { type: "dialogue", text: "Alright. Let's get everybody in a room and see if this is real or if I'm just desperate." },
-        { type: "action", text: "Sean gets to his feet." },
-        { type: "character", text: "SEAN" },
-        { type: "dialogue", text: "It's real. I can already tell." },
-        { type: "transition", text: "CUT TO:" },
-      ],
-      [
-        { type: "scene", text: "SCENE 15" },
-        { type: "heading", text: "INT. THE MUSIC BANK — REHEARSAL ROOM — NIGHT" },
-        { type: "action", text: "A drafty warehouse room is lit by haphazard Christmas lights. Old amps HUM in the corners beside empty beer bottles, tangled cables and a broken fan." },
-        { type: "action", text: "JERRY stands near the center tuning his guitar. Across from him, LAYNE grips the microphone with both hands." },
-        { type: "action", text: "SEAN settles behind the kit." },
-        { type: "action", text: "Beside an amp stack, MIKE STARR, early 20s, stocky with an easy grin, adjusts his bass strap and looks around the room." },
-        { type: "character", text: "JERRY" },
-        { type: "dialogue", text: "You ready?" },
-        { type: "action", text: "Layne nods." },
-        { type: "action", text: "Jerry drops into a slow, heavy riff." },
-        { type: "action", text: "Sean grins behind the kit." },
-        { type: "character", text: "SEAN" },
-        { type: "dialogue", text: "Alright, let's go." },
-        { type: "action", text: "He clicks his sticks together and crashes into the beat. Mike turns up his amp and drops beneath Jerry with a thick bass line that shakes the floor." },
-        { type: "action", text: "Layne waits." },
-        { type: "action", text: "He listens to Sean's snare, watches Mike's fingers move across the strings, then looks toward Jerry." },
-        { type: "action", text: "He closes his eyes, takes a breath and comes in." },
-        { type: "action", text: "Layne's voice tears across the room, raw and hypnotic. Jerry looks up with a grin. Sean laughs without losing the beat and begins hitting harder while Mike reaches back and turns his amp up another notch." },
-        { type: "action", text: "For the first few bars, they push against one another, each trying to find space inside the song." },
-        { type: "action", text: "Then the rhythm settles." },
-      ],
-      [
-        { type: "action", text: "Jerry steps closer to Layne and finds a harmony on the fly. Their voices meet over the riff, darker together than either sounded alone." },
-        { type: "action", text: "Layne grips the mic stand as Jerry stays beside him." },
-        { type: "action", text: "Feedback, cymbals and Sean's kick drum fill the warehouse while Mike drives beneath them." },
-        { type: "action", text: "They push through an improvised chorus and land together on one final crash." },
-        { type: "action", text: "The amps BUZZ into the silence." },
-        { type: "action", text: "All four stand there breathing hard." },
-        { type: "character", text: "JERRY" },
-        { type: "dialogue", text: "Holy shit." },
-        { type: "action", text: "Layne wipes the sweat from his face. A smile slips through." },
-        { type: "action", text: "Sean tosses a stick into the air and catches it, grinning at Mike." },
-        { type: "character", text: "SEAN" },
-        { type: "dialogue", text: "Told you he wasn't just a pretty face." },
-        { type: "character", text: "MIKE" },
-        { type: "parenthetical", text: "(deadpan)" },
-        { type: "dialogue", text: "You didn't tell me anything. You said \"some guy Jerry found.\"" },
-        { type: "character", text: "SEAN" },
-        { type: "dialogue", text: "Same thing." },
-        { type: "character", text: "MIKE" },
-        { type: "dialogue", text: "It is not the same thing." },
-        { type: "action", text: "Sean waves him off." },
-        { type: "character", text: "SEAN" },
-        { type: "dialogue", text: "So... when's the next practice?" },
-        { type: "action", text: "Mike reaches down and switches off his bass." },
-        { type: "character", text: "MIKE" },
-        { type: "dialogue", text: "Whenever we stop bleeding from this one." },
-        { type: "action", text: "Jerry looks around at the others." },
-        { type: "character", text: "JERRY" },
-        { type: "dialogue", text: "Tomorrow. And the day after." },
-        { type: "action", text: "He looks toward Layne." },
-        { type: "character", text: "JERRY (CONT'D)" },
-        { type: "dialogue", text: "And the day after that." },
-        { type: "action", text: "Sean laughs. Mike shakes his head and reaches for a beer." },
-        { type: "action", text: "Layne stays at the microphone, still smiling." },
-        { type: "transition", text: "CUT TO:" },
-      ],
-    ],
-  },
-  "the-name": {
-    id: "the-name",
-    title: "The Name",
-    episode: "Episode 1: We Die Young",
-    scenes: "Scenes 22–23",
-    pages: [
+  "the-audition": {
+    "id": "the-audition",
+    "title": "The Audition",
+    "episode": "Episode 1: We Die Young",
+    "scenes": "Scenes 22–23",
+    "pages": [
       [
         { type: "scene", text: "SCENE 22" },
         { type: "heading", text: "INT. THE MUSIC BANK — REHEARSAL ROOM — NIGHT" },
@@ -152,7 +52,9 @@ export const noiseAndFuryExcerpts: Record<NoiseAndFuryExcerptId, Excerpt> = {
         { type: "character", text: "LAYNE" },
         { type: "dialogue", text: "Enough." },
         { type: "action", text: "The Stripper stops." },
-        { type: "action", text: "Layne looks at him." },
+        { type: "action", text: "Layne looks at him." }
+      ],
+      [
         { type: "character", text: "LAYNE (CONT'D)" },
         { type: "dialogue", text: "That's enough." },
         { type: "action", text: "The Stripper glances around the room, shrugs and reaches for his jacket." },
@@ -170,8 +72,6 @@ export const noiseAndFuryExcerpts: Record<NoiseAndFuryExcerptId, Excerpt> = {
         { type: "character", text: "JERRY" },
         { type: "dialogue", text: "Waiting for you to say it." },
         { type: "action", text: "Layne studies him for a moment." },
-      ],
-      [
         { type: "action", text: "Then he exhales, sits back down and finally pulls off his jacket." },
         { type: "character", text: "LAYNE" },
         { type: "dialogue", text: "Alright." },
@@ -181,10 +81,11 @@ export const noiseAndFuryExcerpts: Record<NoiseAndFuryExcerptId, Excerpt> = {
         { type: "action", text: "Sean's grin breaks through immediately. Mike leans back against his amp and exhales." },
         { type: "action", text: "Jerry gives Layne a small nod." },
         { type: "transition", text: "CUT TO:" },
-        { type: "scene", text: "SCENE 23" },
+        { type: "scene", text: "SCENE 23" }
+      ],
+      [
         { type: "heading", text: "INT. THE MUSIC BANK — REHEARSAL ROOM — LATER THAT NIGHT" },
-        { type: "action", text: "The amps are cooling and the air is still hazy with smoke." },
-        { type: "action", text: "Jerry, Layne, Sean and Mike sit in a loose circle on the floor with beers in hand, exhausted enough that everything is funny." },
+        { type: "action", text: "The amps are cooling and the air is still hazy with smoke. Jerry, Layne, Sean and Mike sit in a loose circle on the floor with beers in hand, exhausted enough that everything is funny." },
         { type: "character", text: "SEAN" },
         { type: "dialogue", text: "Okay, if we're actually doing this... we need a name." },
         { type: "character", text: "MIKE" },
@@ -203,14 +104,14 @@ export const noiseAndFuryExcerpts: Record<NoiseAndFuryExcerptId, Excerpt> = {
         { type: "dialogue", text: "We're still technically Diamond Lie." },
         { type: "character", text: "SEAN" },
         { type: "dialogue", text: "We are not going back to Diamond Lie." },
-      ],
-      [
         { type: "action", text: "Layne sits cross-legged with his beer between his hands, listening as the others settle down." },
         { type: "character", text: "LAYNE" },
         { type: "dialogue", text: "What about Alice in Chains?" },
         { type: "action", text: "The room quiets." },
         { type: "character", text: "MIKE" },
-        { type: "dialogue", text: "Isn't that your old band?" },
+        { type: "dialogue", text: "Isn't that your old band?" }
+      ],
+      [
         { type: "character", text: "LAYNE" },
         { type: "dialogue", text: "Alice N' Chains. Different band, different me." },
         { type: "action", text: "A small smile crosses his face." },
@@ -232,27 +133,142 @@ export const noiseAndFuryExcerpts: Record<NoiseAndFuryExcerptId, Excerpt> = {
         { type: "dialogue", text: "To Alice in Chains." },
         { type: "action", text: "The others raise theirs." },
         { type: "action", text: "The bottles CLINK together." },
-        { type: "transition", text: "CUT TO:" },
-      ],
-    ],
+        { type: "transition", text: "CUT TO:" }
+      ]
+    ]
   },
+  "rooster": {
+    "id": "rooster",
+    "title": "Rooster",
+    "episode": "Episode 3: Rooster",
+    "scenes": "Scenes 6–8",
+    "pages": [
+      [
+        { type: "scene", text: "SCENE 6" },
+        { type: "heading", text: "INT. THE MUSIC BANK — REHEARSAL ROOM — NIGHT" },
+        { type: "action", text: "Christmas lights hang above duct-taped amps and cold concrete walls. SEAN sits behind the kit while MIKE tunes his bass. LAYNE leans against the far wall with a cigarette between his fingers." },
+        { type: "action", text: "The door opens and JERRY comes in carrying his guitar case." },
+        { type: "action", text: "Sean stops tapping his sticks." },
+        { type: "character", text: "MIKE" },
+        { type: "dialogue", text: "Great. Everybody's here." },
+        { type: "action", text: "Jerry sets down the case, straps on the guitar and plays the \"Rooster\" riff." },
+        { type: "action", text: "The room changes." },
+        { type: "action", text: "Mike stops tuning. Layne looks up. Sean listens through the phrase, then waits for Jerry to play it again." },
+        { type: "character", text: "SEAN" },
+        { type: "dialogue", text: "Where'd that come from?" },
+        { type: "character", text: "JERRY" },
+        { type: "dialogue", text: "My dad." },
+        { type: "character", text: "MIKE" },
+        { type: "dialogue", text: "Vietnam?" },
+        { type: "action", text: "Jerry nods." },
+        { type: "character", text: "JERRY" },
+        { type: "dialogue", text: "Yeah." },
+        { type: "action", text: "He plays the riff again." },
+        { type: "action", text: "Mike finds the root underneath it. Sean comes in carefully behind him, building a slow, heavy pocket around Jerry's guitar." },
+        { type: "action", text: "Layne crosses to the microphone and listens for an opening." }
+      ],
+      [
+        { type: "action", text: "When it comes, he answers the riff with a rough, wordless vocal." },
+        { type: "action", text: "Jerry looks up." },
+        { type: "action", text: "The four of them stay with it until the sound finally winds down." },
+        { type: "character", text: "LAYNE" },
+        { type: "dialogue", text: "What's it called?" },
+        { type: "character", text: "JERRY" },
+        { type: "dialogue", text: "\"Rooster.\"" },
+        { type: "action", text: "Layne nods." },
+        { type: "action", text: "Sean points a drumstick at Jerry." },
+        { type: "character", text: "SEAN" },
+        { type: "dialogue", text: "You still owe me forty bucks." },
+        { type: "character", text: "JERRY" },
+        { type: "dialogue", text: "I know." },
+        { type: "character", text: "SEAN" },
+        { type: "dialogue", text: "Just so we're clear." },
+        { type: "action", text: "Mike laughs." },
+        { type: "action", text: "Sean raises his sticks." },
+        { type: "character", text: "SEAN (CONT'D)" },
+        { type: "dialogue", text: "Again." },
+        { type: "action", text: "He counts them in." },
+        { type: "transition", text: "CUT TO:" },
+        { type: "scene", text: "SCENE 7" },
+        { type: "heading", text: "EXT. SEATTLE SIDEWALK — NIGHT" },
+        { type: "action", text: "Cold air hangs over the wet pavement. JERRY and LAYNE walk side by side after rehearsal, their breath visible under the streetlights." },
+        { type: "action", text: "For a while, neither says anything." },
+        { type: "character", text: "LAYNE" },
+        { type: "dialogue", text: "He's still in it, huh." },
+        { type: "action", text: "Jerry knows who he means." }
+      ],
+      [
+        { type: "character", text: "JERRY" },
+        { type: "dialogue", text: "Yeah." },
+        { type: "action", text: "A car passes, headlights moving across them." },
+        { type: "character", text: "LAYNE" },
+        { type: "dialogue", text: "You were a kid." },
+        { type: "character", text: "JERRY" },
+        { type: "dialogue", text: "One of my first memories is him coming home. I was three. My mom had to tell me he was my dad." },
+        { type: "action", text: "Layne looks down at the sidewalk." },
+        { type: "character", text: "JERRY (CONT'D)" },
+        { type: "dialogue", text: "He came back, but part of him was still over there." },
+        { type: "action", text: "Layne kicks at a pebble." },
+        { type: "character", text: "LAYNE" },
+        { type: "dialogue", text: "At least yours came home." },
+        { type: "action", text: "Jerry looks over, but Layne keeps his eyes ahead." },
+        { type: "action", text: "Jerry lets it go." },
+        { type: "action", text: "They walk another few steps." },
+        { type: "character", text: "JERRY" },
+        { type: "dialogue", text: "You think the song's too much?" },
+        { type: "character", text: "LAYNE" },
+        { type: "dialogue", text: "Did he?" },
+        { type: "character", text: "JERRY" },
+        { type: "dialogue", text: "He said I got too close." },
+        { type: "action", text: "Layne considers that." },
+        { type: "character", text: "LAYNE" },
+        { type: "dialogue", text: "Then you got it right." },
+        { type: "action", text: "Jerry takes that in as they continue down the block." },
+        { type: "transition", text: "CUT TO:" },
+        { type: "scene", text: "SCENE 8" },
+        { type: "heading", text: "INT. CLUB — NIGHT" },
+        { type: "heading", text: "SUPER: OPENING FOR IGGY POP." }
+      ],
+      [
+        { type: "action", text: "The room is packed and loud, most of the crowd waiting for the headliner." },
+        { type: "action", text: "Alice in Chains drops into \"Rooster.\"" },
+        { type: "action", text: "At the back of the room, near the soundboard, JERRY SR. stands in his gray Stetson and cowboy boots." },
+        { type: "action", text: "Jerry spots him from the stage." },
+        { type: "action", text: "LAYNE grips the microphone and sings." },
+        { type: "character", text: "LAYNE" },
+        { type: "parenthetical", text: "(singing)" },
+        { type: "dialogue", text: "[ROOSTER — FIRST VERSE]" },
+        { type: "action", text: "Jerry keeps glancing toward the back of the room as the song builds." },
+        { type: "action", text: "Jerry Sr. stands motionless at first. Then his arms come loose at his sides." },
+        { type: "action", text: "By the time the band reaches the chorus, tears are running down his face." },
+        { type: "action", text: "Jerry sees it." },
+        { type: "action", text: "The final chord rings through the room." },
+        { type: "action", text: "Jerry Sr. removes the Stetson and raises it over his head." },
+        { type: "action", text: "He holds it there." },
+        { type: "action", text: "Jerry stands onstage with his guitar hanging from his shoulder, looking back at his father through the crowd." },
+        { type: "action", text: "Layne follows Jerry's gaze and sees him too." },
+        { type: "action", text: "Jerry Sr. keeps the hat raised." },
+        { type: "transition", text: "END OF ACT ONE" }
+      ]
+    ]
+  }
 };
 
 function ScriptPage({ blocks, pageNumber }: { blocks: ScriptBlock[]; pageNumber: number }) {
   return (
-    <article className="relative mx-auto min-h-[760px] w-full max-w-[650px] bg-[#f3eee5] px-6 py-10 text-[#111] shadow-[0_28px_90px_rgba(0,0,0,0.55)] sm:min-h-[820px] sm:px-14 sm:py-12">
+    <article className="relative mx-auto min-h-[760px] w-full max-w-[650px] bg-[#f3eee5] px-5 py-10 text-[#111] shadow-[0_28px_90px_rgba(0,0,0,0.55)] sm:min-h-[820px] sm:px-14 sm:py-12">
       <div className="pointer-events-none absolute inset-0 flex items-center justify-center overflow-hidden" aria-hidden="true">
         <span className="-rotate-[24deg] select-none whitespace-nowrap font-display text-5xl font-semibold uppercase tracking-[0.18em] text-[#8d6631]/[0.045] sm:text-7xl">
           Noise &amp; Fury
         </span>
       </div>
-      <div className="relative font-mono text-[11px] leading-[1.55] sm:text-[13px]">
+      <div className="relative font-mono text-[13px] leading-[1.65] sm:text-[14px]">
         {blocks.map((block, index) => {
           if (block.type === "scene") return <p key={index} className="mb-5 text-center font-bold uppercase">{block.text}</p>;
           if (block.type === "heading") return <p key={index} className="mb-4 mt-5 font-bold uppercase">{block.text}</p>;
           if (block.type === "character") return <p key={index} className="mb-0 mt-4 pl-[35%] uppercase">{block.text}</p>;
           if (block.type === "parenthetical") return <p key={index} className="mb-0 ml-[30%] max-w-[42%]">{block.text}</p>;
-          if (block.type === "dialogue") return <p key={index} className="mb-3 ml-[20%] max-w-[60%]">{block.text}</p>;
+          if (block.type === "dialogue") return <p key={index} className="mb-3 ml-[15%] max-w-[75%] sm:ml-[20%] sm:max-w-[60%]">{block.text}</p>;
           if (block.type === "transition") return <p key={index} className="my-4 text-right font-bold uppercase">{block.text}</p>;
           return <p key={index} className="mb-4">{block.text}</p>;
         })}
@@ -280,6 +296,7 @@ export function NoiseAndFuryExcerptDialog({
   useEffect(() => {
     if (!open) return;
     setPageIndex(0);
+    scrollAreaRef.current?.scrollTo({ top: 0 });
     trackEvent("noise_fury_script_excerpt_open", {
       page: "/noiseandfury",
       excerpt: excerptId,
@@ -322,7 +339,7 @@ export function NoiseAndFuryExcerptDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex h-[94vh] w-[96vw] max-w-5xl flex-col gap-0 overflow-hidden border-[#9d7540]/35 bg-[#0b0a0a] p-0 text-[#f2ebe4] shadow-[0_35px_140px_rgba(0,0,0,0.85)] sm:rounded-none">
+      <DialogContent className="nf-reader flex h-[94dvh] w-[96vw] max-w-5xl flex-col gap-0 overflow-hidden border-[#9d7540]/35 bg-[#0b0a0a] p-0 text-[#f2ebe4] shadow-[0_35px_140px_rgba(0,0,0,0.85)] sm:rounded-none">
         <DialogHeader className="shrink-0 border-b border-[#c59a5e]/20 bg-[#0b0a0a] py-4 pl-5 pr-20 text-left sm:pl-7 sm:pr-20">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
@@ -358,12 +375,12 @@ export function NoiseAndFuryExcerptDialog({
             ))}
           </div>
           <DialogDescription className="sr-only">
-            A complete selected excerpt from Noise &amp; Fury, Episode 1: We Die Young.
+            A complete selected excerpt from Noise &amp; Fury. {excerpt.episode}, {excerpt.scenes}.
           </DialogDescription>
         </DialogHeader>
 
         <div ref={scrollAreaRef} className="min-h-0 flex-1 overflow-y-auto bg-[#211d19] px-3 py-6 sm:px-8 sm:py-8">
-          <ScriptPage blocks={excerpt.pages[pageIndex]} pageNumber={pageIndex + 1} />
+          <ScriptPage blocks={excerpt.pages[Math.min(pageIndex, excerpt.pages.length - 1)]} pageNumber={pageIndex + 1} />
         </div>
 
         <div className="shrink-0 border-t border-[#c59a5e]/20 bg-[#0b0a0a]">

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import "./noise-and-fury.css";
 import { useMutation } from "@tanstack/react-query";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Button } from "@/components/ui/button";
@@ -11,7 +12,7 @@ import { z } from "zod";
 import { apiRequest } from "@/lib/queryClient";
 import { trackEvent } from "@/lib/analytics";
 import { useToast } from "@/hooks/use-toast";
-import { Award, BookOpen, ChevronDown, ExternalLink, Shield, ZoomIn } from "lucide-react";
+import { ArrowDown, ArrowUpRight, Award, BookOpen, ChevronDown, ExternalLink, Shield, ZoomIn } from "lucide-react";
 import {
   NoiseAndFuryExcerptDialog,
   type NoiseAndFuryExcerptId,
@@ -21,13 +22,6 @@ const CONCERT_POSTER_PATH = "/downloads/noise-and-fury-award-poster.png";
 const CORY_BIO_IMAGE_PATH = "/downloads/noise-and-fury-cory.jpg";
 const CESAR_BIO_IMAGE_PATH = "/downloads/noise-and-fury-cesar.jpg";
 const SCOTT_BIO_IMAGE_PATH = "/downloads/noise-and-fury-scott.jpg";
-
-const highlightStats = [
-  { value: "8", label: "Completed teleplays", detail: "One complete season arc" },
-  { value: "1", label: "Complete season bible", detail: "Alice in Chains / Season One" },
-  { value: "2", label: "WGA registrations", detail: "#2317225 / #2333978" },
-  { value: "Complete", label: "Writing status", detail: "Ready for focused creative review" },
-];
 
 const episodeRun = [
   {
@@ -40,7 +34,7 @@ const episodeRun = [
   },
   {
     title: "Man in the Box",
-    years: "1989–1990",
+    years: "1989–1991",
     theme: "The machine begins",
     summary:
       "A packed Seattle bill and growing label attention move Alice in Chains from local rooms toward Columbia, Los Angeles and the making of Facelift. As radio, MTV and touring expand the band's public life, backstage humor and ordinary domestic moments reveal how quickly private reality can fall out of step with a public image.",
@@ -75,15 +69,15 @@ const episodeRun = [
     years: "1994–1996",
     theme: "Openness and public exposure",
     summary:
-      "Layne's work with Mike McCready, John Baker Saunders and Barrett Martin reveals a less pressurized musical space. Alice in Chains' acoustic work and MTV Unplugged create a brief, deeply musical moment of connection, even as private spaces become harder for friends and family to enter.",
+      "Layne's work with Mad Season offers a less pressurized musical space. Alice in Chains reconvenes for the 1995 self-titled album before MTV Unplugged creates a deeply musical moment of connection and exposure. Demri's death in October 1996 changes the emotional ground beneath everything that follows.",
     turningPoint: "An extraordinary public connection cannot restore ordinary life.",
   },
   {
     title: "Sea of Sorrow",
-    years: "1996–2002",
+    years: "1996–2001",
     theme: "The distance no one can close",
     summary:
-      "Following the band's last major public chapter, Layne lives at a growing distance from the people who care about him, while ordinary visits still reveal warmth and humor. Jerry continues to write and work; later recording sessions offer flashes of the old chemistry as contact becomes harder to sustain.",
+      "Following Demri's death, Layne lives at a growing distance from the people who care about him, while Nancy's visits still reveal warmth and humor. Late recording sessions offer flashes of the old chemistry. Jerry meets William DuVall in 2000 and tours with Comes with the Fall in 2001; the episode closes on an ordinary phone conversation with Layne.",
     turningPoint: "No single confrontation can neatly represent a withdrawal that unfolds over years.",
   },
   {
@@ -96,43 +90,15 @@ const episodeRun = [
   },
 ];
 
-const characterCards = [
-  { name: "Layne Staley", summary: "The voice, the wit and the inward turn. Incisive, playful and affectionate; never reduced to an illness or an ending." },
-  { name: "Jerry Cantrell", summary: "The collaborator and carrier. A musician who keeps returning to the work, even as grief and change reshape it." },
-  { name: "Sean Kinney", summary: "The pulse and ballast. Funny, exacting and central to the bond that survives the years when the band barely functions." },
-  { name: "Mike Starr", summary: "The first foundation. His momentum, humor, musicianship and place in the original four remain essential to the story." },
-  { name: "Mike Inez", summary: "Continuity through change. A distinct musician who joins an evolving chemistry and builds his own history with the band." },
-  { name: "Demri Parrott", summary: "A life in her own right: wit, tenderness, friendships, work, difficult choices and a place in Seattle's community." },
-];
-
-const toneReferences = [
-  "Boardwalk Empire - period authenticity with moral complexity",
-  "True Detective Season 1 - tonal commitment without nihilism",
-  "The Crown - prestige biographical storytelling over time",
-  "Singles - a lived-in Seattle music world, expanded into long-form drama",
-];
-
-const safeguards = [
-  "No glorification of addiction",
-  "No blame assignment around death or relapse",
-  "No exploitation of the manner of death",
-  "The dignity of every real person depicted is non-negotiable",
-];
-
-const currentPriorities = [
-  "Focused conversations with artists, representatives, families and historical consultants",
-  "Music, archival, likeness, legal and chain-of-title planning before production",
-  "Creative and producing partnerships aligned with the season's human focus",
-  "Final factual review across all eight teleplays before any production draft",
-];
 const teamProfiles = [
   {
     role: "Producer",
     name: "Scott Rosenfelt",
     imagePath: SCOTT_BIO_IMAGE_PATH,
+    imageClassName: "nf-portrait-scott",
     imdbUrl: "https://www.imdb.com/name/nm0742586/",
     teaser:
-      "Veteran producer and writer bringing major feature credibility, market trust, and experienced packaging guidance.",
+      "Producer of Home Alone, Mystic Pizza, Teen Wolf, and Smoke Signals, with decades of independent film experience.",
     paragraphs: [
       "Scott Rosenfelt is one of Hollywood's most accomplished independent producers, with a body of work that includes Home Alone, Mystic Pizza, Teen Wolf, Smoke Signals, and Extremities. His producing career spans commercially successful studio films, acclaimed independent features, documentaries, and television projects, giving him rare credibility on both the creative and market sides of development.",
       "Recent and current work includes the series SellBlock, the feature Bukinawa, and upcoming projects such as Lips Like Sugar, Sinta Ko, Empress Wu, Choices, and Under The Boards. He also produced Critical Thinking, directed by and starring John Leguizamo, which was selected for SXSW and went on to a successful release and streaming run.",
@@ -144,10 +110,9 @@ const teamProfiles = [
     role: "Creator / Writer",
     name: "Cory Armer",
     imagePath: CORY_BIO_IMAGE_PATH,
-    imageClassName: "object-[center_10%] scale-[1.34] sm:scale-[1.4]",
-    imageHoverClassName: "group-hover:scale-[1.38] sm:group-hover:scale-[1.44]",
+    imageClassName: "nf-portrait-cory",
     teaser:
-      "Creator of Noise & Fury and founder of RSF, with the core operating and creative context behind the project.",
+      "Creator and writer of Noise & Fury. Entrepreneur and founder of Ready Set Fly, bringing a background in leadership and large-scale operations.",
     paragraphs: [
       "Cory Armer is the creator and writer of Noise & Fury, a prestige dramatic series whose complete first season follows Alice in Chains. Across eight finished teleplays, the project approaches music history through brotherhood, creative collaboration and the lives that continue beyond loss. It is designed as cinematic, character-first storytelling for a modern television audience.",
       "Cory brings a distinct, non-traditional path into the entertainment industry. With over 15 years of experience leading large-scale, branded hospitality operations, he has built a career grounded in execution, leadership, and performance. Managing high-volume environments and delivering consistent results within structured systems has shaped a disciplined, solutions-oriented approach that now carries into his creative work.",
@@ -160,7 +125,7 @@ const teamProfiles = [
     name: "Cesar R. Ramirez",
     imagePath: CESAR_BIO_IMAGE_PATH,
     teaser:
-      "Producer, co-creator, and writer with a cross-functional background spanning production, operations, and development.",
+      "Producer, co-creator, and writer at MARC Production Enterprises, with more than two decades across entertainment, operations, and development.",
     paragraphs: [
       "Cesar R. Ramirez is a seasoned producer, consultant, and development executive with more than two decades of experience across entertainment, operations, construction, and product development. His work combines creative instincts, strategic planning, and practical execution, making him a key force in shaping projects from concept through delivery.",
       "At Marc Production Enterprises in Austin, he has helped develop and produce projects including Road to Juarez, Critical Thinking, Sno Cone Stand Inc., and The LookOut Creek, while also supporting current titles in development such as Ladies Forbidden G.O.L.F. and Crossed Love. His work has included producing, acting, directing support, and hands-on project assembly across multiple stages of production.",
@@ -180,16 +145,11 @@ const projectContactSchema = z.object({
 
 type ProjectContactValues = z.infer<typeof projectContactSchema>;
 
-function excerpt(text: string, max = 172) {
-  if (text.length <= max) return text;
-  return `${text.slice(0, max - 3)}...`;
-}
-
 export default function NoiseAndFuryPage() {
   const { toast } = useToast();
-  const [openEpisodeTitle, setOpenEpisodeTitle] = useState<string | null>("We Die Young");
+  const [openEpisodeTitle, setOpenEpisodeTitle] = useState<string | null>(null);
   const [excerptOpen, setExcerptOpen] = useState(false);
-  const [selectedExcerptId, setSelectedExcerptId] = useState<NoiseAndFuryExcerptId>("first-jam");
+  const [selectedExcerptId, setSelectedExcerptId] = useState<NoiseAndFuryExcerptId>("the-audition");
 
   function openExcerpt(excerptId: NoiseAndFuryExcerptId) {
     setSelectedExcerptId(excerptId);
@@ -200,7 +160,7 @@ export default function NoiseAndFuryPage() {
     const section = document.getElementById(sectionId);
     if (!section) return;
     const top = section.getBoundingClientRect().top + window.scrollY - 88;
-    window.scrollTo({ top, behavior: "smooth" });
+    window.scrollTo({ top, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   }
 
   useEffect(() => {
@@ -214,7 +174,7 @@ export default function NoiseAndFuryPage() {
       lastName: "",
       email: "",
       subject: "Noise & Fury project inquiry",
-      message: "I am interested in hearing more about Noise & Fury and discussing a potential creative or strategic conversation.",
+      message: "I would like to discuss Noise & Fury and request access to the project materials.",
     },
   });
 
@@ -235,7 +195,7 @@ export default function NoiseAndFuryPage() {
         lastName: "",
         email: "",
         subject: "Noise & Fury project inquiry",
-        message: "I am interested in hearing more about Noise & Fury and discussing a potential creative or strategic conversation.",
+        message: "I would like to discuss Noise & Fury and request access to the project materials.",
       });
     },
     onError: (error: Error) => {
@@ -248,468 +208,127 @@ export default function NoiseAndFuryPage() {
   });
 
   return (
-    <div className="min-h-screen overflow-hidden bg-[#e9dfce] text-[#241a13] [background-image:radial-gradient(circle_at_10%_18%,rgba(91,55,25,0.08)_0_1px,transparent_1.5px),radial-gradient(circle_at_82%_68%,rgba(91,55,25,0.06)_0_1px,transparent_1.5px)] [background-size:29px_31px,37px_41px]">
-      <section className="relative isolate overflow-hidden border-b border-[#9b682f] bg-[#050505] text-[#f2e9dc]">
-        <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-          <img
-            src={CONCERT_POSTER_PATH}
-            alt=""
-            className="absolute inset-[-7%] h-[114%] w-[114%] object-cover object-center opacity-55 blur-[18px] saturate-[0.9]"
-          />
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(4,4,4,0.08)_0%,rgba(3,3,3,0.74)_72%,rgba(2,2,2,0.96)_100%)]" />
-          <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(3,3,3,0.38)_0%,transparent_28%,transparent_70%,rgba(3,3,3,0.74)_100%)]" />
+    <div className="nf-page">
+      <nav className="nf-nav" aria-label="Noise & Fury page sections">
+        <div className="nf-container nf-nav-inner">
+          <a href="#project-top" className="nf-nav-brand">NOISE <span>&amp;</span> FURY</a>
+          <div className="nf-nav-links">
+            <a href="#series-excerpts">The writing</a>
+            <a href="#season-overview">The season</a>
+            <a href="#team-section">The team</a>
+            <a href="#project-contact">Inquiries <ArrowUpRight size={13} aria-hidden="true" /></a>
+          </div>
         </div>
+      </nav>
 
-        <div className="relative mx-auto grid max-w-6xl items-center gap-8 px-5 py-8 sm:px-8 md:grid-cols-[1fr_auto] md:gap-12 md:py-10">
-          <div className="max-w-xl">
-            <div className="mb-5 flex items-start gap-3 border-l-2 border-[#d3a869] pl-4 text-[#e7bc7c]">
-              <Award className="mt-0.5 h-6 w-6 shrink-0" aria-hidden="true" />
-              <div>
-                <p className="text-sm font-semibold">Winner &mdash; Best TV Series Script</p>
-                <p className="mt-1 text-xs tracking-wide text-[#d7c8b9]">Authentic Global Film Awards 2026</p>
-              </div>
+      <section id="project-top" className="nf-hero">
+        <div className="nf-hero-glow" aria-hidden="true" />
+        <div className="nf-container nf-hero-grid">
+          <div className="nf-hero-copy">
+            <p className="nf-eyebrow">An original prestige dramatic series</p>
+            <h1><span className="sr-only">Noise &amp; Fury</span><img src="/downloads/noise-and-fury-title.png" alt="" width="378" height="248" /></h1>
+            <p className="nf-season-label">Season One <span>/</span> Alice in Chains</p>
+            <p className="nf-hero-intro">The human story inside the sound.</p>
+            <p className="nf-hero-description">Friendship, brotherhood, creativity, grief, and survival. A complete eight-episode season following the lives behind the music.</p>
+            <div className="nf-actions">
+              <button className="nf-button nf-button-gold" onClick={() => scrollToSection("series-excerpts")}><BookOpen size={16} aria-hidden="true" /> Read selected scenes</button>
+              <button className="nf-button nf-button-outline" onClick={() => scrollToSection("project-contact")}>Request project materials <ArrowUpRight size={16} aria-hidden="true" /></button>
             </div>
-            <h1 className="font-display text-5xl font-bold uppercase leading-[0.95] tracking-[-0.04em] text-[#f5e7d0] sm:text-6xl lg:text-7xl">Noise &amp; Fury</h1>
-            <p className="mt-4 text-xs font-semibold uppercase tracking-[0.25em] text-[#e7bc7c] sm:text-sm">Season One: Alice in Chains</p>
-            <p className="mt-5 max-w-lg font-serif text-lg leading-7 text-[#e1d4c4] sm:text-xl sm:leading-8">
-              A character-driven rock drama about the brotherhood, creative fire, and enduring music of a generation. Eight completed hour-long teleplays. One complete season.
-            </p>
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Button className="!bg-[#d3a869] !text-[#17120f] hover:!bg-[#e7bc7c]" onClick={() => scrollToSection("series-excerpts")}>
-                <BookOpen className="mr-2 h-4 w-4" /> Read the excerpts
-              </Button>
-              <Button variant="outline" className="!border-[#b58c56] !bg-[#17120f] !text-[#f2e9dc] hover:!bg-[#33261d] hover:!text-white" onClick={() => scrollToSection("project-contact")}>
-                Start a conversation
-              </Button>
-            </div>
+            <div className="nf-award"><Award size={27} aria-hidden="true" /><div><strong>Winner &middot; Best TV Series Script</strong><span>Authentic Global Film Awards 2026</span></div></div>
           </div>
           <Dialog>
             <DialogTrigger asChild>
-              <button type="button" className="group mx-auto block w-fit rounded-sm text-[#d7c8b9] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#e7bc7c] focus-visible:ring-offset-4 focus-visible:ring-offset-black" aria-label="Enlarge the Noise & Fury award-winning poster">
-                <img
-                  src={CONCERT_POSTER_PATH}
-                  alt="Noise & Fury, Season One: Alice in Chains. Winner, Best TV Series Script, Authentic Global Film Awards 2026. MARC Production Enterprises."
-                  width={1105}
-                  height={1424}
-                  fetchPriority="high"
-                  className="block h-auto max-h-[340px] w-auto max-w-full border border-[#b87b38]/50 shadow-[0_16px_60px_rgba(0,0,0,0.65)] transition group-hover:border-[#e7bc7c] md:max-h-[440px] lg:max-h-[460px]"
-                />
-                <span className="mt-2 flex items-center justify-center gap-2 text-xs"><ZoomIn className="h-3.5 w-3.5" aria-hidden="true" /> View full artwork</span>
+              <button className="nf-poster" aria-label="Enlarge the Noise & Fury award-winning poster">
+                <img src={CONCERT_POSTER_PATH} alt="Noise & Fury, Season One: Alice in Chains. Winner, Best TV Series Script, Authentic Global Film Awards 2026. MARC Production Enterprises." width={1105} height={1424} fetchPriority="high" />
+                <span><ZoomIn size={14} aria-hidden="true" /> View full artwork</span>
               </button>
             </DialogTrigger>
-            <DialogContent className="w-[calc(100%_-_2rem)] max-w-3xl gap-0 border-[#b87b38]/50 bg-[#090909] p-3 pt-10 text-[#f2e9dc] dark:border-[#b87b38]/50 dark:bg-[#090909] dark:text-[#f2e9dc]">
+            <DialogContent className="nf-poster-dialog w-[calc(100%_-_2rem)] max-w-3xl gap-0 p-3 pt-10">
               <DialogTitle className="sr-only">Noise &amp; Fury award-winning artwork</DialogTitle>
-              <DialogDescription className="sr-only">Complete Season One poster featuring the Best TV Series Script award from Authentic Global Film Awards 2026.</DialogDescription>
-              <img src={CONCERT_POSTER_PATH} alt="Full Noise & Fury Season One: Alice in Chains poster with the 2026 Best TV Series Script winner laurels and MARC Production Enterprises logo." className="mx-auto block max-h-[78dvh] w-auto max-w-full object-contain" />
-              <a href="https://marcmovies.com/" target="_blank" rel="noopener noreferrer" className="mt-3 text-center text-sm text-[#e7bc7c] underline underline-offset-4">Visit MARC Production Enterprises</a>
+              <DialogDescription className="sr-only">Complete Season One poster featuring the 2026 Best TV Series Script award.</DialogDescription>
+              <img src={CONCERT_POSTER_PATH} alt="Full Noise & Fury award-winning Season One poster." className="mx-auto block max-h-[78dvh] w-auto max-w-full object-contain" />
+              <a href="https://marcmovies.com/" target="_blank" rel="noopener noreferrer" className="mt-3 text-center text-sm underline underline-offset-4">Visit MARC Production Enterprises</a>
             </DialogContent>
           </Dialog>
         </div>
       </section>
 
-      <section className="relative overflow-hidden border-b border-[#b4936b] bg-[#f2eadc] px-5 py-12 text-[#201711] sm:px-8 sm:py-16">
-        <div className="pointer-events-none absolute inset-0 opacity-55 [background-image:radial-gradient(circle_at_12%_20%,rgba(92,56,24,0.13)_0_1px,transparent_1.5px),radial-gradient(circle_at_78%_65%,rgba(92,56,24,0.09)_0_1px,transparent_1.5px)] [background-size:23px_29px,31px_37px]" />
-        <div className="relative mx-auto max-w-6xl">
-          <div className="grid gap-4 border-b border-[#b98a58]/45 pb-9 md:grid-cols-[8rem_1fr] md:gap-8">
-            <div className="text-xs font-bold uppercase tracking-[0.28em] text-[#8d5124]">Logline</div>
-            <p className="font-serif text-xl leading-8 text-[#2b211a] sm:text-2xl sm:leading-10">
-              In late-1980s Seattle, four young musicians forge the bond that makes Alice in Chains a defining voice of
-              their generation. As success brings addiction, loss and painful changes to the band, the people who made
-              the music must find a way to carry it forward without forgetting who they were together.
-            </p>
+      <main>
+        <section className="nf-overview nf-container" aria-labelledby="overview-title">
+          <div className="nf-overview-copy"><p className="nf-eyebrow">01 / The series</p><h2 id="overview-title">Four musicians.<br />A bond that changed everything.</h2>
+            <p className="nf-logline">In late-1980s Seattle, four young musicians forge the bond that makes Alice in Chains a defining voice of their generation. As success brings addiction, loss and painful changes to the band, the people who made the music must find a way to carry it forward without forgetting who they were together.</p>
+            <p className="nf-credit">Created and written by <strong>Cory Armer &amp; Cesar R. Ramirez</strong></p>
           </div>
-
-          <div className="mt-8 grid gap-5 md:grid-cols-2">
-            <div className="border-l-2 border-[#a9692c] pl-5">
-              <div className="text-[10px] font-bold uppercase tracking-[0.28em] text-[#8d5124]">Created and written by</div>
-              <div className="mt-2 font-display text-xl font-semibold">Cory Armer and Cesar R. Ramirez</div>
-            </div>
-            <div className="border-l-2 border-[#a9692c] pl-5">
-              <div className="text-[10px] font-bold uppercase tracking-[0.28em] text-[#8d5124]">Season One Complete</div>
-              <div className="mt-2 font-display text-xl font-semibold">Eight completed hour-long teleplays</div>
-            </div>
-          </div>
-
-          <div className="mt-8 flex flex-col items-center justify-between gap-5 border-y border-[#b98a58]/45 py-5 sm:flex-row">
-            <div className="flex items-center gap-3">
-              <Shield className="h-5 w-5 text-[#9d642d]" />
-              <div className="text-sm font-semibold">WGA Registered</div>
-              <div className="font-mono text-xs text-[#6d5643]">#2317225 / #2333978</div>
-            </div>
-            <div className="flex flex-wrap justify-center gap-3">
-              <Button className="bg-[#17120f] text-[#f2eadc] hover:bg-[#33261d]" onClick={() => scrollToSection("series-excerpts")}>
-                <BookOpen className="mr-2 h-4 w-4" /> Read the excerpts
-              </Button>
-              <Button variant="outline" className="border-[#8d6239] bg-transparent text-[#2b2018] hover:bg-[#e2d2ba]" onClick={() => scrollToSection("project-contact")}>
-                Start a conversation
-              </Button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <main className="relative mx-auto flex max-w-7xl flex-col px-4 pb-16 pt-8 sm:px-6 sm:pb-24">
-        <section className="order-1 grid gap-px overflow-hidden border border-[#8E6B3B]/30 bg-[#2A2118]/40 md:grid-cols-4">
-          {highlightStats.map((stat) => (
-            <div key={stat.label} className="bg-[linear-gradient(180deg,rgba(14,12,11,0.96)_0%,rgba(10,10,11,0.98)_100%)] px-5 py-6">
-              <div className="text-3xl font-semibold tracking-[-0.04em] text-[#D3A869]">{stat.value}</div>
-              <div className="mt-2 text-sm font-semibold text-white">{stat.label}</div>
-              <div className="mt-1 text-xs uppercase tracking-[0.18em] text-[#8C7B70]">{stat.detail}</div>
-            </div>
-          ))}
+          <dl className="nf-facts"><div><dt>Format</dt><dd>8 &times; approximately one hour</dd></div><div><dt>Genre</dt><dd>Serialized prestige drama</dd></div><div><dt>World</dt><dd>Seattle &amp; the Pacific Northwest</dd></div><div><dt>Timeline</dt><dd>1987–present</dd></div><div><dt>Writing</dt><dd>Eight completed teleplays<br /><span>Complete Season One bible</span></dd></div></dl>
         </section>
 
-        <section id="series-promise" className="order-2 mt-16 scroll-mt-24 border-y border-[#D3A869]/25 py-16 sm:py-20">
-          <div className="mx-auto max-w-5xl text-center">
-            <div className="text-xs font-semibold uppercase tracking-[0.38em] text-[#8d5124]">The Series Promise</div>
-            <h2 className="mt-6 font-serif text-4xl font-medium italic leading-[1.08] tracking-[-0.05em] text-[#17110d] sm:text-6xl">
-              Out of the noise came the music. Through the fury came the freedom.
-            </h2>
-            <div className="mx-auto mt-7 max-w-4xl space-y-6 text-left font-serif text-lg leading-9 text-[#392b21] sm:text-xl sm:leading-10">
-              <p>
-                <em>Noise &amp; Fury</em> is really about a generation of artists who came up at a time when they had room
-                to figure out who they were before the whole world was watching. They were influenced by the people
-                around them, the places they came from, the things they lost and the things they were trying to survive,
-                but they weren&apos;t being told every second what people thought of them or what they should become.
-              </p>
-              <p>
-                And what makes that so powerful now is that the music didn&apos;t stay in that time. It kept moving forward.
-                People who weren&apos;t even alive when these songs were written still hear themselves in them today.
-              </p>
-              <p>
-                That&apos;s what I think <em>Noise &amp; Fury</em> is ultimately about. The world around the music has changed
-                completely, but the reasons people connect to it haven&apos;t. Loss still feels like loss. Loneliness still
-                feels like loneliness. Friendship still matters. Anger, addiction, grief, love, insecurity, all of it is
-                still there.
-              </p>
-              <p>
-                These artists had no idea they were creating something that would become part of somebody else&apos;s life
-                thirty years later. They were trying to make something honest in the moment.
-              </p>
-              <p className="text-center font-display text-3xl font-semibold italic text-[#8d5124] sm:text-4xl">
-                And somehow, that honesty lasted.
-              </p>
+        <section id="series-promise" className="nf-heart">
+          <div className="nf-container">
+            <p className="nf-eyebrow">02 / The heart of the story</p>
+            <div className="nf-heart-grid"><h2>Brotherhood,<br /><em>before the mythology.</em></h2><div><p>A song turns a corner in rehearsal. A badly timed joke breaks the tension. One musician hears what the others are reaching for and changes what he is playing.</p><p>Layne, Jerry, Sean, and Mike Starr begin as working musicians discovering a chemistry that belongs to all four. As their world changes, Mike Inez and later William DuVall bring their own voices to its continuing story. The music matters because these people matter.</p></div></div>
+            <blockquote>Out of the noise came the music.<br />Through the fury came the freedom.</blockquote>
+          </div>
+          <div className="nf-waterfront"><img src="/downloads/noise-and-fury-seattle.png" alt="Seattle waterfront and Space Needle in the packet's charcoal and gold artwork." width="1184" height="340" loading="lazy" /><span>Seattle / Where the story begins</span></div>
+        </section>
+
+        <section id="series-excerpts" className="nf-writing">
+          <div className="nf-container">
+            <div className="nf-section-heading"><div><p className="nf-eyebrow">03 / Selected screenplay excerpts</p><h2>Meet them on the page.</h2></div><p>Two scenes from the completed season.<br />The humor. The chemistry. The things music can say.</p></div>
+            <div className="nf-excerpt-grid">
+              <button className="nf-excerpt" onClick={() => openExcerpt("the-audition")}>
+                <div className="nf-excerpt-meta"><span>01 / We Die Young</span><span>Scenes 22–23</span></div>
+                <h3>The Audition</h3><p className="nf-excerpt-summary">An unexpected frontman walks into rehearsal. Layne makes his choice, and four musicians find a name.</p>
+                <div className="nf-script-preview" aria-hidden="true"><span>JERRY</span><p>Waiting for you to say it.</p><span>LAYNE</span><p>Alright.</p></div>
+                <span className="nf-read-link">Read the excerpt <ArrowUpRight size={19} aria-hidden="true" /></span>
+              </button>
+              <button className="nf-excerpt" onClick={() => openExcerpt("rooster")}>
+                <div className="nf-excerpt-meta"><span>03 / Rooster</span><span>Scenes 6–8</span></div>
+                <h3>Rooster</h3><p className="nf-excerpt-summary">A riff carries a father's history into the rehearsal room, onto a Seattle sidewalk, and finally to the stage.</p>
+                <div className="nf-script-preview" aria-hidden="true"><span>JERRY</span><p>He said I got too close.</p><span>LAYNE</span><p>Then you got it right.</p></div>
+                <span className="nf-read-link">Read the excerpt <ArrowUpRight size={19} aria-hidden="true" /></span>
+              </button>
             </div>
+            <p className="nf-small-print">Selected dramatized scenes. Private conversations and dialogue are imagined within a historical framework.</p>
           </div>
         </section>
 
-        <section className="order-4 mt-10 grid gap-8 lg:grid-cols-[1.15fr_0.85fr]">
-          <div className="space-y-6 border border-[#b9956e] bg-[#f5eddf] p-7 shadow-[0_18px_45px_rgba(77,47,24,0.12)] sm:p-9">
-            <div className="space-y-3">
-              <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#8d5124]">Why This Story Matters</div>
-              <h2 className="font-display text-4xl font-semibold tracking-[-0.05em] text-[#17110d] sm:text-5xl">
-                Brotherhood before mythology.
-              </h2>
-            </div>
-            <div className="grid gap-5 font-display text-[16px] leading-8 text-[#46362a] md:grid-cols-2">
-              <p>
-                This is not a nostalgia exercise or a conventional rise-and-fall biography. It begins with Layne,
-                Jerry, Sean and Mike Starr as working musicians—carrying amplifiers, arguing, making one another laugh
-                and discovering a sound no one of them could have created alone.
-              </p>
-              <p>
-                That bond carries them through fame, private loss and a changing lineup. Mike Inez becomes part of the
-                band's evolving chemistry, and the season ultimately moves beyond Layne's death toward the people and
-                music that continue—without pretending anyone can be replaced or forgotten.
-              </p>
-            </div>
+        <section id="season-overview" className="nf-season nf-container">
+          <div className="nf-section-heading"><div><p className="nf-eyebrow">04 / The season's journey</p><h2>Eight episodes.<br />One complete arc.</h2></div><p>From the first shared rooms to a changed band<br />and the music that carries forward.</p></div>
+          <div className="nf-movements">
+            <div><span>I / Episodes 1–3</span><h3>Becoming</h3><p>A partnership takes shape and grows into a career. The strain arrives early.</p></div>
+            <div><span>II / Episodes 4–7</span><h3>Fracture</h3><p>Loss and pressure change the relationships. Music keeps offering moments of connection.</p></div>
+            <div><span>III / Episode 8</span><h3>Continuing</h3><p>Grief, reunion, and new music. A future that carries everyone who came before.</p></div>
           </div>
-
-          <div className="grid gap-4">
-            <div className="border border-[#b9956e] bg-[#ede0cc] p-6">
-              <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[#8d5124]">Development Status</div>
-              <div className="mt-3 font-display text-4xl font-semibold tracking-[-0.05em] text-[#17110d]">The complete season is on the page.</div>
-              <div className="mt-2 text-sm leading-7 text-[#554133]">
-                Eight completed hour-long teleplays. A complete season bible. A complete one-pager. Final research,
-                rights clearances and consultation remain essential before production; the completed writing package
-                provides the basis for those focused conversations.
-              </div>
-            </div>
-            <div className="border border-[#b9956e] bg-[#ede0cc] p-6">
-              <div className="text-xs font-semibold uppercase tracking-[0.3em] text-[#8d5124]">Current Priorities</div>
-              <div className="mt-4 space-y-3">
-                {currentPriorities.map((item) => (
-                  <div key={item} className="border-l-2 border-[#a9692c] bg-[#f7f0e5] px-4 py-3 text-sm text-[#46362a]">
-                    {item}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="order-8 mt-16 scroll-mt-24">
-          <div className="rounded-[30px] border border-[#8E6B3B]/18 bg-[linear-gradient(180deg,rgba(17,14,12,0.94)_0%,rgba(8,8,9,0.98)_100%)] p-7 shadow-[0_18px_60px_rgba(0,0,0,0.22)] sm:p-9">
-            <div className="mx-auto max-w-4xl text-center">
-              <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">Authenticity &amp; Stewardship</div>
-              <h2 className="mt-3 font-display text-4xl font-semibold tracking-[-0.05em] text-white sm:text-5xl">
-                An invitation to help protect the truth, humanity, and musical integrity of the story.
-              </h2>
-              <p className="mt-4 text-base leading-8 text-[#CEC1B5] sm:text-lg">
-                Noise &amp; Fury is being developed with respect for the artists, families, collaborators, and communities
-                connected to the history it portrays. We welcome conversations with people who can help the series feel
-                lived-in, honest, and worthy of the music at its center.
-              </p>
-            </div>
-
-            <div className="mx-auto mt-8 max-w-5xl border border-[#D3A869]/25 bg-[#16110D]/70 px-5 py-5 text-sm leading-7 text-[#E2D6CA] sm:px-7">
-              Public performances, releases, collaborations and losses provide the historical framework. Private
-              conversations and emotional transitions are dramatized and should be tested against primary records and
-              first-person testimony as the work advances. This independent development presentation does not imply
-              authorization, participation or endorsement by Alice in Chains, its members, their families or representatives.
-            </div>
-
-            <div className="mt-8 grid gap-4 lg:grid-cols-3">
-              <div className="rounded-[24px] border border-white/10 bg-white/[0.03] px-5 py-5">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#B89258]">1. Hear the Story</div>
-                <div className="mt-3 text-lg font-semibold text-white">Begin with the vision, season architecture, and emotional purpose.</div>
-                <div className="mt-3 text-sm leading-7 text-[#D8CCC0]">
-                  Explore the project overview and episode guide, then connect directly if the story resonates or if your
-                  experience can add context, perspective, or authenticity.
-                </div>
-              </div>
-              <div className="rounded-[24px] border border-white/10 bg-white/[0.03] px-5 py-5">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#B89258]">2. Share Perspective</div>
-                <div className="mt-3 text-lg font-semibold text-white">Continue the conversation privately with the creative team.</div>
-                <div className="mt-3 text-sm leading-7 text-[#D8CCC0]">
-                  Conversations can center on the music, the era, lived experience, creative fit, or the responsibilities
-                  involved in portraying real people with honesty and dignity.
-                </div>
-              </div>
-              <div className="rounded-[24px] border border-white/10 bg-white/[0.03] px-5 py-5">
-                <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#B89258]">3. Find the Right Role</div>
-                <div className="mt-3 text-lg font-semibold text-white">Any next step should reflect genuine alignment.</div>
-                <div className="mt-3 text-sm leading-7 text-[#D8CCC0]">
-                  There is no predetermined ask. A conversation may lead to insight, an introduction, consultation,
-                  creative participation, or simply a better and more responsible version of the work.
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section id="season-overview" className="order-6 mt-16 scroll-mt-24">
-          <div className="mx-auto max-w-3xl text-center">
-            <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#8d5124]">Season One Overview</div>
-            <h2 className="mt-3 font-display text-4xl font-semibold tracking-[-0.05em] text-[#17110d] sm:text-5xl">
-              Eight episodes. One complete arc.
-            </h2>
-            <p className="mt-4 font-display text-base leading-8 text-[#574435] sm:text-lg">
-              Becoming. Fracture. Continuing. The season follows the original partnership, the years of change and the
-              musicians who carry the work forward.
-            </p>
-          </div>
-
-          <div className="mt-8 grid gap-4 lg:grid-cols-2">
+          <div className="nf-episodes">
             {episodeRun.map((episode, index) => {
               const isOpen = openEpisodeTitle === episode.title;
-              return (
-                <button
-                  key={episode.title}
-                  type="button"
-                  aria-expanded={isOpen}
-                  onClick={() => setOpenEpisodeTitle(isOpen ? null : episode.title)}
-                  className="group border border-[#b9956e] bg-[#f5eddf] p-6 text-left shadow-[0_10px_28px_rgba(77,47,24,0.08)] transition hover:-translate-y-0.5 hover:border-[#8d5124] hover:bg-[#fbf6ed]"
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#8d5124]">EP {index + 1} · {episode.years}</div>
-                      <div className="mt-2 font-display text-3xl font-semibold tracking-[-0.05em] text-[#17110d]">
-                        {episode.title}
-                      </div>
-                      <div className="mt-2 text-sm uppercase tracking-[0.18em] text-[#705a48]">{episode.theme}</div>
-                    </div>
-                    <ChevronDown className={`mt-1 h-5 w-5 shrink-0 text-[#D3A869] transition-transform ${isOpen ? "rotate-180" : "rotate-0"}`} />
-                  </div>
-
-                  <div className="mt-5 font-display text-[16px] leading-7 text-[#46362a]">
-                    {isOpen ? episode.summary : excerpt(episode.summary)}
-                  </div>
-
-                  {isOpen ? (
-                    <div className="mt-5 border-l-2 border-[#a9692c] bg-[#eadbc4] px-4 py-4">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#8d5124]">The Turn</div>
-                      <div className="mt-2 text-sm leading-7 text-[#35271e]">{episode.turningPoint}</div>
-                    </div>
-                  ) : null}
-                </button>
-              );
+              return <div key={episode.title} className="nf-episode">
+                <h3><button id={`episode-trigger-${index}`} className="nf-episode-trigger" aria-expanded={isOpen} aria-controls={`episode-panel-${index}`} onClick={() => setOpenEpisodeTitle(isOpen ? null : episode.title)}><span className="nf-episode-number">{String(index + 1).padStart(2, "0")}</span><span className="nf-episode-title">{episode.title}<small>{episode.theme}</small></span><span className="nf-episode-years">{episode.years}</span><ChevronDown size={18} className={isOpen ? "rotate-180" : ""} aria-hidden="true" /></button></h3>
+                <div id={`episode-panel-${index}`} role="region" aria-labelledby={`episode-trigger-${index}`} hidden={!isOpen} className="nf-episode-panel"><p>{episode.summary}</p><p className="nf-episode-turn"><strong>The turn</strong>{episode.turningPoint}</p></div>
+              </div>;
             })}
           </div>
         </section>
 
-        <section id="series-excerpts" className="order-3 mt-16 scroll-mt-24">
-          <div className="overflow-hidden rounded-[30px] border border-[#8E6B3B]/22 bg-[linear-gradient(135deg,rgba(25,19,14,0.98)_0%,rgba(8,8,9,0.98)_72%)] p-7 shadow-[0_24px_80px_rgba(0,0,0,0.28)] sm:p-9">
-            <div className="mx-auto max-w-4xl text-center">
-              <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">A Moment from the Series</div>
-              <h2 className="mt-4 font-display text-3xl font-semibold leading-tight tracking-[-0.04em] text-white sm:text-5xl">
-                Before the records, tours, and expectations, there were four musicians finding their way to each other.
-              </h2>
-            </div>
-
-            <div className="mt-9 grid gap-4 lg:grid-cols-2">
-              <button
-                type="button"
-                onClick={() => openExcerpt("first-jam")}
-                className="group rounded-[26px] border border-white/10 bg-black/30 p-6 text-left transition hover:-translate-y-0.5 hover:border-[#D3A869]/60 hover:bg-black/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D3A869] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0a0a]"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.26em] text-[#B89258]">Episode 1: We Die Young · Scenes 14–15</div>
-                    <h3 className="mt-3 font-display text-3xl font-semibold uppercase tracking-[-0.03em] text-white">The First Jam</h3>
-                  </div>
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#D3A869]/35 bg-[#D3A869]/10 text-[#D3A869] transition group-hover:bg-[#D3A869] group-hover:text-[#141414]">
-                    <BookOpen className="h-5 w-5" />
-                  </span>
-                </div>
-                <p className="mt-5 text-base leading-7 text-[#D8CCC0]">Four musicians discover what happens when they play together.</p>
-                <div className="mt-6 text-[11px] font-semibold uppercase tracking-[0.22em] text-[#D3A869]">Read complete excerpt</div>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => openExcerpt("the-name")}
-                className="group rounded-[26px] border border-white/10 bg-black/30 p-6 text-left transition hover:-translate-y-0.5 hover:border-[#D3A869]/60 hover:bg-black/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#D3A869] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0b0a0a]"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <div className="text-[10px] font-semibold uppercase tracking-[0.26em] text-[#B89258]">Episode 1: We Die Young · Scenes 22–23</div>
-                    <h3 className="mt-3 font-display text-3xl font-semibold uppercase tracking-[-0.03em] text-white">The Name</h3>
-                  </div>
-                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-[#D3A869]/35 bg-[#D3A869]/10 text-[#D3A869] transition group-hover:bg-[#D3A869] group-hover:text-[#141414]">
-                    <BookOpen className="h-5 w-5" />
-                  </span>
-                </div>
-                <p className="mt-5 text-base leading-7 text-[#D8CCC0]">Layne makes a decision. The band finds its name.</p>
-                <div className="mt-6 text-[11px] font-semibold uppercase tracking-[0.22em] text-[#D3A869]">Read complete excerpt</div>
-              </button>
-            </div>
-
-            <p className="mx-auto mt-6 max-w-4xl text-center text-xs leading-6 text-[#9F9387]">
-              Dramatized scenes inspired by historical events. Dialogue and private interactions have been fictionalized. Not presented as a verbatim historical record.
-            </p>
+        <section id="team-section" className="nf-team">
+          <div className="nf-container">
+            <div className="nf-section-heading"><div><p className="nf-eyebrow">05 / The creative team</p><h2>The people behind the series.</h2></div><a href="https://marcmovies.com/" target="_blank" rel="noopener noreferrer" className="nf-marc-link">MARC Production Enterprises <ArrowUpRight size={16} aria-hidden="true" /></a></div>
+            <div className="nf-team-grid">{teamProfiles.map(profile => <article key={profile.name} className="nf-profile">
+              <div className="nf-portrait"><img src={profile.imagePath} alt={profile.name} loading="lazy" width="420" height="420" className={profile.imageClassName ?? ""} /></div>
+              <p className="nf-eyebrow">{profile.role}</p><h3>{profile.name}</h3><p className="nf-profile-intro">{profile.teaser}</p>
+              <details><summary>Read biography <ChevronDown size={14} aria-hidden="true" /></summary><div className="nf-bio">{profile.paragraphs.map(paragraph => <p key={paragraph}>{paragraph}</p>)}{"imdbUrl" in profile && profile.imdbUrl ? <a href={profile.imdbUrl} target="_blank" rel="noopener noreferrer">View on IMDb <ExternalLink size={13} aria-hidden="true" /></a> : null}</div></details>
+            </article>)}</div>
           </div>
         </section>
 
-        <section id="team-section" className="order-7 mt-16 scroll-mt-24">
-          <div className="mx-auto max-w-3xl text-center">
-            <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#8d5124]">Writer and Producer Bios</div>
-            <h2 className="mt-3 font-display text-4xl font-semibold tracking-[-0.05em] text-[#17110d] sm:text-5xl">
-              The team shaping the package.
-            </h2>
-            <p className="mt-4 font-display text-base leading-8 text-[#574435] sm:text-lg">
-              The full team bios are presented here so the creative and producing package reads clearly at a glance.
-            </p>
-          </div>
-
-          <div className="mt-8 grid gap-5 md:grid-cols-2 md:gap-6 xl:grid-cols-3">
-            {teamProfiles.map((profile) => {
-              return (
-                <div
-                  key={profile.name}
-                  className="group h-full border border-[#b9956e] bg-[#f5eddf] p-5 text-left shadow-[0_12px_34px_rgba(77,47,24,0.1)] transition hover:-translate-y-0.5 hover:border-[#8d5124] sm:p-6"
-                >
-                  <div className="overflow-hidden border border-[#9a7755] bg-[#1b1511] shadow-[0_18px_32px_rgba(57,36,20,0.2)]">
-                    <img
-                      src={profile.imagePath}
-                      alt={`${profile.name} profile`}
-                      className={`h-56 w-full object-cover transition duration-500 sm:h-64 ${profile.imageHoverClassName ?? "group-hover:scale-[1.02]"} ${profile.imageClassName ?? "object-center"}`}
-                    />
-                  </div>
-
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="pt-5">
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.28em] text-[#8d5124]">{profile.role}</div>
-                      <div className="mt-3 font-display text-[2rem] font-semibold tracking-[-0.05em] text-[#17110d] sm:text-3xl">{profile.name}</div>
-                      {"imdbUrl" in profile && profile.imdbUrl ? (
-                        <a
-                          href={profile.imdbUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="mt-3 inline-flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-[#8d5124] underline-offset-4 transition hover:text-[#5f3519] hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#8d5124] focus-visible:ring-offset-2 focus-visible:ring-offset-[#f5eddf]"
-                          aria-label={`View ${profile.name} on IMDb`}
-                        >
-                          View on IMDb
-                          <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-                        </a>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  <div className="mt-4 text-sm leading-6 text-[#554133] sm:leading-7">{profile.teaser}</div>
-
-                  <div className="mt-5 space-y-4 border-t border-[#b9956e] pt-5 font-display text-sm leading-6 text-[#392b21] sm:leading-7">
-                    {profile.paragraphs.map((paragraph) => (
-                      <p key={paragraph}>{paragraph}</p>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+        <section className="nf-development nf-container" aria-labelledby="development-title">
+          <div><p className="nf-eyebrow">06 / Development</p><h2 id="development-title">The complete season<br />is on the page.</h2><p>Eight completed teleplays and a complete season bible provide the basis for focused creative and producing conversations. Final historical review, consultation, and music, archival, and production rights planning remain part of the work ahead.</p></div>
+          <div className="nf-approach"><Shield size={24} aria-hidden="true" /><h3>History with humanity.</h3><p>The series approaches the artists, families, and Seattle community through their full lives: their work, wit, loyalties, and losses. Documented events anchor the story; private dialogue is dramatized.</p><p className="nf-registration">WGA registered <span>#2317225 / #2333978</span></p></div>
         </section>
 
-        <section className="order-5 mt-16 grid gap-8 lg:grid-cols-2">
-          <div className="rounded-[30px] border border-[#8E6B3B]/18 bg-[linear-gradient(180deg,rgba(15,12,10,0.96)_0%,rgba(9,9,10,0.98)_100%)] p-7 sm:p-8">
-            <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">The Human Core</div>
-            <h3 className="mt-3 font-display text-3xl font-semibold tracking-[-0.05em] text-white">The brotherhood—and the lives around it.</h3>
-            <div className="mt-6 grid gap-4">
-              {characterCards.map((character) => (
-                <div key={character.name} className="rounded-[24px] border border-white/10 bg-white/[0.03] px-5 py-4">
-                  <div className="text-lg font-semibold text-white">{character.name}</div>
-                  <div className="mt-2 text-sm leading-7 text-[#D3C6BA]">{character.summary}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="grid gap-6">
-            <div className="rounded-[30px] border border-[#8E6B3B]/18 bg-[linear-gradient(180deg,rgba(15,12,10,0.96)_0%,rgba(9,9,10,0.98)_100%)] p-7 sm:p-8">
-              <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">Tonal DNA</div>
-              <div className="mt-5 space-y-3">
-                {toneReferences.map((item) => (
-                  <div key={item} className="rounded-[22px] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm leading-7 text-[#E7DACD]">
-                    {item}
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="rounded-[30px] border border-[#8E6B3B]/18 bg-[linear-gradient(180deg,rgba(15,12,10,0.96)_0%,rgba(9,9,10,0.98)_100%)] p-7 sm:p-8">
-              <div className="flex items-center gap-3 text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">
-                <Shield className="h-4 w-4" />
-                Ethical guardrails
-              </div>
-              <div className="mt-5 grid gap-3">
-                {safeguards.map((item) => (
-                  <div key={item} className="rounded-[20px] border border-white/10 bg-white/[0.03] px-4 py-3 text-sm text-[#E7DACD]">
-                    {item}
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section id="project-contact" className="order-9 mt-16 grid gap-8 scroll-mt-24 lg:grid-cols-[0.95fr_1.05fr]">
-          <div className="space-y-6 rounded-[30px] border border-[#8E6B3B]/18 bg-[linear-gradient(180deg,rgba(15,12,10,0.96)_0%,rgba(9,9,10,0.98)_100%)] p-7 sm:p-8">
-            <div className="text-xs font-semibold uppercase tracking-[0.34em] text-[#C59A5E]">Continue the Conversation</div>
-            <h3 className="font-display text-4xl font-semibold tracking-[-0.05em] text-white">There are different ways into the project.</h3>
-            <p className="text-base leading-8 text-[#D3C6BA]">
-              Inquiries are sent directly to Cory Armer and copied to the producing team. Artists, representatives,
-              historians, creative collaborators, producers and potential partners are invited to identify the kind of
-              conversation they want to have.
-            </p>
-            <p className="text-sm leading-7 text-[#BCAEA0]">
-              The eight teleplays and revised development documents are private materials. Appropriate review access can
-              be arranged directly with the team; no scripts or confidential package materials are published here.
-            </p>
-            <div className="rounded-[22px] border border-white/10 bg-white/[0.03] px-4 py-4 text-sm leading-7 text-[#E7DACD]">
-              Tell us what connects you to <em>Noise &amp; Fury</em>—its music, its people, its history, or its path toward the screen—and
-              the team will respond with the most relevant next step.
-            </div>
-          </div>
-
-          <div className="rounded-[30px] border border-[#8E6B3B]/18 bg-[linear-gradient(180deg,rgba(15,12,10,0.96)_0%,rgba(9,9,10,0.98)_100%)] p-7 sm:p-8">
+        <section id="project-contact" className="nf-contact">
+          <div className="nf-container nf-contact-grid"><div className="nf-contact-copy"><p className="nf-eyebrow">07 / Continue the conversation</p><h2>The next chapter<br /><em>starts with a conversation.</em></h2><p>For producing partnerships, representation, creative collaboration, consultation, or a closer look at the writing, contact the team.</p><p>The complete season bible and teleplays are available for appropriate private review. Tell us about your interest and the materials you would like to see.</p><div className="nf-contact-signature"><strong>Noise &amp; Fury</strong><span>Season One: Alice in Chains</span><a href="https://marcmovies.com/" target="_blank" rel="noopener noreferrer">MARC Production Enterprises <ArrowUpRight size={14} aria-hidden="true" /></a></div></div>
+          <div className="nf-contact-form"><h3>Project inquiries</h3>
             <Form {...form}>
               <form onSubmit={form.handleSubmit((values) => sendProjectContactMutation.mutate(values))} className="space-y-5">
                 <div className="grid gap-5 sm:grid-cols-2">
@@ -776,27 +395,23 @@ export default function NoiseAndFuryPage() {
                     <FormItem>
                       <FormLabel className="text-[#D7C8B9]">Message</FormLabel>
                       <FormControl>
-                        <Textarea {...field} rows={7} className="border-white/10 bg-black/30 text-white placeholder:text-[#87796A]" />
+                        <Textarea {...field} rows={5} className="border-white/10 bg-black/30 text-white placeholder:text-[#87796A]" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
 
-                <Button type="submit" className="w-full bg-[#D3A869] text-[#141414] hover:bg-[#deb980]" disabled={sendProjectContactMutation.isPending}>
-                  {sendProjectContactMutation.isPending ? "Sending inquiry..." : "Start the conversation"}
+                <Button type="submit" className="nf-button nf-button-gold w-full" disabled={sendProjectContactMutation.isPending}>
+                  {sendProjectContactMutation.isPending ? "Sending inquiry..." : "Send inquiry"}
                 </Button>
               </form>
             </Form>
-          </div>
+          </div></div>
         </section>
       </main>
-      <NoiseAndFuryExcerptDialog
-        open={excerptOpen}
-        excerptId={selectedExcerptId}
-        onExcerptChange={setSelectedExcerptId}
-        onOpenChange={setExcerptOpen}
-      />
+      <footer className="nf-footer"><div className="nf-container"><span>NOISE &amp; FURY / SEASON ONE</span><p>An independent development presentation. Participation or endorsement by Alice in Chains, its members, families, or representatives is not implied.</p><a href="#project-top">Back to top <ArrowDown size={13} className="rotate-180" aria-hidden="true" /></a></div></footer>
+      <NoiseAndFuryExcerptDialog open={excerptOpen} excerptId={selectedExcerptId} onExcerptChange={setSelectedExcerptId} onOpenChange={setExcerptOpen} />
     </div>
   );
 }

@@ -211,7 +211,7 @@ export default function NoiseAndFuryPage() {
     <div className="nf-page">
       <nav className="nf-nav" aria-label="Noise & Fury page sections">
         <div className="nf-container nf-nav-inner">
-          <a href="#project-top" className="nf-nav-brand">NOISE <span>&amp;</span> FURY</a>
+          <a href="#project-top" className="nf-nav-brand" aria-label="Noise & Fury home"><img src="/downloads/noise-and-fury-grunge-logo.png" alt="Noise & Fury" width="2172" height="724" /></a>
           <div className="nf-nav-links">
             <a href="#series-excerpts">The writing</a>
             <a href="#season-overview">The season</a>
@@ -226,7 +226,12 @@ export default function NoiseAndFuryPage() {
         <div className="nf-container nf-hero-grid">
           <div className="nf-hero-copy">
             <p className="nf-eyebrow">An original prestige dramatic series</p>
-            <h1 className="nf-brand-logo"><span className="sr-only">Noise &amp; Fury. Season One: Alice in Chains.</span><span className="nf-emblem-crop nf-emblem-title"><img src="/downloads/noise-and-fury-golden-emblem.png" alt="" width="1145" height="1374" fetchPriority="high" /></span></h1>
+            <div className="nf-brand-lockup">
+              <h1 className="nf-brand-logo"><span className="sr-only">Noise &amp; Fury. Season One: Alice in Chains.</span><span className="nf-emblem-crop nf-emblem-title"><img src="/downloads/noise-and-fury-golden-emblem.png" alt="" width="1145" height="1374" fetchPriority="high" /></span></h1>
+              <figure className="nf-hero-award">
+                <span className="nf-emblem-crop nf-emblem-award"><img src="/downloads/noise-and-fury-golden-emblem.png" alt="Authentic Global Film Awards 2026 winner, Best TV Series Script." width="1145" height="1374" /></span>
+              </figure>
+            </div>
             <p className="nf-hero-intro">The human story inside the sound.</p>
             <p className="nf-hero-description">Friendship, brotherhood, creativity, grief, and survival. A complete eight-episode season following the lives behind the music.</p>
             <div className="nf-actions">

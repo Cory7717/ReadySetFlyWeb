@@ -259,6 +259,29 @@ export default function NoiseAndFuryPage() {
       </section>
 
       <main>
+        <section id="award-recognition" className="nf-recognition" aria-labelledby="award-recognition-title">
+          <div className="nf-container nf-recognition-grid">
+            <figure className="nf-plaque-display">
+              {/* Keep the original photograph's plaque pixels; clip only the auditorium surroundings. */}
+              <svg viewBox="70 300 800 1210" role="img" aria-labelledby="nf-plaque-title nf-plaque-description" className="nf-plaque-photo">
+                <title id="nf-plaque-title">Noise &amp; Fury: Best TV Series Script award plaque</title>
+                <desc id="nf-plaque-description">The original Authentic Global Film Awards 2026 plaque, engraved with Cory Armer and Cesar R. Ramirez, presented against a charcoal studio background.</desc>
+                <defs><clipPath id="nf-plaque-outline"><path d="M668 340 C421 365 216 557 137 811 C69 1023 109 1216 192 1365 L162 1368 L120 1437 L118 1467 L833 1459 L832 1435 L791 1380 L759 1376 C794 1180 798 947 766 737 L728 517 L684 355 Q678 339 668 340 Z" /></clipPath></defs>
+                <image href="/downloads/noise-and-fury-award-plaque-original.png" width="941" height="1672" clipPath="url(#nf-plaque-outline)" />
+              </svg>
+              <figcaption>Authentic Global Film Awards / 2026</figcaption>
+            </figure>
+            <div className="nf-recognition-copy">
+              <p className="nf-eyebrow">Award recognition</p>
+              <p className="nf-recognition-winner">2026 Winner</p>
+              <h2 id="award-recognition-title">Best TV Series Script</h2>
+              <p className="nf-recognition-festival">Authentic Global Film Awards</p>
+              <p className="nf-recognition-series">Noise &amp; Fury <span>Season One: Alice in Chains</span></p>
+              <div className="nf-recognition-recipients"><span>Recognizing the writing of</span><strong>Cory Armer &amp; Cesar R. Ramirez</strong></div>
+              <button className="nf-button nf-button-outline" onClick={() => scrollToSection("series-excerpts")}>Explore the award-winning writing <ArrowUpRight size={16} aria-hidden="true" /></button>
+            </div>
+          </div>
+        </section>
         <section className="nf-overview nf-container" aria-labelledby="overview-title">
           <div className="nf-overview-copy"><p className="nf-eyebrow">01 / The series</p><h2 id="overview-title">Four musicians.<br />A bond that changed everything.</h2>
             <p className="nf-logline">In late-1980s Seattle, a group of young musicians find friendship, purpose, and belonging in one another as they create the sound that will become Alice in Chains. But as their music changes the course of rock history, sudden fame, addiction, and devastating loss test the bonds that brought them together, revealing the extraordinary human story behind a musical legacy that continues to influence generations.</p>
